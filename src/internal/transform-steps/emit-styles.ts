@@ -121,6 +121,18 @@ function normalizeResolvedNumericPxValues(ctx: TransformContext): void {
 
 function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<string> {
   const names = new Set<string>();
+  ctx.root.find(ctx.j.ImportDeclaration).forEach((path) => {
+    const sourceValue = (path.node.source as { value?: unknown }).value;
+    if (typeof sourceValue !== "string" || !/\.stylex(?:\.[cm]?[jt]sx?)?$/u.test(sourceValue)) {
+      return;
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      const localName = (specifier.local as { name?: string } | null | undefined)?.name;
+      if (localName) {
+        names.add(localName);
+      }
+    }
+  });
   ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
     if (!isImmutableTopLevelVariableDeclaratorPath(path)) {
       return;
@@ -213,6 +225,7 @@ function isNumericExpressionNode(value: unknown, numericIdentifiers: ReadonlySet
     left?: unknown;
     right?: unknown;
     expression?: unknown;
+    object?: unknown;
   };
   if (
     node.type === "NumericLiteral" ||
@@ -222,6 +235,10 @@ function isNumericExpressionNode(value: unknown, numericIdentifiers: ReadonlySet
   }
   if (node.type === "Identifier") {
     return Boolean(node.name && numericIdentifiers.has(node.name));
+  }
+  if (node.type === "MemberExpression") {
+    const rootName = memberExpressionRootName(node);
+    return Boolean(rootName && numericIdentifiers.has(rootName));
   }
   if (node.type === "UnaryExpression") {
     return (
@@ -240,6 +257,22 @@ function isNumericExpressionNode(value: unknown, numericIdentifiers: ReadonlySet
     return isNumericExpressionNode(node.expression, numericIdentifiers);
   }
   return false;
+}
+
+function memberExpressionRootName(node: {
+  type?: string;
+  name?: string;
+  object?: unknown;
+}): string | null {
+  if (node.type === "Identifier") {
+    return node.name ?? null;
+  }
+  if (node.type !== "MemberExpression" || !node.object || typeof node.object !== "object") {
+    return null;
+  }
+  return memberExpressionRootName(
+    node.object as { type?: string; name?: string; object?: unknown },
+  );
 }
 
 function normalizeStylexNumericPxValue(

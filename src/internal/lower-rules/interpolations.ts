@@ -117,6 +117,7 @@ export function tryHandleInterpolatedStringValue(args: {
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
   setStyleValue?: (prop: string, value: unknown) => void;
+  numericIdentifiers?: ReadonlySet<string>;
 }): boolean {
   const { j, decl, d, styleObj, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
   const setValue = (prop: string, value: unknown): void => {
@@ -168,7 +169,11 @@ export function tryHandleInterpolatedStringValue(args: {
         const usesExpr = entry.value.includes(`__SC_EXPR_${slotId}__`);
         setValue(
           entry.prop,
-          usesExpr ? maybeOmitPxUnitFromStylexValue(j, tl as any, entry.prop, d.important) : 0,
+          usesExpr
+            ? maybeOmitPxUnitFromStylexValue(j, tl as any, entry.prop, d.important, {
+                numericIdentifiers: args.numericIdentifiers,
+              })
+            : 0,
         );
       }
       return true;
@@ -273,7 +278,12 @@ export function tryHandleInterpolatedStringValue(args: {
   const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
     const out = outputs[i]!;
-    setValue(out.prop, maybeOmitPxUnitFromStylexValue(j, tl as any, out.prop, d.important));
+    setValue(
+      out.prop,
+      maybeOmitPxUnitFromStylexValue(j, tl as any, out.prop, d.important, {
+        numericIdentifiers: args.numericIdentifiers,
+      }),
+    );
     // Add leading comment if present (e.g., for inlined static member expressions)
     if (i === 0 && ((d as any).leadingComment || (d as any).leadingLineComment)) {
       addPropComments(styleObj, out.prop, {

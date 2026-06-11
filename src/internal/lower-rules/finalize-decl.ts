@@ -45,6 +45,7 @@ import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
+import { expandBorderRadiusShorthandValue } from "../css-border-radius.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -120,8 +121,16 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj[sel] = obj;
   }
 
+  resolveBoxShorthandConflicts(styleObj);
   resolveDirectionalConflicts(styleObj);
+  expandMultiValueBorderRadius(styleObj);
   warnOpaqueShorthands(styleObj, decl, warnings);
+  for (const bucket of variantBuckets.values()) {
+    resolveBoxShorthandConflicts(bucket);
+    resolveDirectionalConflicts(bucket, { skipNullishShorthandDefault: true });
+    expandMultiValueBorderRadius(bucket);
+    warnOpaqueShorthands(bucket, decl, warnings);
+  }
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
 
@@ -407,8 +416,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     const oldKey = decl.styleKey;
     decl.styleKey = baseKey;
     resolvedStyleObjects.delete(oldKey);
+    expandMultiValueBorderRadius(styleObj);
     resolvedStyleObjects.set(baseKey, styleObj);
     for (const [k, v] of extraStyleObjects.entries()) {
+      expandMultiValueBorderRadius(v);
       resolvedStyleObjects.set(k, v);
     }
     for (const c of cases) {
@@ -416,8 +427,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
     decl.needsWrapperComponent = true;
   } else {
+    expandMultiValueBorderRadius(styleObj);
     resolvedStyleObjects.set(decl.styleKey, styleObj);
     for (const [k, v] of extraStyleObjects.entries()) {
+      expandMultiValueBorderRadius(v);
       resolvedStyleObjects.set(k, v);
     }
   }
@@ -603,6 +616,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // Add remaining (compound/boolean) variants to resolvedStyleObjects
   for (const [when, obj] of remainingBuckets.entries()) {
     const key = remainingStyleKeys[when]!;
+    expandMultiValueBorderRadius(obj);
     resolvedStyleObjects.set(key, obj);
   }
   for (const [k, v] of attrBuckets.entries()) {
@@ -2727,6 +2741,35 @@ const AXIS_PAIRS: Array<{
   { shorthand: "marginInline", start: "marginLeft", end: "marginRight" },
 ];
 
+const BOX_SHORTHAND_CONFLICTS: Array<{
+  shorthand: string;
+  top: string;
+  right: string;
+  bottom: string;
+  left: string;
+  block: string;
+  inline: string;
+}> = [
+  {
+    shorthand: "padding",
+    top: "paddingTop",
+    right: "paddingRight",
+    bottom: "paddingBottom",
+    left: "paddingLeft",
+    block: "paddingBlock",
+    inline: "paddingInline",
+  },
+  {
+    shorthand: "margin",
+    top: "marginTop",
+    right: "marginRight",
+    bottom: "marginBottom",
+    left: "marginLeft",
+    block: "marginBlock",
+    inline: "marginInline",
+  },
+];
+
 const LOGICAL_SIDE_PAIRS: Array<{
   logical: string;
   physical: string;
@@ -2752,6 +2795,84 @@ function isMediaOrPseudoMap(v: unknown): v is Record<string, unknown> {
   return keys.includes("default") || keys.some((k) => k.startsWith(":") || k.startsWith("@"));
 }
 
+function resolveBoxShorthandConflicts(styleObj: Record<string, unknown>): void {
+  for (const config of BOX_SHORTHAND_CONFLICTS) {
+    const shorthandVal = styleObj[config.shorthand];
+    if (shorthandVal === undefined) {
+      continue;
+    }
+    const sideProps = [
+      config.top,
+      config.right,
+      config.bottom,
+      config.left,
+      config.block,
+      config.inline,
+    ];
+    if (!sideProps.some((prop) => prop in styleObj)) {
+      continue;
+    }
+
+    const entries = Object.entries(styleObj);
+    const replacements: Record<string, unknown> = {
+      [config.top]: resolveBoxSideConflictValue(
+        shorthandVal,
+        styleObj[config.top],
+        styleObj[config.block],
+      ),
+      [config.right]: resolveBoxSideConflictValue(
+        shorthandVal,
+        styleObj[config.right],
+        styleObj[config.inline],
+      ),
+      [config.bottom]: resolveBoxSideConflictValue(
+        shorthandVal,
+        styleObj[config.bottom],
+        styleObj[config.block],
+      ),
+      [config.left]: resolveBoxSideConflictValue(
+        shorthandVal,
+        styleObj[config.left],
+        styleObj[config.inline],
+      ),
+    };
+
+    for (const key of Object.keys(styleObj)) {
+      delete styleObj[key];
+    }
+    for (const [key, val] of entries) {
+      if (key === config.shorthand) {
+        styleObj[config.top] = replacements[config.top];
+        styleObj[config.right] = replacements[config.right];
+        styleObj[config.bottom] = replacements[config.bottom];
+        styleObj[config.left] = replacements[config.left];
+      } else if (sideProps.includes(key)) {
+        continue;
+      } else {
+        styleObj[key] = val;
+      }
+    }
+  }
+}
+
+function resolveBoxSideConflictValue(
+  shorthandVal: unknown,
+  longhandVal: unknown,
+  axisVal: unknown,
+): unknown {
+  const baseValue = longhandVal ?? axisVal;
+  if (!isMediaOrPseudoMap(shorthandVal)) {
+    return baseValue ?? shorthandVal;
+  }
+  const result: Record<string, unknown> = { default: baseValue ?? shorthandVal.default ?? null };
+  for (const [condition, conditionValue] of Object.entries(shorthandVal)) {
+    if (condition !== "default" && conditionValue != null) {
+      result[condition] = conditionValue;
+    }
+  }
+  return result;
+}
+
 /**
  * Resolves conflicts between directional shorthand properties (e.g., `paddingBlock`)
  * and their individual longhand overrides (e.g., `paddingBottom`).
@@ -2768,10 +2889,16 @@ function isMediaOrPseudoMap(v: unknown): v is Record<string, unknown> {
  * Property ordering is preserved: the split longhands replace the shorthand's
  * position in the object to maintain a natural CSS property order.
  */
-function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
+function resolveDirectionalConflicts(
+  styleObj: Record<string, unknown>,
+  options?: { skipNullishShorthandDefault?: boolean },
+): void {
   for (const { shorthand, start, end } of AXIS_PAIRS) {
     const shorthandVal = styleObj[shorthand];
     if (shorthandVal === undefined) {
+      continue;
+    }
+    if (options?.skipNullishShorthandDefault === true && hasNullishDefault(shorthandVal)) {
       continue;
     }
 
@@ -2854,6 +2981,63 @@ function resolveLogicalSideConflicts(styleObj: Record<string, unknown>): void {
       }
     }
   }
+}
+
+function expandMultiValueBorderRadius(styleObj: Record<string, unknown>): void {
+  const value = styleObj.borderRadius;
+  if (value === undefined) {
+    return;
+  }
+  const expanded = expandBorderRadiusValue(value);
+  if (!expanded) {
+    return;
+  }
+  delete styleObj.borderRadius;
+  styleObj.borderTopLeftRadius = expanded.topLeft;
+  styleObj.borderTopRightRadius = expanded.topRight;
+  styleObj.borderBottomRightRadius = expanded.bottomRight;
+  styleObj.borderBottomLeftRadius = expanded.bottomLeft;
+}
+
+function expandBorderRadiusValue(value: unknown): {
+  topLeft: unknown;
+  topRight: unknown;
+  bottomRight: unknown;
+  bottomLeft: unknown;
+} | null {
+  if (typeof value === "string") {
+    return expandBorderRadiusShorthandValue(value);
+  }
+  if (!isMediaOrPseudoMap(value)) {
+    return null;
+  }
+  const topLeft: Record<string, unknown> = {};
+  const topRight: Record<string, unknown> = {};
+  const bottomRight: Record<string, unknown> = {};
+  const bottomLeft: Record<string, unknown> = {};
+  let changed = false;
+  for (const [condition, conditionValue] of Object.entries(value)) {
+    if (conditionValue == null) {
+      topLeft[condition] = conditionValue;
+      topRight[condition] = conditionValue;
+      bottomRight[condition] = conditionValue;
+      bottomLeft[condition] = conditionValue;
+      continue;
+    }
+    if (typeof conditionValue !== "string") {
+      return null;
+    }
+    const expanded = expandBorderRadiusShorthandValue(conditionValue);
+    if (!expanded) {
+      return null;
+    }
+    changed = true;
+    topLeft[condition] = expanded.topLeft;
+    topRight[condition] = expanded.topRight;
+    bottomRight[condition] = expanded.bottomRight;
+    bottomLeft[condition] = expanded.bottomLeft;
+  }
+  return changed ? { topLeft, topRight, bottomRight, bottomLeft } : null;
 }
 
 function resolveDirectionalConflictValue(args: {

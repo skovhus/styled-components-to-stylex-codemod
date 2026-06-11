@@ -4,6 +4,7 @@
  */
 import type { VariantDimension } from "../transform-types.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
+import { expandStyleObjectShorthands } from "./style-object-normalization.js";
 
 type ParsedVariantCondition =
   | {
@@ -280,7 +281,7 @@ export function groupVariantBucketsIntoDimensions(
     const { conditionWhen } = conditionGroup;
 
     for (const v of variants) {
-      variantMap[v.value] = v.styles;
+      variantMap[v.value] = expandStyleObjectShorthands(v.styles);
       for (const cssProp of Object.keys(v.styles)) {
         allOverriddenProps.add(cssProp);
       }
@@ -307,13 +308,13 @@ export function groupVariantBucketsIntoDimensions(
         // Use actual remaining value as key - for variants-recipe, this enables simple lookup
         // even for optional props when we emit destructuring defaults
         defaultValue = remainingValues[0];
-        variantMap[defaultValue] = defaultStyles;
+        variantMap[defaultValue] = expandStyleObjectShorthands(defaultStyles);
         // Note: We don't strip from base styles here - that only happens for namespace
         // dimensions where the ternary lookup guarantees a defined value
       } else {
         // Multiple remaining values - use "default" with cast+fallback
         defaultValue = "default";
-        variantMap["default"] = defaultStyles;
+        variantMap["default"] = expandStyleObjectShorthands(defaultStyles);
       }
     }
 
@@ -378,7 +379,7 @@ export function groupVariantBucketsIntoDimensions(
             merged[cssProp] = boolValue;
           }
         }
-        disabledVariantMap[variantValue] = merged as any;
+        disabledVariantMap[variantValue] = expandStyleObjectShorthands(merged);
       }
 
       dimensions.push({

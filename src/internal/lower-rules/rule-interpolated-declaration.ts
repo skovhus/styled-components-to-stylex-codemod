@@ -27,6 +27,7 @@ import {
   parseBorderShorthandParts,
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
+import { expandBorderRadiusShorthandValue } from "../css-border-radius.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { camelToKebabCase } from "../utilities/string-utils.js";
 import {
@@ -509,14 +510,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
       applyVariant(
         { when: formatObservedVariantCondition(jsxProp, value), propName: jsxProp },
-        {
-          [stylexProp]: emitStaticObservedValue(
-            value,
-            stylexProp,
-            observedValues !== null,
-            staticParts,
-          ),
-        },
+        staticVariantStyleObject(
+          stylexProp,
+          emitStaticObservedValue(value, stylexProp, observedValues !== null, staticParts),
+        ),
       );
     }
     if (observedValues) {
@@ -1458,6 +1455,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         return { bail: true };
       }
+      if (!isStylexImportSource(imp.source.value) && hasRuntimeImport(resolveValueResult.imports)) {
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported interpolation: call expression",
+          loc: getNodeLocStart(expr) ?? decl.loc,
+          context: {
+            localName: decl.localName,
+            importedName: imp.importedName,
+            source: imp.source.value,
+            path: info.path.length ? info.path.join(".") : undefined,
+          },
+        });
+        bail = true;
+        return { bail: true };
+      }
       const exprAst = parseExpr(resolveValueResult.expr);
       if (!exprAst) {
         warnings.push({
@@ -1583,6 +1595,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
+        numericIdentifiers: getImportedStylexIdentifiers(importMap, resolverImports),
         setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {
@@ -4384,6 +4397,25 @@ function emitStaticObservedValue(
   return getNumericCssEmissionMode(stylexProp) === "stylexNumber" ? value : String(value);
 }
 
+function staticVariantStyleObject(
+  stylexProp: string,
+  value: string | number,
+): Record<string, string | number> {
+  if (stylexProp !== "borderRadius" || typeof value !== "string") {
+    return { [stylexProp]: value };
+  }
+  const expanded = expandBorderRadiusShorthandValue(value);
+  if (!expanded) {
+    return { [stylexProp]: value };
+  }
+  return {
+    borderTopLeftRadius: expanded.topLeft,
+    borderTopRightRadius: expanded.topRight,
+    borderBottomRightRadius: expanded.bottomRight,
+    borderBottomLeftRadius: expanded.bottomLeft,
+  };
+}
+
 function buildRuntimeObservedValueExpr(
   j: JSCodeshift,
   stylexProp: string,
@@ -6336,6 +6368,14 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
   decl.needsWrapperComponent = true;
 
   return true;
+}
+
+function hasRuntimeImport(imports: readonly ImportSpec[] | undefined): boolean {
+  return (imports ?? []).some((imp) => !isStylexImportSource(imp.from.value));
+}
+
+function isStylexImportSource(source: string): boolean {
+  return /\.stylex(?:\.[cm]?[jt]sx?)?$/u.test(source);
 }
 
 /**

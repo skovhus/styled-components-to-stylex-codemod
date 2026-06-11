@@ -265,6 +265,10 @@ export function isNumericStylexExpression(
   if (value.type === "Identifier") {
     return options.numericIdentifiers?.has(value.name) ?? false;
   }
+  if (value.type === "MemberExpression") {
+    const rootName = memberExpressionRootIdentifier(value);
+    return rootName ? (options.numericIdentifiers?.has(rootName) ?? false) : false;
+  }
   if (value.type === "UnaryExpression") {
     return (
       (value.operator === "-" || value.operator === "+") &&
@@ -306,4 +310,14 @@ function isExpressionNode(value: unknown): value is ExpressionKind {
   return Boolean(
     value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string",
   );
+}
+
+function memberExpressionRootIdentifier(value: ExpressionKind): string | null {
+  if (value.type === "Identifier") {
+    return value.name;
+  }
+  if (value.type !== "MemberExpression") {
+    return null;
+  }
+  return memberExpressionRootIdentifier(value.object as ExpressionKind);
 }

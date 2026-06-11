@@ -5027,6 +5027,12 @@ function validateSxRestrictedWrappedComponentStyles(
         if (!disallowedProperty) {
           continue;
         }
+        /**
+         * Keep this as a warning instead of bailing. Some component wrappers expose
+         * narrow style APIs (for example icon `color` props instead of raw `fill`
+         * styles), but the generated output is still localized and manually fixable
+         * by the migration author.
+         */
         ctx.warnings.push({
           severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",

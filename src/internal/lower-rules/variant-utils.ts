@@ -11,6 +11,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { isMemberExpression, mergeStyleObjects } from "./utils.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
+import { expandStyleObjectShorthands } from "./style-object-normalization.js";
 
 /**
  * Inverts a "when" condition string for the opposite variant branch.
@@ -282,7 +283,7 @@ export const createVariantApplier = (args: {
     const when = testInfo.when;
     const existingBucket = variantBuckets.get(when);
     const nextBucket = existingBucket ? { ...existingBucket } : {};
-    mergeStyleObjects(nextBucket, consStyle);
+    mergeStyleObjects(nextBucket, expandStyleObjectShorthands(consStyle));
     variantBuckets.set(when, nextBucket);
     variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
     // Drop all props used in the condition (for chained conditions, allPropNames has them all)
