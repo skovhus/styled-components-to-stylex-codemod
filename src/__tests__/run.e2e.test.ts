@@ -33,6 +33,7 @@ async function runAutoSxWrapperFixture(args: {
   print?: boolean;
   appReturn?: string;
   exportStyled?: boolean;
+  additionalFiles?: Array<{ relativePath: string; lines: string[] }>;
 }): Promise<{
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
@@ -61,6 +62,11 @@ async function runAutoSxWrapperFixture(args: {
     join(tmp, "src/components/ContentViewContainer.tsx"),
     args.componentLines.join("\n"),
   );
+  for (const file of args.additionalFiles ?? []) {
+    const filePath = join(tmp, file.relativePath);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, file.lines.join("\n"));
+  }
   await writeFile(
     join(tmp, "src/views/Debug/Repro.tsx"),
     [
@@ -317,6 +323,66 @@ describe("runTransform (e2e)", () => {
 
     expect(result.errors).toBe(0);
     expect(result.skipped).toBe(2);
+    expect(consumer).toContain("const Body = styled(ContentViewContainer.Option)`");
+    expect(consumer).not.toContain("sx={styles.body}");
+  });
+
+  it("bails on static member wrappers whose StyleX root assigns an imported styled-dependent member", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-static-member-imported-styled-dependency-",
+      componentLines: [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        'import { SelectOption } from "./SelectOption";',
+        "",
+        'const baseStyles = stylex.create({ root: { color: "blue" } });',
+        "",
+        "type SelectProps = React.PropsWithChildren<Record<string, never>>;",
+        "",
+        "const SelectBase = (props: SelectProps) => (",
+        "  <div {...stylex.props(baseStyles.root)}>{props.children}</div>",
+        ");",
+        "",
+        "const CustomSelect = SelectBase as typeof SelectBase & { Option: typeof SelectOption };",
+        "CustomSelect.Option = SelectOption;",
+        "",
+        "export const ContentViewContainer = CustomSelect;",
+      ],
+      additionalFiles: [
+        {
+          relativePath: "src/components/SelectOption.tsx",
+          lines: [
+            'import * as React from "react";',
+            'import * as stylex from "@stylexjs/stylex";',
+            'import styled from "styled-components";',
+            "",
+            "type SelectOptionProps = React.PropsWithChildren<{",
+            "  value: string;",
+            "  sx?: stylex.StyleXStyles;",
+            "}>;",
+            "",
+            "const StyledOptionRoot = styled.div`",
+            "  max-width: 300px;",
+            "",
+            "  span {",
+            "    color: red;",
+            "  }",
+            "`;",
+            "",
+            "export const SelectOption = (props: SelectOptionProps) => (",
+            "  <StyledOptionRoot sx={props.sx}>{props.children}</StyledOptionRoot>",
+            ");",
+          ],
+        },
+      ],
+      wrappedName: "ContentViewContainer.Option",
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  max-width: 100%;"],
+      appReturn: '<Body value="home">Home</Body>',
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.skipped).toBe(3);
     expect(consumer).toContain("const Body = styled(ContentViewContainer.Option)`");
     expect(consumer).not.toContain("sx={styles.body}");
   });

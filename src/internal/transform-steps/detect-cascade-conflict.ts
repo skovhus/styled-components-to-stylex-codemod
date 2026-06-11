@@ -138,39 +138,50 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         definition.importedName,
         definition.importedName === "default",
       ) &&
-      (!styledDefinitions ||
-        !bindingDependsOnStyledDefinitions(
-          {
-            ...styledDefinitions,
-            names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
-          },
-          definition.importedName,
-          baseMemberPath,
-        ))
+      bindingIsIndependentOfRemainingStyledDefinitions(ctx, {
+        sourcePath: definition.path,
+        bindingName: definition.importedName,
+        memberPath: baseMemberPath,
+        styledDefinitions: styledDefinitions
+          ? {
+              ...styledDefinitions,
+              names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
+            }
+          : undefined,
+      })
     ) {
       continue;
     }
 
     if (!styledDefinitions) {
-      continue;
-    }
-
-    if (
+      if (
+        bindingIsIndependentOfRemainingStyledDefinitions(ctx, {
+          sourcePath: definition.path,
+          bindingName: definition.importedName,
+          memberPath: baseMemberPath,
+          styledDefinitions: undefined,
+        })
+      ) {
+        continue;
+      }
+    } else if (
       transformedComponents &&
       transformedComponentsHasPath(transformedComponents, styledDefinitions.path) &&
-      !bindingDependsOnStyledDefinitions(
-        {
+      bindingIsIndependentOfRemainingStyledDefinitions(ctx, {
+        sourcePath: styledDefinitions.path,
+        bindingName: definition.importedName,
+        memberPath: baseMemberPath,
+        styledDefinitions: {
           ...styledDefinitions,
           names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
         },
-        definition.importedName,
-        baseMemberPath,
-      )
+      })
     ) {
       continue;
     }
 
     if (
+      styledDefinitions &&
       canSkipCascadeForStylexExport(ctx, styledDefinitions, definition.importedName, baseMemberPath)
     ) {
       continue;
@@ -188,7 +199,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         component: decl.localName,
         base: baseIdent,
         importedPath,
-        definitionPath: styledDefinitions.path,
+        definitionPath: styledDefinitions?.path ?? definition.path,
       },
     });
     foundCascadeConflict = true;
@@ -456,6 +467,37 @@ function bindingDependsOnStyledDefinitions(
         memberPath,
       })
     : true;
+}
+
+function bindingIsIndependentOfRemainingStyledDefinitions(
+  ctx: TransformContext,
+  args: {
+    sourcePath: string;
+    bindingName: string;
+    memberPath: readonly string[];
+    styledDefinitions: StyledDefinitionFile | undefined;
+  },
+): boolean {
+  if (
+    args.styledDefinitions &&
+    bindingDependsOnStyledDefinitions(args.styledDefinitions, args.bindingName, args.memberPath)
+  ) {
+    return false;
+  }
+  if (!args.styledDefinitions && args.memberPath.length === 0) {
+    return true;
+  }
+  if (!args.styledDefinitions && !tryReadFile(args.sourcePath)) {
+    return true;
+  }
+  return !bindingDependsOnImportedStyledDefinitions({
+    bindingName: args.bindingName,
+    memberPath: args.memberPath,
+    sourcePath: args.sourcePath,
+    styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
+    stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
+    resolveModule: ctx.options.resolveModule,
+  });
 }
 
 function bindingDependsOnImportedStyledDefinitions(args: {
