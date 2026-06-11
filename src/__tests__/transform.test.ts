@@ -10990,6 +10990,50 @@ export const App = () => <Box>test</Box>;
     expect(box).not.toMatch(/default: \{/);
   });
 
+  it("should keep late side overrides local to their own variant bucket", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ active?: boolean; disabled?: boolean }>\`
+  padding: 4px;
+  \${(p) =>
+    p.active &&
+    css\`
+      padding: 8px;
+      padding-top: 10px;
+    \`}
+  \${(p) =>
+    p.disabled &&
+    css\`
+      padding: 12px;
+    \`}
+\`;
+
+export const App = () => (
+  <>
+    <Box>base</Box>
+    <Box active>active</Box>
+    <Box disabled>disabled</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const disabled = result.code.match(/boxDisabled:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(disabled).toBeTruthy();
+    expect(disabled).toMatch(/paddingTop: 12/);
+    expect(disabled).toMatch(/paddingRight: 12/);
+    expect(disabled).toMatch(/paddingBottom: 12/);
+    expect(disabled).toMatch(/paddingLeft: 12/);
+  });
+
   it("should preserve radius defaults for conditional corner overrides", () => {
     const source = `
 import styled from "styled-components";
@@ -11017,6 +11061,37 @@ export const App = () => <Box>test</Box>;
     expect(box).toMatch(/borderTopLeftRadius: \{/);
     expect(box).toMatch(/default: (?:"8px"|8)/);
     expect(box).toMatch(/":hover": (?:"2px"|2)/);
+  });
+
+  it("should preserve prior conditional radius entries when a later corner map is merged", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px;
+  &:hover {
+    border-radius: 4px;
+  }
+  &:active {
+    border-top-left-radius: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    expect(result.code).toMatch(/borderTopLeftRadius: \{/);
+    expect(result.code).toMatch(/default: (?:"8px"|8)/);
+    expect(result.code).toMatch(/":hover": (?:"4px"|4)/);
+    expect(result.code).toMatch(/":active": (?:"2px"|2)/);
   });
 
   it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {

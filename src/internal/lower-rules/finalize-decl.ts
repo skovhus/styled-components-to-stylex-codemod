@@ -139,11 +139,11 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     expandMultiValueBorderRadius(bucket);
     warnOpaqueShorthands(bucket, decl, warnings);
   }
-  harmonizeShorthandExpansion([
-    styleObj,
-    ...variantBuckets.values(),
-    ...extraStyleObjects.values(),
-  ]);
+  const variantBucketObjects = [...variantBuckets.values()];
+  harmonizeShorthandExpansion([styleObj, ...variantBucketObjects, ...extraStyleObjects.values()], {
+    baseStyleObj: styleObj,
+    inheritBaseLateSides: new Set(variantBucketObjects),
+  });
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
 
@@ -626,12 +626,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     attrBuckets,
   });
 
-  harmonizeShorthandExpansion([
-    styleObj,
-    ...remainingBuckets.values(),
-    ...extraStyleObjects.values(),
-    ...attrBuckets.values(),
-  ]);
+  const remainingBucketObjects = [...remainingBuckets.values()];
+  harmonizeShorthandExpansion(
+    [styleObj, ...remainingBucketObjects, ...extraStyleObjects.values(), ...attrBuckets.values()],
+    {
+      baseStyleObj: styleObj,
+      inheritBaseLateSides: new Set(remainingBucketObjects),
+    },
+  );
 
   // Add remaining (compound/boolean) variants to resolvedStyleObjects
   for (const [when, obj] of remainingBuckets.entries()) {
@@ -3059,8 +3061,14 @@ const BORDER_RADIUS_CORNER_PROPS = [
   "borderBottomLeftRadius",
 ] as const;
 
-function harmonizeShorthandExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
-  harmonizeBoxShorthandExpansion(styleObjs);
+function harmonizeShorthandExpansion(
+  styleObjs: ReadonlyArray<Record<string, unknown>>,
+  options?: {
+    baseStyleObj?: Record<string, unknown>;
+    inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
+  },
+): void {
+  harmonizeBoxShorthandExpansion(styleObjs, options);
   harmonizeBorderRadiusExpansion(styleObjs);
 }
 
@@ -3118,20 +3126,13 @@ function recordLateSideOverrides(
   lateSideOverrides.set(styleObj, byShorthand);
 }
 
-function collectLateSideOverrides(
+function harmonizeBoxShorthandExpansion(
   styleObjs: ReadonlyArray<Record<string, unknown>>,
-  shorthand: string,
-): ReadonlySet<string> {
-  const lateSides = new Set<string>();
-  for (const obj of styleObjs) {
-    for (const side of lateSideOverrides.get(obj)?.get(shorthand) ?? []) {
-      lateSides.add(side);
-    }
-  }
-  return lateSides;
-}
-
-function harmonizeBoxShorthandExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
+  options?: {
+    baseStyleObj?: Record<string, unknown>;
+    inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
+  },
+): void {
   for (const config of BOX_SHORTHAND_CONFLICTS) {
     const levels = new Set<string>();
     for (const obj of styleObjs) {
@@ -3148,15 +3149,27 @@ function harmonizeBoxShorthandExpansion(styleObjs: ReadonlyArray<Record<string, 
     if (levels.size < 2) {
       continue;
     }
-    const lateSides = collectLateSideOverrides(styleObjs, config.shorthand);
+    const baseLateSides = options?.baseStyleObj
+      ? lateSideOverrides.get(options.baseStyleObj)?.get(config.shorthand)
+      : undefined;
+    const lateSidesFor = (styleObj: Record<string, unknown>): ReadonlySet<string> => {
+      const localLateSides = lateSideOverrides.get(styleObj)?.get(config.shorthand);
+      if (!options?.inheritBaseLateSides?.has(styleObj) || !baseLateSides?.size) {
+        return localLateSides ?? new Set();
+      }
+      if (!localLateSides?.size) {
+        return baseLateSides;
+      }
+      return new Set([...baseLateSides, ...localLateSides]);
+    };
     // Expand lower levels up to the highest level present — never past it,
     // or a base expansion would out-prioritize a variant's higher-level keys.
     const targetLevel = levels.has("side") ? "side" : "axis";
     for (const obj of styleObjs) {
       if (targetLevel === "side") {
-        expandBoxLevelsToSides(obj, config, lateSides);
+        expandBoxLevelsToSides(obj, config, lateSidesFor(obj));
       } else {
-        expandBoxShorthandToAxis(obj, config, lateSides);
+        expandBoxShorthandToAxis(obj, config, lateSidesFor(obj));
       }
     }
   }

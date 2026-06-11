@@ -107,7 +107,7 @@ function mergeConditionMapDefault(value: unknown, defaultValue: unknown): unknow
   if (!isConditionMap(value)) {
     return value;
   }
-  const merged = { ...value };
+  const merged = isConditionMap(defaultValue) ? { ...defaultValue, ...value } : { ...value };
   if (merged.default === null || merged.default === undefined) {
     merged.default = conditionMapDefault(defaultValue);
   }
