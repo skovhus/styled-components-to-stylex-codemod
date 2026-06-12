@@ -1310,6 +1310,39 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       patchStyleFnConditionValue(prop, conditionKey, conditionValue);
     };
 
+    /**
+     * A base-scope declaration later in the CSS overrides any earlier conditional
+     * assignment of the same property — within one styled template the generated
+     * class contains both declarations, and the last one wins regardless of the
+     * runtime condition. Drop the dead base-scope value from earlier variant
+     * buckets so the emitted variant (applied after the base style in
+     * stylex.props) cannot incorrectly win. Condition-scoped values (pseudo/media
+     * maps) only lose their `default` layer.
+     */
+    const clearEarlierVariantBaseValues = (prop: string): void => {
+      for (const [when, bucket] of [...variantBuckets]) {
+        if (!Object.hasOwn(bucket, prop)) {
+          continue;
+        }
+        const bucketValue = bucket[prop];
+        if (
+          bucketValue !== null &&
+          typeof bucketValue === "object" &&
+          !isAstNode(bucketValue) &&
+          "default" in (bucketValue as Record<string, unknown>)
+        ) {
+          (bucketValue as Record<string, unknown>).default = null;
+          continue;
+        }
+        delete bucket[prop];
+        if (Object.keys(bucket).length === 0) {
+          variantBuckets.delete(when);
+          delete ctx.variantStyleKeys[when];
+          delete ctx.variantSourceOrder[when];
+        }
+      }
+    };
+
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
@@ -1609,6 +1642,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
+      clearEarlierVariantBaseValues(prop);
       const target = ctx.getBaseStyleTarget();
       setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);

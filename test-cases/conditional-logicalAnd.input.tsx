@@ -52,6 +52,15 @@ export const StatusBar = styled.div<{ $isDisconnected?: boolean }>`
     props.$isDisconnected ? `background-color: ${props.theme.color.bgSub};` : undefined}
 `;
 
+// Pattern 7: Conditional block BEFORE an unconditional declaration of the same
+// property — the later base declaration always wins (CSS cascade: last
+// declaration in the generated class), so the conditional color is dead
+const LateOverride = styled.div<{ $hot?: boolean }>`
+  ${(props) => props.$hot && "color: red;"}
+  color: blue;
+  padding: 4px;
+`;
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -81,5 +90,9 @@ export const App = () => (
     <Card $isHighlighted={false}>Normal</Card>
     <StatusBar $isDisconnected>Disconnected</StatusBar>
     <StatusBar>Connected</StatusBar>
+
+    {/* Pattern 7: later base declaration wins over the earlier conditional */}
+    <LateOverride $hot>Hot (still blue)</LateOverride>
+    <LateOverride>Default (blue)</LateOverride>
   </div>
 );

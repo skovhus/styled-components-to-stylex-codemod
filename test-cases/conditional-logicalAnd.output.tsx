@@ -79,6 +79,19 @@ export function StatusBar(props: StatusBarProps) {
   return <div {...rest} sx={[styles.statusBar, isDisconnected && styles.statusBarDisconnected]} />;
 }
 
+type LateOverrideProps = { hot?: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
+
+// Pattern 7: Conditional block BEFORE an unconditional declaration of the same
+// property — the later base declaration always wins (CSS cascade: last
+// declaration in the generated class), so the conditional color is dead
+function LateOverride(props: LateOverrideProps) {
+  const { hot, ...rest } = props;
+  return <div {...rest} sx={styles.lateOverride} />;
+}
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -108,6 +121,10 @@ export const App = () => (
     <Card isHighlighted={false}>Normal</Card>
     <StatusBar isDisconnected>Disconnected</StatusBar>
     <StatusBar>Connected</StatusBar>
+
+    {/* Pattern 7: later base declaration wins over the earlier conditional */}
+    <LateOverride hot>Hot (still blue)</LateOverride>
+    <LateOverride>Default (blue)</LateOverride>
   </div>
 );
 
@@ -152,5 +169,9 @@ const styles = stylex.create({
   },
   statusBarDisconnected: {
     backgroundColor: $colors.bgSub,
+  },
+  lateOverride: {
+    color: "blue",
+    padding: 4,
   },
 });
