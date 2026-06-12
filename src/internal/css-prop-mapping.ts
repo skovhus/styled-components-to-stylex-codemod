@@ -14,6 +14,7 @@ import {
 
 export {
   isCssShorthandProperty,
+  isDirectionalShorthandCssProperty,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   isStylexStringOnlyCssProp,
@@ -100,6 +101,11 @@ function isCssShorthandProperty(cssProp: string): boolean {
     /^border-(top|right|bottom|left)$/.test(cssProp) ||
     cssProp === "background"
   );
+}
+
+/** True for the directional shorthands (`margin`, `padding`, `scroll-margin`, `scroll-padding`). */
+function isDirectionalShorthandCssProperty(cssProp: string): boolean {
+  return cssProp in DIRECTIONAL_SHORTHAND_MAP;
 }
 
 function isUnsupportedStylexProperty(cssProp: string): boolean {

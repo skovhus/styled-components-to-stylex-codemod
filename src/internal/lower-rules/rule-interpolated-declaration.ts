@@ -22,6 +22,7 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   isCssShorthandProperty,
+  isDirectionalShorthandCssProperty,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   parseBorderShorthandParts,
@@ -4315,13 +4316,6 @@ function isImportedRuntimeCondition(
   return false;
 }
 
-const DIRECTIONAL_SHORTHAND_UNIT_VALUE_PROPS = new Set([
-  "margin",
-  "padding",
-  "scroll-margin",
-  "scroll-padding",
-]);
-
 function isImportedShorthandUnitValue(
   d: CssDeclarationIR,
   decl: StyledDecl,
@@ -4350,7 +4344,7 @@ function isImportedShorthandUnitValue(
   // cannot expand to multiple tokens, so the interpolated-string handler can
   // emit it directly.
   if (
-    DIRECTIONAL_SHORTHAND_UNIT_VALUE_PROPS.has(d.property) &&
+    isDirectionalShorthandCssProperty(d.property) &&
     staticParts.prefix.trim() === "" &&
     /^[a-zA-Z%]+$/.test(staticParts.suffix.trim()) &&
     numericIdentifiers.has(info.rootName)
