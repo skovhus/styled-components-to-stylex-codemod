@@ -2734,8 +2734,16 @@ function recoverStandaloneInterpolationsInPseudoBlock(
 
 /** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */
 function negateWhen(when: string): string {
+  if (when.startsWith("!(") && when.endsWith(")")) {
+    return when.slice(2, -1);
+  }
   if (when.startsWith("!")) {
     return when.slice(1);
+  }
+  // Composite conditions (e.g. `big === undefined || big`) cannot be negated by
+  // flipping an operator — wrap the whole condition instead.
+  if (when.includes(" || ") || when.includes(" && ")) {
+    return `!(${when})`;
   }
   if (when.includes(" === ")) {
     return when.replace(" === ", " !== ");

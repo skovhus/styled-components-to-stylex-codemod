@@ -24,6 +24,15 @@ export function invertWhen(when: string): string | null {
   if (when.startsWith("!")) {
     return when.slice(1);
   }
+  // Composite conditions (e.g. `big === undefined || big`) cannot be inverted by
+  // flipping an operator — wrap the whole condition instead. Mixed && / || compounds
+  // stay un-invertible: re-parsing `!(a && b || c)` would regroup the operands.
+  if (when.includes(" || ") || when.includes(" && ")) {
+    if (when.includes(" || ") && when.includes(" && ")) {
+      return null;
+    }
+    return `!(${when})`;
+  }
   const match = when.match(/^(.+)\s+(===|!==)\s+(.+)$/);
   if (match) {
     const [, propName, op, rhs] = match;
@@ -129,6 +138,26 @@ export const createPropTestHelpers = (
     return null;
   };
 
+  // Destructuring defaults only apply when the prop is `undefined`. A statically
+  // truthy default means a bare truthiness test must also match when the prop is
+  // unset; defaults that cannot be evaluated statically are not representable in a
+  // `when` string, so callers must fall back to other handlers (returns null).
+  const applyDefaultToTruthyWhen = (whenName: string, propName: string): string | null => {
+    if (bindings.kind !== "destructured" || !bindings.defaults?.has(propName)) {
+      return whenName;
+    }
+    if (whenName !== propName) {
+      // Dotted access on a defaulted binding (e.g. `config.enabled`) — the emitted
+      // wrapper does not propagate the default, so bail.
+      return null;
+    }
+    const defaultValue = literalToStaticValue(bindings.defaults.get(propName));
+    if (defaultValue === null) {
+      return null;
+    }
+    return defaultValue ? `${whenName} === undefined || ${whenName}` : whenName;
+  };
+
   const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
     if (!test || typeof test !== "object") {
       return null;
@@ -136,18 +165,35 @@ export const createPropTestHelpers = (
     // Handle bare Identifier from destructured params: ({ isBw }) => isBw && ...
     if (test.type === "Identifier" && bindings.kind === "destructured") {
       const propAccess = readPropAccess(test);
-      return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
+      if (!propAccess) {
+        return null;
+      }
+      const when = applyDefaultToTruthyWhen(propAccess.whenName, propAccess.propName);
+      return when === null ? null : { when, propName: propAccess.propName };
     }
     if (isMemberExpression(test)) {
       const propAccess = readPropAccess(test);
-      return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
+      if (!propAccess) {
+        return null;
+      }
+      const when = applyDefaultToTruthyWhen(propAccess.whenName, propAccess.propName);
+      return when === null ? null : { when, propName: propAccess.propName };
     }
     if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
       const propAccess = readPropAccess(test.argument as ExpressionKind);
-      return propAccess ? { when: `!${propAccess.whenName}`, propName: propAccess.propName } : null;
+      if (!propAccess) {
+        return null;
+      }
+      const truthyWhen = applyDefaultToTruthyWhen(propAccess.whenName, propAccess.propName);
+      if (truthyWhen === null) {
+        return null;
+      }
+      const when = truthyWhen === propAccess.whenName ? `!${truthyWhen}` : `!(${truthyWhen})`;
+      return { when, propName: propAccess.propName };
     }
     if (test.type === "BinaryExpression" && (test.operator === "===" || test.operator === "!==")) {
       const left = test.left;
+      const operator = test.operator;
 
       // Helper to get rhs value, including special handling for undefined Identifier
       const getRhsValue = (): string | null => {
@@ -162,6 +208,40 @@ export const createPropTestHelpers = (
         return JSON.stringify(rhs);
       };
 
+      // A destructuring default replaces `undefined` before the comparison runs, so the
+      // emitted `when` must account for the unset-prop case when the default would match
+      // (or fail to match) the compared value. Returns null when not representable.
+      const buildBinaryWhen = (
+        propAccess: { whenName: string; propName: string },
+        rhsValue: string,
+      ): string | null => {
+        const base = `${propAccess.whenName} ${operator} ${rhsValue}`;
+        if (bindings.kind !== "destructured" || !bindings.defaults?.has(propAccess.propName)) {
+          return base;
+        }
+        if (propAccess.whenName !== propAccess.propName || rhsValue === "undefined") {
+          return null;
+        }
+        const defaultValue = literalToStaticValue(bindings.defaults.get(propAccess.propName));
+        if (defaultValue === null) {
+          return null;
+        }
+        let rhsStatic: unknown;
+        try {
+          rhsStatic = JSON.parse(rhsValue);
+        } catch {
+          // Non-literal rhs (e.g. a member expression) cannot be compared to the default.
+          return null;
+        }
+        if (defaultValue !== rhsStatic) {
+          return base;
+        }
+        // The default matches the compared value, so an unset prop takes that branch too.
+        return operator === "==="
+          ? `${propAccess.whenName} === undefined || ${base}`
+          : `${propAccess.whenName} !== undefined && ${base}`;
+      };
+
       // Handle destructured identifier on left side
       if (bindings.kind === "destructured" && left.type === "Identifier") {
         const propAccess = readPropAccess(left as ExpressionKind);
@@ -169,10 +249,8 @@ export const createPropTestHelpers = (
         if (!propAccess || rhsValue === null) {
           return null;
         }
-        return {
-          when: `${propAccess.whenName} ${test.operator} ${rhsValue}`,
-          propName: propAccess.propName,
-        };
+        const when = buildBinaryWhen(propAccess, rhsValue);
+        return when === null ? null : { when, propName: propAccess.propName };
       }
       if (isMemberExpression(left)) {
         const propAccess = readPropAccess(left as ExpressionKind);
@@ -180,10 +258,8 @@ export const createPropTestHelpers = (
         if (!propAccess || rhsValue === null) {
           return null;
         }
-        return {
-          when: `${propAccess.whenName} ${test.operator} ${rhsValue}`,
-          propName: propAccess.propName,
-        };
+        const when = buildBinaryWhen(propAccess, rhsValue);
+        return when === null ? null : { when, propName: propAccess.propName };
       }
     }
     return null;

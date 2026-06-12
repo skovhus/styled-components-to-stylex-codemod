@@ -18,6 +18,22 @@ const Box = styled.div<{ margin?: number }>`
   margin: ${({ margin: m = 10 }) => m || 5}px;
 `;
 
+// Truthy boolean default in a ternary:
+// When $rounded is undefined, the default (true) applies → 12px radius
+// Only an explicit false should produce 0 radius
+const Pill = styled.span<{ $rounded?: boolean }>`
+  padding: 4px 8px;
+  background-color: lightseagreen;
+  border-radius: ${({ $rounded = true }) => ($rounded ? "12px" : "0")};
+`;
+
+// Truthy boolean default gating a conditional block:
+// When $framed is undefined, the default (true) applies → border is shown
+const Frame = styled.div<{ $framed?: boolean }>`
+  padding: 8px;
+  ${({ $framed = true }) => $framed && "border: 2px solid darkslategray;"}
+`;
+
 export const App = () => (
   <>
     <Button>Default (should be hotpink)</Button>
@@ -29,5 +45,10 @@ export const App = () => (
     <Box>Default (should be 10px)</Box>
     <Box margin={0}>Zero (should be 5px)</Box>
     <Box margin={20}>20px</Box>
+    <Pill>Default (rounded)</Pill>
+    <Pill $rounded={false}>Square</Pill>
+    <Pill $rounded>Rounded</Pill>
+    <Frame>Default (framed)</Frame>
+    <Frame $framed={false}>No frame</Frame>
   </>
 );

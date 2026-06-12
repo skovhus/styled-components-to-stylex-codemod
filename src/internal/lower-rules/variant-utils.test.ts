@@ -181,8 +181,16 @@ describe("invertWhen", () => {
     expect(invertWhen("!($a && $b)")).toBe("$a && $b");
   });
 
-  it("returns null for un-invertible compound: $a || $b", () => {
-    expect(invertWhen("$a || $b")).toBeNull();
+  it("inverts pure || compound by grouping: $a || $b → !($a || $b)", () => {
+    expect(invertWhen("$a || $b")).toBe("!($a || $b)");
+  });
+
+  it("inverts the default-truthiness idiom by grouping", () => {
+    expect(invertWhen("big === undefined || big")).toBe("!(big === undefined || big)");
+  });
+
+  it("returns null for mixed &&/|| compound: $a && $b || $c", () => {
+    expect(invertWhen("$a && $b || $c")).toBeNull();
   });
 
   it("inverts comparison: $a === 'x' → $a !== 'x'", () => {
