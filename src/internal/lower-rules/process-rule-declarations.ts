@@ -6,6 +6,7 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import {
   cssDeclarationToStylexDeclarations,
+  expandBackgroundShorthandComponents,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
 } from "../css-prop-mapping.js";
@@ -133,6 +134,26 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     }
 
     if (d.property === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw)) {
+      const expanded =
+        d.value.kind === "static" && !d.important
+          ? expandBackgroundShorthandComponents(d.valueRaw)
+          : null;
+      // The shorthand resets unspecified background longhands to initial; the
+      // expansion does not, so any other background declaration could leak
+      // through and we must bail.
+      if (expanded && !hasOtherBackgroundDeclaration(allRules, d)) {
+        const commentSource = {
+          leading: (d as any).leadingComment,
+          leadingLine: (d as any).leadingLineComment,
+          trailingLine: (d as any).trailingLineComment,
+        };
+        let isFirst = true;
+        for (const { prop, value } of expanded) {
+          applyResolvedPropValue(prop, value, isFirst ? commentSource : null, d.property);
+          isFirst = false;
+        }
+        continue;
+      }
       state.bailUnsupported(
         ctx.decl,
         "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
@@ -214,4 +235,26 @@ function resolveInterpolatedPropertyName(
     return null;
   }
   return resolved;
+}
+
+/**
+ * Returns true when any other declaration in the decl's rules targets a
+ * background property. Used to guard background shorthand expansion, which
+ * does not reproduce the shorthand's reset-to-initial semantics.
+ */
+function hasOtherBackgroundDeclaration(
+  allRules: readonly CssRuleIR[],
+  current: CssRuleIR["declarations"][number],
+): boolean {
+  for (const rule of allRules) {
+    for (const declaration of rule.declarations) {
+      if (declaration === current) {
+        continue;
+      }
+      if (declaration.property && /^background(-|$)/.test(declaration.property)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

@@ -6,6 +6,7 @@ import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { expandBorderRadiusShorthandValue } from "./css-border-radius.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import {
+  hasTopLevelMatch,
   isBackgroundImageValue,
   isSingleBackgroundComponent,
   looksLikeLength,
@@ -119,6 +120,131 @@ export function resolveBackgroundStylexPropForVariants(
     return null; // Heterogeneous - can't safely transform
   }
   return hasGradient ? "backgroundImage" : "backgroundColor";
+}
+
+/**
+ * Expands a static multi-component `background` shorthand (single layer) into
+ * its StyleX longhands, e.g. `#fff url(a.svg) no-repeat center / cover` →
+ * backgroundColor/backgroundImage/backgroundRepeat/backgroundPosition/backgroundSize.
+ *
+ * Returns null when the value cannot be expanded losslessly: multiple layers
+ * (top-level commas), unrecognized tokens, or duplicate components. Callers
+ * must additionally ensure no other `background*` declaration exists for the
+ * same component, since the shorthand's reset-to-initial semantics for
+ * unspecified longhands are not reproduced.
+ */
+export function expandBackgroundShorthandComponents(
+  rawValue: string,
+): Array<{ prop: string; value: string }> | null {
+  const value = rawValue.trim();
+  if (!value || hasTopLevelMatch(value, /,/)) {
+    return null;
+  }
+  const tokens = tokenizeBackgroundValue(value);
+  if (!tokens) {
+    return null;
+  }
+
+  let color: string | undefined;
+  let image: string | undefined;
+  let attachment: string | undefined;
+  const repeatTokens: string[] = [];
+  const positionTokens: string[] = [];
+  const sizeTokens: string[] = [];
+  const boxTokens: string[] = [];
+  let inSizeMode = false;
+
+  for (const token of tokens) {
+    if (token === "/") {
+      if (inSizeMode || positionTokens.length === 0) {
+        return null;
+      }
+      inSizeMode = true;
+      continue;
+    }
+    if (inSizeMode) {
+      if (sizeTokens.length >= 2 || !isBackgroundSizeToken(token)) {
+        return null;
+      }
+      sizeTokens.push(token);
+      continue;
+    }
+    if (token === "none" || isBackgroundImageValue(token)) {
+      if (image !== undefined) {
+        return null;
+      }
+      image = token;
+      continue;
+    }
+    if (isCssColorToken(token)) {
+      if (color !== undefined) {
+        return null;
+      }
+      color = token;
+      continue;
+    }
+    if (BACKGROUND_REPEAT_KEYWORDS.has(token)) {
+      if (repeatTokens.length >= 2) {
+        return null;
+      }
+      repeatTokens.push(token);
+      continue;
+    }
+    if (BACKGROUND_ATTACHMENT_KEYWORDS.has(token)) {
+      if (attachment !== undefined) {
+        return null;
+      }
+      attachment = token;
+      continue;
+    }
+    if (BACKGROUND_BOX_KEYWORDS.has(token)) {
+      if (boxTokens.length >= 2) {
+        return null;
+      }
+      boxTokens.push(token);
+      continue;
+    }
+    if (isBackgroundPositionToken(token)) {
+      if (positionTokens.length >= 2) {
+        return null;
+      }
+      positionTokens.push(token);
+      continue;
+    }
+    return null;
+  }
+
+  if (inSizeMode && sizeTokens.length === 0) {
+    return null;
+  }
+
+  const out: Array<{ prop: string; value: string }> = [];
+  if (color !== undefined) {
+    out.push({ prop: "backgroundColor", value: color });
+  }
+  if (image !== undefined) {
+    out.push({ prop: "backgroundImage", value: image });
+  }
+  if (repeatTokens.length) {
+    out.push({ prop: "backgroundRepeat", value: repeatTokens.join(" ") });
+  }
+  if (attachment !== undefined) {
+    out.push({ prop: "backgroundAttachment", value: attachment });
+  }
+  if (positionTokens.length) {
+    out.push({ prop: "backgroundPosition", value: positionTokens.join(" ") });
+  }
+  if (sizeTokens.length) {
+    out.push({ prop: "backgroundSize", value: sizeTokens.join(" ") });
+  }
+  if (boxTokens.length) {
+    // Per spec, a single <box> value sets both origin and clip.
+    out.push({ prop: "backgroundOrigin", value: boxTokens[0]! });
+    out.push({ prop: "backgroundClip", value: boxTokens[1] ?? boxTokens[0]! });
+  }
+  // Require at least two components — single components keep the existing
+  // single-longhand mapping path.
+  return out.length >= 2 ? out : null;
 }
 
 export function parseInterpolatedBorderStaticParts(args: {
@@ -469,4 +595,121 @@ function classifyBorderTokens(tokens: string[]): {
     return null;
   }
   return { width, style, color };
+}
+
+const BACKGROUND_REPEAT_KEYWORDS = new Set([
+  "repeat",
+  "repeat-x",
+  "repeat-y",
+  "no-repeat",
+  "space",
+  "round",
+]);
+
+const BACKGROUND_ATTACHMENT_KEYWORDS = new Set(["scroll", "fixed", "local"]);
+
+const BACKGROUND_BOX_KEYWORDS = new Set(["border-box", "padding-box", "content-box"]);
+
+const BACKGROUND_POSITION_KEYWORDS = new Set(["left", "right", "top", "bottom", "center"]);
+
+const CSS_COLOR_FUNCTION_RE = /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(/i;
+
+// Standard CSS named colors (CSS Color Module Level 4) plus transparent/currentcolor.
+const CSS_NAMED_COLORS = new Set(
+  (
+    "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue " +
+    "blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk " +
+    "crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki " +
+    "darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen " +
+    "darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue " +
+    "dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite " +
+    "gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki " +
+    "lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan " +
+    "lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen " +
+    "lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen " +
+    "linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple " +
+    "mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred " +
+    "midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab " +
+    "orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip " +
+    "peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue " +
+    "saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue " +
+    "slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet " +
+    "wheat white whitesmoke yellow yellowgreen transparent currentcolor"
+  ).split(" "),
+);
+
+function isCssColorToken(token: string): boolean {
+  if (token.startsWith("#")) {
+    return /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(token);
+  }
+  if (CSS_COLOR_FUNCTION_RE.test(token)) {
+    return true;
+  }
+  return CSS_NAMED_COLORS.has(token.toLowerCase());
+}
+
+function isBackgroundPositionToken(token: string): boolean {
+  return (
+    BACKGROUND_POSITION_KEYWORDS.has(token.toLowerCase()) ||
+    /^-?\d*\.?\d+(?:[a-z%]*)$/i.test(token) ||
+    /^calc\(/i.test(token)
+  );
+}
+
+function isBackgroundSizeToken(token: string): boolean {
+  const lower = token.toLowerCase();
+  return (
+    lower === "cover" ||
+    lower === "contain" ||
+    lower === "auto" ||
+    /^-?\d*\.?\d+(?:[a-z%]*)$/i.test(token) ||
+    /^calc\(/i.test(token)
+  );
+}
+
+/**
+ * Splits a background shorthand value into top-level tokens, keeping function
+ * calls intact and emitting `/` (position/size separator) as its own token.
+ * Returns null for values containing placeholders or unbalanced parens.
+ */
+function tokenizeBackgroundValue(value: string): string[] | null {
+  if (value.includes("__SC_EXPR_")) {
+    return null;
+  }
+  const tokens: string[] = [];
+  let current = "";
+  let depth = 0;
+  const flush = (): void => {
+    if (current) {
+      tokens.push(current);
+      current = "";
+    }
+  };
+  for (const c of value) {
+    if (c === "(") {
+      depth++;
+      current += c;
+      continue;
+    }
+    if (c === ")") {
+      depth = Math.max(0, depth - 1);
+      current += c;
+      continue;
+    }
+    if (depth === 0 && /\s/.test(c)) {
+      flush();
+      continue;
+    }
+    if (depth === 0 && c === "/") {
+      flush();
+      tokens.push("/");
+      continue;
+    }
+    current += c;
+  }
+  if (depth !== 0) {
+    return null;
+  }
+  flush();
+  return tokens.length ? tokens : null;
 }
