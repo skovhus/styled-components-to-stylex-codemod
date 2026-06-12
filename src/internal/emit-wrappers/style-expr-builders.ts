@@ -1097,6 +1097,7 @@ export function buildVariantStyleExprs(opts: {
           destructureProps,
           booleanProps,
           ...(knownProps ? { knownProps } : {}),
+          nonPropRoots: d.nonPropConditionRoots,
         });
         if (onNewDestructureProp && prevLengthRef && destructureProps) {
           for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
@@ -1117,6 +1118,7 @@ export function buildVariantStyleExprs(opts: {
         destructureProps,
         booleanProps,
         ...(knownProps ? { knownProps } : {}),
+        nonPropRoots: d.nonPropConditionRoots,
       });
       if (onNewDestructureProp && prevLengthRef && destructureProps) {
         for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
@@ -1137,6 +1139,7 @@ export function buildVariantStyleExprs(opts: {
         destructureProps,
         booleanProps,
         ...(knownProps ? { knownProps } : {}),
+        nonPropRoots: d.nonPropConditionRoots,
       });
       const styleExpr = styleRef(j, stylesIdentifier, variantKey);
       pushExpr(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }), when);

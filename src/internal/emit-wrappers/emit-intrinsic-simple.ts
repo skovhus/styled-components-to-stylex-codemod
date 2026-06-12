@@ -257,6 +257,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           const { props } = emitter.collectConditionProps({
             when,
             ...(knownProps ? { knownProps } : {}),
+            nonPropRoots: d.nonPropConditionRoots,
           });
           for (const p of props) {
             if (p) {
@@ -283,6 +284,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           const { props } = emitter.collectConditionProps({
             when: extra.when,
             ...(knownProps ? { knownProps } : {}),
+            nonPropRoots: d.nonPropConditionRoots,
           });
           for (const p of props) {
             if (p) {
@@ -1519,7 +1521,7 @@ function collectPropsUsedOutsideExtraStyleConditionals(
   };
 
   for (const [when] of Object.entries(d.variantStyleKeys ?? {})) {
-    const parsed = parseVariantWhenToAst(j, when, undefined, knownProps);
+    const parsed = parseVariantWhenToAst(j, when, undefined, knownProps, d.nonPropConditionRoots);
     for (const prop of parsed.props) {
       add(prop);
     }

@@ -2315,14 +2315,21 @@ function collectDeclPropNames(
     }
   };
   for (const when of Object.keys(decl.variantStyleKeys ?? {})) {
-    for (const p of parseVariantWhenToAst(j, when).props) {
+    for (const p of parseVariantWhenToAst(j, when, undefined, undefined, decl.nonPropConditionRoots)
+      .props) {
       addIfMatch(p);
     }
   }
   for (const sf of decl.styleFnFromProps ?? []) {
     addIfMatch(sf.jsxProp);
     if (sf.conditionWhen) {
-      for (const p of parseVariantWhenToAst(j, sf.conditionWhen).props) {
+      for (const p of parseVariantWhenToAst(
+        j,
+        sf.conditionWhen,
+        undefined,
+        undefined,
+        decl.nonPropConditionRoots,
+      ).props) {
         addIfMatch(p);
       }
     }

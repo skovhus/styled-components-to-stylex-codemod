@@ -2312,6 +2312,7 @@ export class WrapperEmitter {
     destructureProps?: string[];
     booleanProps?: ReadonlySet<string>;
     knownProps?: ReadonlySet<string>;
+    nonPropRoots?: ReadonlySet<string>;
   }) {
     return vc.collectConditionProps(this.j, args);
   }

@@ -68,20 +68,11 @@ const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
   // safely without element-specific knowledge, so callers should bail instead
   // of emitting `all` into stylex.create().
   "all",
-  // StyleX does not currently accept logical scroll longhands, and converting
-  // them to physical sides would change behavior in RTL or vertical writing modes.
-  "scroll-margin-block",
+  // StyleX compiles these two to physical `scroll-margin-top`/`scroll-margin-bottom`,
+  // which changes behavior in vertical writing modes. All other logical scroll
+  // longhands/shorthands are preserved losslessly by StyleX and are supported.
   "scroll-margin-block-start",
   "scroll-margin-block-end",
-  "scroll-margin-inline",
-  "scroll-margin-inline-start",
-  "scroll-margin-inline-end",
-  "scroll-padding-block",
-  "scroll-padding-block-start",
-  "scroll-padding-block-end",
-  "scroll-padding-inline",
-  "scroll-padding-inline-start",
-  "scroll-padding-inline-end",
 ]);
 
 /**

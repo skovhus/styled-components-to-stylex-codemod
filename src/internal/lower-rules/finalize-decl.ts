@@ -48,7 +48,13 @@ import {
 } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
-import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
+import {
+  isProvenSingleTokenValue,
+  isStyleConditionKey,
+  mapAst,
+  mergeStyleObjects,
+  walkAst,
+} from "./utils.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import {
   expandBorderRadiusInStyleObject,
@@ -4000,7 +4006,7 @@ function warnOpaqueShorthands(
 ): void {
   for (const prop of OPAQUE_SHORTHAND_PROPS) {
     const val = styleObj[prop];
-    if (val !== undefined && isAstNode(val)) {
+    if (val !== undefined && isAstNode(val) && !isProvenSingleTokenValue(val)) {
       warnings.push({
         severity: "warning",
         type: "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens",

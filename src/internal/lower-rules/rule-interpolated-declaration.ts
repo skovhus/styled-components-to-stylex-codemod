@@ -1583,7 +1583,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) {
       continue;
     }
-    if (isImportedShorthandUnitValue(d, decl, importMap)) {
+    const numericIdentifiers = getNumericImportedStylexIdentifiers(
+      j,
+      filePath,
+      importMap,
+      resolverImports,
+    );
+    if (isImportedShorthandUnitValue(d, decl, importMap, numericIdentifiers)) {
       bailUnsupportedLocal(decl, "Unsupported interpolation: call expression");
       continue;
     }
@@ -1597,12 +1603,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
-        numericIdentifiers: getNumericImportedStylexIdentifiers(
-          j,
-          filePath,
-          importMap,
-          resolverImports,
-        ),
+        numericIdentifiers,
         setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {
@@ -4018,7 +4019,33 @@ function tryHandleRuntimeConditionalStaticBranches(
   }
   applyVariant({ when }, consequentStyle);
   decl.needsWrapperComponent = true;
+  recordNonPropConditionRoots(decl, expr.test);
   return true;
+}
+
+/**
+ * Records the root identifiers of an imported runtime condition on the decl so
+ * wrapper emission treats them as module-scope bindings rather than component
+ * props (which matters for lowercase roots like `browser.isTouchDevice`).
+ */
+function recordNonPropConditionRoots(decl: StyledDecl, test: ExpressionKind): void {
+  const roots = (decl.nonPropConditionRoots ??= new Set<string>());
+  const visit = (expr: ExpressionKind): void => {
+    if (expr.type === "LogicalExpression") {
+      visit(expr.left as ExpressionKind);
+      visit(expr.right as ExpressionKind);
+      return;
+    }
+    if (expr.type === "UnaryExpression") {
+      visit(expr.argument as ExpressionKind);
+      return;
+    }
+    const info = extractRootAndPath(expr);
+    if (info && info.path.length > 0) {
+      roots.add(info.rootName);
+    }
+  };
+  visit(test);
 }
 
 function buildStaticBranchStyle(
@@ -4154,12 +4181,7 @@ function isImportedRuntimeCondition(
   importMap: ReadonlyMap<string, unknown>,
 ): boolean {
   const info = extractRootAndPath(expr);
-  if (
-    info &&
-    info.path.length > 0 &&
-    importMap.has(info.rootName) &&
-    isRuntimeConditionImportRoot(info.rootName)
-  ) {
+  if (info && info.path.length > 0 && importMap.has(info.rootName)) {
     return true;
   }
   if (expr.type === "LogicalExpression" && expr.operator === "&&") {
@@ -4174,14 +4196,18 @@ function isImportedRuntimeCondition(
   return false;
 }
 
-function isRuntimeConditionImportRoot(rootName: string): boolean {
-  return /^[A-Z]/.test(rootName);
-}
+const DIRECTIONAL_SHORTHAND_UNIT_VALUE_PROPS = new Set([
+  "margin",
+  "padding",
+  "scroll-margin",
+  "scroll-padding",
+]);
 
 function isImportedShorthandUnitValue(
   d: CssDeclarationIR,
   decl: StyledDecl,
   importMap: ReadonlyMap<string, unknown>,
+  numericIdentifiers: ReadonlySet<string>,
 ): boolean {
   if (!d.property || !isCssShorthandProperty(d.property)) {
     return false;
@@ -4197,7 +4223,22 @@ function isImportedShorthandUnitValue(
       ? (decl.templateExpressions[slotPart.slotId] as ExpressionKind | undefined)
       : undefined;
   const info = extractRootAndPath(expr);
-  return !!info && importMap.has(info.rootName);
+  if (!info || !importMap.has(info.rootName)) {
+    return false;
+  }
+  // A directional shorthand whose whole value is a single proven-numeric token
+  // (e.g. `margin: ${NumericConsts.x}px`) is valid in StyleX as-is: the value
+  // cannot expand to multiple tokens, so the interpolated-string handler can
+  // emit it directly.
+  if (
+    DIRECTIONAL_SHORTHAND_UNIT_VALUE_PROPS.has(d.property) &&
+    staticParts.prefix.trim() === "" &&
+    /^[a-zA-Z%]+$/.test(staticParts.suffix.trim()) &&
+    numericIdentifiers.has(info.rootName)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {

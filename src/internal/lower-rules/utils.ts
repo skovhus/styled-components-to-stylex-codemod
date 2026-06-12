@@ -15,6 +15,24 @@ import { literalToStaticValue } from "./types.js";
 // Re-exported for backwards compatibility; the canonical home is utilities/ast-walk.
 export { walkAst } from "../utilities/ast-walk.js";
 
+/**
+ * Marks an emitted AST value node as proven to be a single CSS token (e.g. a
+ * numeric stylex const that had a unit suffix). Shorthand properties holding
+ * such values cannot expand to multiple tokens, so the opaque-shorthand
+ * warning does not apply to them.
+ */
+export function markProvenSingleTokenValue(node: unknown): void {
+  if (node && typeof node === "object") {
+    provenSingleTokenValues.add(node as object);
+  }
+}
+
+export function isProvenSingleTokenValue(node: unknown): boolean {
+  return !!node && typeof node === "object" && provenSingleTokenValues.has(node as object);
+}
+
+const provenSingleTokenValues = new WeakSet<object>();
+
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
 type MediaSlotResolution =
