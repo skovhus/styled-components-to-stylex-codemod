@@ -4220,9 +4220,7 @@ function physicalLonghandExpansion(prop: string): string[] {
   if (borderMatch) {
     const side = borderMatch[1];
     const kind = borderMatch[2]!;
-    return side
-      ? [prop]
-      : ["Top", "Right", "Bottom", "Left"].map((s) => `border${s}${kind}`);
+    return side ? [prop] : ["Top", "Right", "Bottom", "Left"].map((s) => `border${s}${kind}`);
   }
   return [prop];
 }

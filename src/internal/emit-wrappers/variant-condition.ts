@@ -135,7 +135,9 @@ export function parseVariantWhenToAst(
       .split("&&")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots));
+    const parsed = parts.map((p) =>
+      parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots),
+    );
     const firstParsed = parsed[0];
     if (!firstParsed) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -155,7 +157,9 @@ export function parseVariantWhenToAst(
       .split(" || ")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots));
+    const parsed = parts.map((p) =>
+      parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots),
+    );
     const firstParsedOr = parsed[0];
     if (!firstParsedOr) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };

@@ -4,12 +4,12 @@ export const App = () => <div sx={styles.box}>Logical scroll longhand</div>;
 
 const styles = stylex.create({
   box: {
-    scrollMarginInlineStart: 6,
-    scrollMarginInlineEnd: 4,
-    scrollMarginBlock: "10px 12px",
     scrollPaddingBlockStart: 2,
     scrollPaddingBlockEnd: 3,
-    scrollPaddingInline: 7,
+    scrollPaddingInlineStart: 7,
+    scrollPaddingInlineEnd: 7,
+    scrollMarginInlineStart: 5,
+    scrollMarginInlineEnd: 9,
     backgroundColor: "lavender",
     padding: 16,
   },

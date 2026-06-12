@@ -69,12 +69,25 @@ const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
   // safely without element-specific knowledge, so callers should bail instead
   // of emitting `all` into stylex.create().
   "all",
-  // StyleX compiles these two to physical `scroll-margin-top`/`scroll-margin-bottom`,
-  // which changes behavior in vertical writing modes. All other logical scroll
-  // longhands/shorthands are preserved losslessly by StyleX and are supported.
+  // StyleX compiles the block-axis scroll-margin longhands to physical
+  // `scroll-margin-top`/`scroll-margin-bottom`, which changes behavior in
+  // vertical writing modes (the shorthand expands to those longhands, so it is
+  // equally lossy). The inline-axis scroll-margin and all scroll-padding
+  // logical properties are preserved losslessly and are supported.
+  "scroll-margin-block",
   "scroll-margin-block-start",
   "scroll-margin-block-end",
 ]);
+
+/**
+ * Logical scroll shorthands that expand to Start/End longhands. StyleX's
+ * valid-styles rule accepts only the longhand forms.
+ */
+const LOGICAL_SCROLL_AXIS_SHORTHANDS: Record<string, string> = {
+  "scroll-margin-inline": "scrollMarginInline",
+  "scroll-padding-block": "scrollPaddingBlock",
+  "scroll-padding-inline": "scrollPaddingInline",
+};
 
 /**
  * Returns true if the CSS property is a shorthand that StyleX cannot express directly
@@ -334,6 +347,27 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
         prop: entry.prop,
         value: { kind: "static", value: entry.value },
       }));
+    }
+  }
+
+  // Logical scroll shorthands (e.g. `scroll-margin-inline: 4px 8px`) are valid
+  // CSS but not accepted by StyleX's valid-styles rule; expand them to their
+  // Start/End longhands, which StyleX preserves losslessly.
+  const logicalScrollAxis = LOGICAL_SCROLL_AXIS_SHORTHANDS[prop];
+  if (logicalScrollAxis && decl.value.kind === "static") {
+    const values = decl.valueRaw.trim().split(/\s+/).filter(Boolean);
+    if (values.length >= 1 && values.length <= 2) {
+      const start = values[0]!;
+      const end = values[1] ?? start;
+      const withImportant = (value: string): string =>
+        decl.important ? `${value} !important` : value;
+      return [
+        {
+          prop: `${logicalScrollAxis}Start`,
+          value: { kind: "static", value: withImportant(start) },
+        },
+        { prop: `${logicalScrollAxis}End`, value: { kind: "static", value: withImportant(end) } },
+      ];
     }
   }
 
