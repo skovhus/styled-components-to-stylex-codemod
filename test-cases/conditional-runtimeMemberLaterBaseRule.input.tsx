@@ -1,5 +1,4 @@
-// @expected-warning: Unsupported interpolation: call expression
-// A later equivalent base rule must not be overridden by an earlier runtime branch.
+// A later equivalent base rule wins, making the earlier runtime branch dead code.
 import styled from "styled-components";
 import { Browser } from "./lib/helpers";
 

@@ -4008,8 +4008,21 @@ function tryHandleRuntimeConditionalStaticBranches(
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
     return true;
   }
-  if (hasLaterDeclarationOverlap(rule, allRules, d, new Set(Object.keys(consequentStyle)))) {
+  if (
+    !subtractLaterStaticOverrides({
+      rule,
+      allRules,
+      currentDecl: d,
+      branchStyles: [consequentStyle, alternateStyle],
+    })
+  ) {
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
+  }
+  if (!Object.keys(consequentStyle).length && !Object.keys(alternateStyle).length) {
+    // Every branch property is unconditionally overridden by a later static
+    // declaration, so the conditional is dead — the later declarations carry
+    // the final values.
     return true;
   }
 
@@ -4081,50 +4094,158 @@ function sameStyleProps(left: Record<string, unknown>, right: Record<string, unk
   return leftKeys.length === rightKeys.size && leftKeys.every((key) => rightKeys.has(key));
 }
 
-function hasLaterDeclarationOverlap(
-  rule: CssRuleIR,
-  allRules: readonly CssRuleIR[],
-  currentDecl: CssDeclarationIR,
-  stylexProps: ReadonlySet<string>,
-): boolean {
+/**
+ * Removes branch properties that are unconditionally overridden by later static
+ * declarations in the same selector context, so the runtime variant cannot
+ * invert the original CSS cascade. Partially overridden directional props are
+ * narrowed to the longhands that survive the override (e.g. `marginBlock`
+ * overridden by a later `margin-top` becomes `marginBlockEnd`).
+ *
+ * Returns false when a later overlapping declaration cannot be subtracted
+ * safely (conditional at-rule context, dynamic value, property-less helper, or
+ * a multi-token branch value that cannot be split per longhand) — the caller
+ * must bail in that case.
+ */
+function subtractLaterStaticOverrides(args: {
+  rule: CssRuleIR;
+  allRules: readonly CssRuleIR[];
+  currentDecl: CssDeclarationIR;
+  branchStyles: Array<Record<string, unknown>>;
+}): boolean {
+  const { rule, allRules, currentDecl, branchStyles } = args;
   const currentIndex = rule.declarations.indexOf(currentDecl);
   if (currentIndex === -1) {
-    return false;
-  }
-  if (declarationsOverlap(rule.declarations.slice(currentIndex + 1), stylexProps)) {
     return true;
   }
-
+  const laterContexts: Array<{
+    declarations: readonly CssDeclarationIR[];
+    unconditional: boolean;
+  }> = [{ declarations: rule.declarations.slice(currentIndex + 1), unconditional: true }];
   const currentRuleIndex = allRules.indexOf(rule);
-  if (currentRuleIndex === -1) {
-    return false;
-  }
-  for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
-    if (rule.selector !== laterRule.selector) {
-      continue;
+  if (currentRuleIndex !== -1) {
+    for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
+      if (laterRule.selector !== rule.selector) {
+        continue;
+      }
+      laterContexts.push({
+        declarations: laterRule.declarations,
+        unconditional: sameAtRuleStack(laterRule.atRuleStack, rule.atRuleStack),
+      });
     }
-    if (declarationsOverlap(laterRule.declarations, stylexProps)) {
-      return true;
-    }
   }
-  return false;
-}
 
-function declarationsOverlap(
-  declarations: readonly CssDeclarationIR[],
-  stylexProps: ReadonlySet<string>,
-): boolean {
-  for (const laterDecl of declarations) {
-    if (!laterDecl.property) {
-      return true;
-    }
-    for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
-      if ([...stylexProps].some((prop) => stylexPropsOverlap(prop, out.prop))) {
-        return true;
+  const branchProps = (): string[] => [
+    ...new Set(branchStyles.flatMap((style) => Object.keys(style))),
+  ];
+  for (const context of laterContexts) {
+    for (const laterDecl of context.declarations) {
+      if (!laterDecl.property) {
+        // Property-less interpolation (e.g. a helper mixin) may set anything.
+        if (branchProps().length) {
+          return false;
+        }
+        continue;
+      }
+      for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
+        const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, out.prop));
+        if (!overlapped.length) {
+          continue;
+        }
+        if (!context.unconditional || laterDecl.value.kind !== "static") {
+          return false;
+        }
+        for (const branch of branchStyles) {
+          if (!subtractOverrideFromBranch(branch, overlapped, out.prop)) {
+            return false;
+          }
+        }
       }
     }
   }
-  return false;
+  return true;
+}
+
+function sameAtRuleStack(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+
+function subtractOverrideFromBranch(
+  branch: Record<string, unknown>,
+  overlappedProps: string[],
+  overrideProp: string,
+): boolean {
+  const overridePhysical = new Set(physicalLonghandExpansion(overrideProp));
+  for (const branchProp of overlappedProps) {
+    if (!(branchProp in branch)) {
+      continue;
+    }
+    const branchPhysical = physicalLonghandExpansion(branchProp);
+    const remainder = branchPhysical.filter((prop) => !overridePhysical.has(prop));
+    if (remainder.length === branchPhysical.length) {
+      // Related (same directional group) but physically disjoint — no override.
+      continue;
+    }
+    const value = branch[branchProp];
+    delete branch[branchProp];
+    if (!remainder.length) {
+      continue;
+    }
+    if (!isSingleCssToken(value)) {
+      return false;
+    }
+    for (const physical of remainder) {
+      const name = LOGICAL_TO_PHYSICAL[branchProp]
+        ? logicalFormForPhysical(branchProp, physical)
+        : physical;
+      if (!name) {
+        return false;
+      }
+      branch[name] = value;
+    }
+  }
+  return true;
+}
+
+/** Physical longhands covered by a StyleX directional/border property. */
+function physicalLonghandExpansion(prop: string): string[] {
+  const group = SHORTHAND_LONGHANDS[prop];
+  if (group) {
+    return [...group.physical];
+  }
+  const logical = LOGICAL_TO_PHYSICAL[prop];
+  if (logical) {
+    return [...logical];
+  }
+  const borderMatch = prop.match(/^border(Top|Right|Bottom|Left)?(Width|Style|Color)$/);
+  if (borderMatch) {
+    const side = borderMatch[1];
+    const kind = borderMatch[2]!;
+    return side
+      ? [prop]
+      : ["Top", "Right", "Bottom", "Left"].map((s) => `border${s}${kind}`);
+  }
+  return [prop];
+}
+
+/** Maps a physical longhand back to the Start/End form of a logical branch prop. */
+function logicalFormForPhysical(logicalProp: string, physical: string): string | null {
+  for (const [name, physicalProps] of Object.entries(LOGICAL_TO_PHYSICAL)) {
+    if (
+      physicalProps.length === 1 &&
+      physicalProps[0] === physical &&
+      name.startsWith(logicalProp)
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function isSingleCssToken(value: unknown): boolean {
+  if (typeof value === "number") {
+    return true;
+  }
+  return typeof value === "string" && value.trim() !== "" && !/\s/.test(value.trim());
 }
 
 function stylexPropsOverlap(left: string, right: string): boolean {

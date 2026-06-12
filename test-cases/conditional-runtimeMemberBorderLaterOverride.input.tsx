@@ -1,5 +1,4 @@
-// @expected-warning: Unsupported interpolation: call expression
-// A later border longhand declaration must not be overridden by an earlier runtime border branch.
+// A later border longhand declaration wins over the earlier runtime border branch for that side.
 import styled from "styled-components";
 import { Browser } from "./lib/helpers";
 
