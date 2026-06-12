@@ -93,6 +93,17 @@ function wrappedComponentAcceptsSxProp(
     visiting.delete(componentLocalName);
     return true;
   }
+  // A local styled decl emitted as a wrapper that supports external styles takes
+  // an `sx` prop (merged after its own styles via the style merger), so callers
+  // can delegate extension styles through it.
+  if (
+    localStyledDecl?.needsWrapperComponent &&
+    !localStyledDecl.skipTransform &&
+    localStyledDecl.supportsExternalStyles
+  ) {
+    visiting.delete(componentLocalName);
+    return true;
+  }
 
   const componentInterface = wrappedComponentInterfaceFor(ctx, componentLocalName);
   if (componentInterface !== undefined) {
@@ -732,8 +743,21 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // When skipBaseStyleRef is set, the base style key IS a dynamic function
         // (static properties were merged into it). Don't include the bare reference —
         // processAttr will emit the function call when it consumes the prop.
+        //
+        // When the rendered element is itself a converted local wrapper component
+        // (the extension chain could not be flattened, e.g. the base consumes props
+        // via dynamic style functions), the wrapper already applies its own base
+        // styles internally — re-applying styles.<extendsKey> here would duplicate
+        // them, and for a dynamic base it would pass the style function uncalled.
+        const rendersLocalWrapperBase =
+          decl.base.kind === "component" &&
+          decl.base.ident === finalTag &&
+          (ctx.styledDecls?.some(
+            (d) => d.localName === finalTag && d.needsWrapperComponent && !d.skipTransform,
+          ) ??
+            false);
         const styleArgs: ExpressionKind[] = [
-          ...(decl.extendsStyleKey
+          ...(decl.extendsStyleKey && !rendersLocalWrapperBase
             ? [
                 j.memberExpression(
                   j.identifier(ctx.stylesIdentifier ?? "styles"),
