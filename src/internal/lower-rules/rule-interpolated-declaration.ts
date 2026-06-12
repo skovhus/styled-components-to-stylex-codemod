@@ -3361,7 +3361,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                   ...pseudos.map((ps) => j.property("init", j.literal(ps), valueExpr)),
                 ]);
               }
-              if (media && pseudos?.length) {
+              if (!media) {
+                return valueExpr;
+              }
+              if (pseudos?.length) {
                 return buildPseudoMediaPropValue({ j, valueExpr, pseudos, media });
               }
               const existingFn = styleFnDecls.get(fnKey);

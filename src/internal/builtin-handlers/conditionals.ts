@@ -920,7 +920,12 @@ export function tryResolveConditionalValue(
         if (allUsages.size === 1) {
           const usage = cons.usage;
           const variants = [
-            { nameHint: "truthy", when: resolvedWhens.truthy, expr: cons.expr, imports: cons.imports },
+            {
+              nameHint: "truthy",
+              when: resolvedWhens.truthy,
+              expr: cons.expr,
+              imports: cons.imports,
+            },
             { nameHint: "falsy", when: resolvedWhens.falsy, expr: alt.expr, imports: alt.imports },
           ];
           return usage === "props"

@@ -101,13 +101,6 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     },
   });
   const styleFnDecls = new Map<string, any>();
-  if (process.env.DEBUG_TRACE_FN) {
-    const origSet = styleFnDecls.set.bind(styleFnDecls);
-    styleFnDecls.set = ((k: string, v: any) => {
-      console.trace("styleFnDecls.set", k);
-      return origSet(k, v);
-    }) as any;
-  }
   const attrBuckets = new Map<string, Record<string, unknown>>();
   const observedVariantFallbackFns = new Map<string, string>();
   let currentDeclarationSourceOrder: number | undefined;

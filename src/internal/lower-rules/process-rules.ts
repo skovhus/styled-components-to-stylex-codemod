@@ -1320,7 +1320,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
      * maps) only lose their `default` layer.
      */
     const clearEarlierVariantBaseValues = (prop: string): void => {
-      for (const [when, bucket] of [...variantBuckets]) {
+      // Deleting entries while iterating a Map is safe in JS.
+      for (const [when, bucket] of variantBuckets) {
         if (!Object.hasOwn(bucket, prop)) {
           continue;
         }

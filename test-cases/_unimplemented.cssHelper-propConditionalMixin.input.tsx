@@ -10,7 +10,7 @@ const sizing = css<{ $big?: boolean }>`
   width: ${(p) => (p.$big ? "100px" : "50px")};
 `;
 
-const Tile = styled.div`
+const Tile = styled.div<{ $big?: boolean }>`
   ${sizing}
   background-color: lightsteelblue;
   padding: 8px;

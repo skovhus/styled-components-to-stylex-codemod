@@ -50,7 +50,9 @@ export const App = () => (
     <CardContainer checked={true} disabled={true}>
       <CardContent>Checked, disabled</CardContent>
     </CardContainer>
-    <FadeBox active size="large">Active large (opacity 1)</FadeBox>
+    <FadeBox active size="large">
+      Active large (opacity 1)
+    </FadeBox>
     <FadeBox active>Active small (opacity 0.5)</FadeBox>
     <FadeBox>Inactive (opacity 0.1)</FadeBox>
   </div>
