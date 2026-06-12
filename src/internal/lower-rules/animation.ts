@@ -350,15 +350,19 @@ export function tryHandleAnimation(args: {
         return false;
       }
 
-      const nameTok = tokens.shift()!;
-      const m = nameTok.match(/^__SC_EXPR_(\d+)__$/);
-      if (!m) {
+      // The animation-name can appear anywhere in the shorthand (e.g.
+      // `animation: 300ms ${fade} linear`), so locate the keyframes slot token
+      // instead of assuming it comes first.
+      const nameIdx = tokens.findIndex((t) => {
+        const slotMatch = t.match(/^__SC_EXPR_(\d+)__$/);
+        return slotMatch ? getKeyframeFromSlot(Number(slotMatch[1])) !== null : false;
+      });
+      if (nameIdx === -1) {
         return false;
       }
-      const kf = getKeyframeFromSlot(Number(m[1]));
-      if (!kf) {
-        return false;
-      }
+      const nameTok = tokens.splice(nameIdx, 1)[0]!;
+      const m = nameTok.match(/^__SC_EXPR_(\d+)__$/)!;
+      const kf = getKeyframeFromSlot(Number(m[1]))!;
       animNames.push({ kind: "ident", name: kf });
 
       // Track ALL time tokens (static and interpolated) with their original indices.

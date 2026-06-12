@@ -16,4 +16,17 @@ const Rotate = styled.div`
   font-size: 1.2rem;
 `;
 
-export const App = () => <Rotate>💅</Rotate>;
+// The animation-name can appear anywhere in the shorthand, not just first
+const RotateNameLast = styled.div`
+  display: inline-block;
+  animation: 2s linear infinite ${rotate};
+  padding: 2rem 1rem;
+  font-size: 1.2rem;
+`;
+
+export const App = () => (
+  <>
+    <Rotate>💅</Rotate>
+    <RotateNameLast>💅</RotateNameLast>
+  </>
+);
