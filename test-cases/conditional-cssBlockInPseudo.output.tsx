@@ -40,7 +40,7 @@ function IconWrapper(props: IconWrapperProps) {
             })
           : undefined,
         styles.iconWrapper,
-        background != null && styles.iconWrapperBackgroundColor(background),
+        background ? styles.iconWrapperBackgroundColor(background) : undefined,
         background ? styles.iconWrapperBackground : undefined,
       ]}
     >

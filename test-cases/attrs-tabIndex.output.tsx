@@ -25,7 +25,7 @@ export function ScrollableFlex(props: ScrollableFlexProps) {
         [
           styles.scrollableFlex,
           applyBackground ? styles.scrollableFlexApplyBackground : undefined,
-          props.gutter != null && styles.scrollableFlexScrollbarGutter(props.gutter),
+          props.gutter ? styles.scrollableFlexScrollbarGutter(props.gutter) : undefined,
           sx,
         ],
         className,
@@ -47,7 +47,7 @@ export function ScrollableDiv(
         [
           styles.scrollableDiv,
           applyBackground ? styles.scrollableDivApplyBackground : undefined,
-          gutter != null && styles.scrollableDivScrollbarGutter(gutter),
+          gutter ? styles.scrollableDivScrollbarGutter(gutter) : undefined,
           sx,
         ],
         className,

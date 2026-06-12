@@ -236,6 +236,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         );
         const callArg = buildTemplateWithStaticParts(j, logicalExpr, prefix, suffix);
         styleFnFromProps.push({ fnKey, jsxProp, callArg, condition: "always" });
+      } else if (expr.body.operator === "||") {
+        // `||` falls back on ANY falsy value (0, "", false), so the style fn must be
+        // gated on truthiness. The default guard (`prop != null`, or a bare call for
+        // required props) would let falsy values through instead of using the fallback.
+        styleFnFromProps.push({ fnKey, jsxProp, condition: "truthy" });
       } else {
         styleFnFromProps.push({ fnKey, jsxProp });
       }

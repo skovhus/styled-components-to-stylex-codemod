@@ -15,7 +15,11 @@ export function Badge(
   return (
     <div
       {...rest}
-      sx={[styles.badge, sizeVariants[size], color != null && styles.badgeBackgroundColor(color)]}
+      sx={[
+        styles.badge,
+        sizeVariants[size],
+        color ? styles.badgeBackgroundColor(color) : undefined,
+      ]}
     />
   );
 }
