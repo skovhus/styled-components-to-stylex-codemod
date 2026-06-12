@@ -74,6 +74,7 @@ export type WarningType =
   | "Unsupported interpolation: arrow function"
   | "Unsupported interpolation: call expression"
   | "Unsupported interpolation: identifier"
+  | "css helper with prop-based interpolation cannot be reused as a mixin"
   | "Unsupported interpolation: member expression"
   | "Unsupported interpolation: multiple dynamic slots in one declaration"
   | "Unsupported interpolation: property"

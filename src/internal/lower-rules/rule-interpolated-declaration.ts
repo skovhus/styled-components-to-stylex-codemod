@@ -1621,10 +1621,46 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (tryEmitObservedCssBlockVariantBuckets(expr)) {
           continue;
         }
+        // A helper whose template interpolates component props (beyond theme access)
+        // carries conditional variants/dynamic values that applyCssHelperMixin does
+        // not wire into the consumer — only the helper's base style key would be
+        // referenced, silently dropping the prop-dependent styles. Bail instead.
+        const bailOnPropDependentCssHelper = (helperDecl: StyledDecl): boolean => {
+          for (const helperExpr of (helperDecl.templateExpressions ?? []) as Array<{
+            type?: string;
+          }>) {
+            if (
+              !helperExpr ||
+              (helperExpr.type !== "ArrowFunctionExpression" &&
+                helperExpr.type !== "FunctionExpression")
+            ) {
+              continue;
+            }
+            const propsUsed = new Set([
+              ...collectPropsFromArrowFn(helperExpr as never),
+              ...collectPropsFromArrowFnDestructured(helperExpr as never),
+            ]);
+            propsUsed.delete("theme");
+            if (propsUsed.size > 0) {
+              warnings.push({
+                severity: "warning",
+                type: "css helper with prop-based interpolation cannot be reused as a mixin",
+                loc: decl.loc,
+                context: { localName: decl.localName, mixin: helperDecl.localName },
+              });
+              bail = true;
+              return true;
+            }
+          }
+          return false;
+        };
         // Handle css helper identifier: ${primaryStyles}
         if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
           const helperDecl = declByLocalName.get(expr.name);
           if (helperDecl) {
+            if (bailOnPropDependentCssHelper(helperDecl)) {
+              break;
+            }
             applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
             continue;
           }
@@ -1638,6 +1674,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const calleeName = expr.callee.name as string;
           const helperDecl = declByLocalName.get(calleeName);
           if (helperDecl?.isCssHelper) {
+            if (bailOnPropDependentCssHelper(helperDecl)) {
+              break;
+            }
             applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
             continue;
           }
