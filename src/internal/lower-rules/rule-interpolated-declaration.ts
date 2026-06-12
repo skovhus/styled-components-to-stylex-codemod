@@ -2626,14 +2626,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? scalarizePropsObjectDynamicValue({
                 j,
                 valueExpr: dynamicValueExpr,
-                paramName: "props",
+                paramName,
                 propNames: dynamicProps,
               })
             : null;
         const dynamicStyleValueExpr = scalarDynamic?.valueExpr ?? dynamicValueExpr;
+        // The non-scalar fallback keeps the original arrow's member accesses
+        // (e.g. `p.size`), so the function param must reuse that name.
         const dynamicStyleParams: ArrowFunctionParams = scalarDynamic
           ? scalarDynamic.paramNames.map((propName) => j.identifier(propName))
-          : [j.identifier("props")];
+          : [j.identifier(paramName)];
         if (scalarDynamic) {
           annotateScalarParams(dynamicStyleParams, scalarDynamic.paramNames);
         }
