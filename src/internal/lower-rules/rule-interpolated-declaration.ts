@@ -3267,8 +3267,39 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
             const valueExpr = buildValueExpr();
             const getPropValue = (): ExpressionKind => {
-              if (!media) {
+              if (!media && !pseudos?.length) {
                 return valueExpr;
+              }
+              if (!media && pseudos?.length) {
+                // Pseudo-gated dynamic value (e.g. `&:hover { color: ${p => p.$c} }`).
+                // Fold the existing static base value (if any) into the function's
+                // `default` so the base declaration isn't clobbered by the later
+                // style-function entry in the stylex.props() array.
+                const existingStatic = (styleObj as Record<string, unknown>)[out.prop];
+                let defaultValue: ExpressionKind = j.literal(null);
+                if (existingStatic !== undefined && existingStatic !== null) {
+                  if (typeof existingStatic === "object") {
+                    if ("type" in (existingStatic as Record<string, unknown>)) {
+                      defaultValue = cloneAstNode(existingStatic) as ExpressionKind;
+                      delete (styleObj as Record<string, unknown>)[out.prop];
+                    }
+                    // Plain condition buckets (prior pseudo/media objects) stay in
+                    // styleObj; the null default keeps this function pseudo-only.
+                  } else {
+                    defaultValue = staticValueToLiteral(
+                      j,
+                      existingStatic as string | number | boolean,
+                    ) as ExpressionKind;
+                    delete (styleObj as Record<string, unknown>)[out.prop];
+                  }
+                }
+                return j.objectExpression([
+                  j.property("init", j.identifier("default"), defaultValue),
+                  ...pseudos.map((ps) => j.property("init", j.literal(ps), valueExpr)),
+                ]);
+              }
+              if (media && pseudos?.length) {
+                return buildPseudoMediaPropValue({ j, valueExpr, pseudos, media });
               }
               const existingFn = styleFnDecls.get(fnKey);
               let existingValue: ExpressionKind | null = null;

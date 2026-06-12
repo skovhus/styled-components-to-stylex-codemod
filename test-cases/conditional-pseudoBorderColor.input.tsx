@@ -15,9 +15,23 @@ const JsonTextarea = styled.textarea<{ $hasError?: boolean }>`
   }
 `;
 
+// Prop-valued dynamic declaration inside a pseudo-class:
+// the :hover gating must be preserved and the static base folded into `default`
+const HoverSwatch = styled.button<{ $hoverColor: string }>`
+  padding: 8px 16px;
+  color: white;
+  background-color: slategray;
+
+  &:hover {
+    background-color: ${(p) => p.$hoverColor};
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
     <JsonTextarea defaultValue="default" />
     <JsonTextarea $hasError defaultValue="error" />
+    <HoverSwatch $hoverColor="tomato">Hover me (tomato)</HoverSwatch>
+    <HoverSwatch $hoverColor="seagreen">Hover me (seagreen)</HoverSwatch>
   </div>
 );
