@@ -1829,7 +1829,31 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
-    const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
+    // The fallback below resolves a single interpolation slot. If multiple
+    // function-valued slots remain in one declaration (e.g.
+    // `padding: ${p => p.$v}px ${p => p.$h}px`) and no specialized handler
+    // consumed them, emitting only the first slot would silently drop the
+    // others — bail instead. Slots holding static expressions (identifiers,
+    // constants) are fine: the template builders below substitute them in place.
+    const remainingSlotParts = d.value.parts.filter((p: any) => p.kind === "slot");
+    const functionSlotCount = remainingSlotParts.filter((p: any) => {
+      const slotExpr = decl.templateExpressions[p.slotId] as { type?: string } | undefined;
+      return (
+        slotExpr?.type === "ArrowFunctionExpression" || slotExpr?.type === "FunctionExpression"
+      );
+    }).length;
+    if (functionSlotCount > 1) {
+      warnings.push({
+        severity: "error",
+        type: "Unsupported interpolation: multiple dynamic slots in one declaration",
+        loc: decl.loc,
+        context: { localName: decl.localName, property: d.property },
+      });
+      bail = true;
+      break;
+    }
+
+    const slotPart = remainingSlotParts[0];
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
