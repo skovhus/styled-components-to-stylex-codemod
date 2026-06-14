@@ -3213,11 +3213,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           // be optional at runtime (untyped / JS components).
           const hasExplicitType = !!decl.propsType;
           const isOptional = ctx.isJsxPropOptional(jsxProp);
+          // When this value is pseudo-gated and a static base for the same
+          // property exists, getPropValue folds that base into the function's
+          // `default`. The folded base is only emitted when the function runs,
+          // so the function must be called unconditionally — otherwise an absent
+          // optional prop would drop the base (e.g. `background: slategray;
+          // &:hover { background: ${p => p.$c} }` rendered without `$c`).
+          const foldsStaticBaseIntoPseudoDefault =
+            !media &&
+            !!pseudos?.length &&
+            staticBaseValueWouldFold((styleObj as Record<string, unknown>)[out.prop]);
           styleFnFromProps.push({
             fnKey,
             jsxProp,
             ...(callArg ? { callArg } : {}),
-            ...(hasExplicitType && !isOptional ? { condition: "always" as const } : {}),
+            ...((hasExplicitType && !isOptional) || foldsStaticBaseIntoPseudoDefault
+              ? { condition: "always" as const }
+              : {}),
           });
 
           if (!styleFnDecls.has(fnKey)) {
@@ -3234,6 +3246,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (resolvedCallArg && /\.(ts|tsx)$/.test(filePath)) {
               (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                 j.tsStringKeyword(),
+              );
+            }
+            // Forcing an always-call on an optional prop passes `T | undefined`
+            // into the style function, so widen the param to accept undefined.
+            if (
+              foldsStaticBaseIntoPseudoDefault &&
+              isOptional &&
+              jsxProp !== "__props" &&
+              /\.(ts|tsx)$/.test(filePath)
+            ) {
+              const annotated = (param as { typeAnnotation?: { typeAnnotation?: unknown } })
+                .typeAnnotation?.typeAnnotation;
+              const baseTypeNode = (annotated as ExpressionKind | undefined) ?? j.tsStringKeyword();
+              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                j.tsUnionType([baseTypeNode as never, j.tsUndefinedKeyword()]),
               );
             }
             if (jsxProp?.startsWith?.("$")) {
@@ -3800,6 +3827,22 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return (
     pseudoElement === "::before" || pseudoElement === "::after" || pseudoElement === "::placeholder"
   );
+}
+
+/**
+ * Whether a base style value for a property would be folded into a pseudo-gated
+ * dynamic style function's `default` (mirrors the fold logic in getPropValue):
+ * plain primitives and AST-node values fold; existing pseudo/media condition
+ * buckets (plain objects without a `type` discriminator) do not.
+ */
+function staticBaseValueWouldFold(existingStatic: unknown): boolean {
+  if (existingStatic === undefined || existingStatic === null) {
+    return false;
+  }
+  if (typeof existingStatic === "object") {
+    return "type" in (existingStatic as Record<string, unknown>);
+  }
+  return true;
 }
 
 function tryHandleLocalCustomPropertyDefinition(args: {
