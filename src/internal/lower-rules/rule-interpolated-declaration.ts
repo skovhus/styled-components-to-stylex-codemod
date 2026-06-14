@@ -21,8 +21,8 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  expandBackgroundShorthandComponents,
   isCssShorthandProperty,
-  isDirectionalShorthandCssProperty,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   parseBorderShorthandParts,
@@ -4147,8 +4147,18 @@ function subtractLaterStaticOverrides(args: {
         }
         continue;
       }
-      for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
-        const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, out.prop));
+      const laterProps = laterDeclStylexPropNames(laterDecl);
+      if (laterProps === null) {
+        // A later shorthand we cannot enumerate losslessly (e.g. an
+        // unexpandable multi-component background) might reset any branch
+        // property — bail.
+        if (branchProps().length) {
+          return false;
+        }
+        continue;
+      }
+      for (const overrideProp of laterProps) {
+        const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
         if (!overlapped.length) {
           continue;
         }
@@ -4163,7 +4173,7 @@ function subtractLaterStaticOverrides(args: {
           return false;
         }
         for (const branch of branchStyles) {
-          if (!subtractOverrideFromBranch(branch, overlapped, out.prop)) {
+          if (!subtractOverrideFromBranch(branch, overlapped, overrideProp)) {
             return false;
           }
         }
@@ -4177,12 +4187,38 @@ function sameAtRuleStack(left: readonly string[], right: readonly string[]): boo
   return left.length === right.length && left.every((entry, i) => entry === right[i]);
 }
 
+/**
+ * StyleX property names a later declaration sets, used for cascade-overlap
+ * detection. A multi-component `background` shorthand is expanded to its full
+ * reset set (so e.g. its implicit `backgroundColor: transparent` reset is
+ * visible to overlap detection). Returns null when a shorthand cannot be
+ * enumerated losslessly and the caller must bail.
+ */
+function laterDeclStylexPropNames(laterDecl: CssDeclarationIR): string[] | null {
+  if (
+    laterDecl.property === "background" &&
+    laterDecl.value.kind === "static" &&
+    isUnsupportedBackgroundShorthandValue(laterDecl.valueRaw)
+  ) {
+    const expanded = expandBackgroundShorthandComponents(laterDecl.valueRaw);
+    return expanded ? expanded.map((entry) => entry.prop) : null;
+  }
+  return cssDeclarationToStylexDeclarations(laterDecl).map((out) => out.prop);
+}
+
 function subtractOverrideFromBranch(
   branch: Record<string, unknown>,
   overlappedProps: string[],
   overrideProp: string,
 ): boolean {
   const overridePhysical = new Set(physicalLonghandExpansion(overrideProp));
+  // A logical override leaves a logical survivor (direction/writing-mode aware);
+  // a physical override leaves a deterministic physical survivor. Anchoring on
+  // the override's representation keeps the remainder direction-correct — e.g.
+  // `margin-inline` (logical) partially overridden by physical `margin-left`
+  // survives as physical `margin-right`, not logical `margin-inline-end` (which
+  // would target the left side in RTL).
+  const overrideIsLogical = LOGICAL_TO_PHYSICAL[overrideProp] !== undefined;
   for (const branchProp of overlappedProps) {
     if (!(branchProp in branch)) {
       continue;
@@ -4202,9 +4238,10 @@ function subtractOverrideFromBranch(
       return false;
     }
     for (const physical of remainder) {
-      const name = LOGICAL_TO_PHYSICAL[branchProp]
-        ? logicalFormForPhysical(branchProp, physical)
-        : physical;
+      const name =
+        overrideIsLogical && LOGICAL_TO_PHYSICAL[branchProp]
+          ? logicalFormForPhysical(branchProp, physical)
+          : physical;
       if (!name) {
         return false;
       }
@@ -4346,12 +4383,14 @@ function isImportedShorthandUnitValue(
   if (!info || !importMap.has(info.rootName)) {
     return false;
   }
-  // A directional shorthand whose whole value is a single proven-numeric token
-  // (e.g. `margin: ${NumericConsts.x}px`) is valid in StyleX as-is: the value
-  // cannot expand to multiple tokens, so the interpolated-string handler can
-  // emit it directly.
+  // `margin`/`padding` whose whole value is a single proven-numeric token (e.g.
+  // `margin: ${NumericConsts.x}px`) are valid in StyleX as-is: the value cannot
+  // expand to multiple tokens and StyleX's compiler expands the shorthand
+  // internally, so the interpolated-string handler can emit it directly. The
+  // `scroll-margin`/`scroll-padding` shorthands are excluded because StyleX does
+  // not accept them — they must be written as physical longhands.
   if (
-    isDirectionalShorthandCssProperty(d.property) &&
+    (d.property === "margin" || d.property === "padding") &&
     staticParts.prefix.trim() === "" &&
     /^[a-zA-Z%]+$/.test(staticParts.suffix.trim()) &&
     numericIdentifiers.has(info.rootName)
