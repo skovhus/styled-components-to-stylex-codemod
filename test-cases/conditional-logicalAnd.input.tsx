@@ -61,6 +61,22 @@ const LateOverride = styled.div<{ $hot?: boolean }>`
   padding: 4px;
 `;
 
+// Pattern 8: An `!important` conditional still wins over a LATER non-important
+// base declaration of the same property (CSS importance beats source order), so
+// the variant must be preserved rather than cleared. Covers both the css-block
+// form and the ternary-with-undefined-alternate form.
+const ImportantBlock = styled.div<{ $hot?: boolean }>`
+  ${(props) => props.$hot && "color: red !important;"}
+  color: blue;
+  padding: 4px;
+`;
+
+const ImportantTernary = styled.div<{ $hot?: boolean }>`
+  color: ${(props) => (props.$hot ? "red" : undefined)} !important;
+  color: blue;
+  padding: 4px;
+`;
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -94,5 +110,11 @@ export const App = () => (
     {/* Pattern 7: later base declaration wins over the earlier conditional */}
     <LateOverride $hot>Hot (still blue)</LateOverride>
     <LateOverride>Default (blue)</LateOverride>
+
+    {/* Pattern 8: !important conditional wins over the later non-important base */}
+    <ImportantBlock $hot>Hot (red, important)</ImportantBlock>
+    <ImportantBlock>Default (blue)</ImportantBlock>
+    <ImportantTernary $hot>Hot (red, important)</ImportantTernary>
+    <ImportantTernary>Default (blue)</ImportantTernary>
   </div>
 );

@@ -280,8 +280,28 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       return map;
     };
 
+    // Preserve `!important` from the source declaration on the resolved variant
+    // value. Without this, a `color: ${p => p.$x ? "a" : undefined} !important`
+    // variant would silently drop its importance, letting later non-important
+    // base declarations win in the cascade.
+    const withImportant = (valueAst: unknown): unknown => {
+      if (!d.important || !valueAst || typeof valueAst !== "object") {
+        return valueAst;
+      }
+      const node = valueAst as { type?: string; value?: unknown };
+      if (
+        (node.type === "StringLiteral" || node.type === "Literal") &&
+        typeof node.value === "string" &&
+        !node.value.includes("!important")
+      ) {
+        return j.literal(`${node.value} !important`);
+      }
+      return valueAst;
+    };
+
     // Helper: apply a single prop value to target, respecting media/pseudo context.
-    const applyWithContext = (prop: string, valueAst: unknown): void => {
+    const applyWithContext = (prop: string, valueAstRaw: unknown): void => {
+      const valueAst = withImportant(valueAstRaw);
       if (media) {
         const map = getOrCreateConditionMap(prop);
         map[media] = valueAst as any;

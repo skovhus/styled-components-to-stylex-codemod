@@ -1318,8 +1318,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
      * buckets so the emitted variant (applied after the base style in
      * stylex.props) cannot incorrectly win. Condition-scoped values (pseudo/media
      * maps) only lose their `default` layer.
+     *
+     * Exception: an earlier `!important` conditional value still wins over a later
+     * non-important base declaration in the CSS cascade, so it must be preserved.
+     * (When the later base is itself `!important`, source order decides and the
+     * later one wins, so clearing is correct.)
      */
-    const clearEarlierVariantBaseValues = (prop: string): void => {
+    const clearEarlierVariantBaseValues = (prop: string, laterBaseValue: unknown): void => {
+      const laterBaseIsImportant = cssValueIsImportant(laterBaseValue);
       // Deleting entries while iterating a Map is safe in JS.
       for (const [when, bucket] of variantBuckets) {
         if (!Object.hasOwn(bucket, prop)) {
@@ -1332,7 +1338,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           !isAstNode(bucketValue) &&
           "default" in (bucketValue as Record<string, unknown>)
         ) {
+          const conditionDefault = (bucketValue as Record<string, unknown>).default;
+          if (!laterBaseIsImportant && cssValueIsImportant(conditionDefault)) {
+            continue;
+          }
           (bucketValue as Record<string, unknown>).default = null;
+          continue;
+        }
+        if (!laterBaseIsImportant && cssValueIsImportant(bucketValue)) {
           continue;
         }
         delete bucket[prop];
@@ -1643,7 +1656,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
-      clearEarlierVariantBaseValues(prop);
+      clearEarlierVariantBaseValues(prop, value);
       const target = ctx.getBaseStyleTarget();
       setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);
@@ -2765,6 +2778,36 @@ function recoverStandaloneInterpolationsInPseudoBlock(
 
   const when = needsNegation ? negateWhen(testInfo.when) : testInfo.when;
   return { when, propName: testInfo.propName, cssProps };
+}
+
+/**
+ * Whether a lowered StyleX value carries `!important`. Values are stored either
+ * as plain strings (e.g. `"red !important"`) or as AST string/template literals.
+ */
+function cssValueIsImportant(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.includes("!important");
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const node = value as {
+    type?: string;
+    value?: unknown;
+    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+  };
+  if (
+    (node.type === "StringLiteral" || node.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return node.value.includes("!important");
+  }
+  if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
+    return node.quasis.some((q) =>
+      (q?.value?.cooked ?? q?.value?.raw ?? "").includes("!important"),
+    );
+  }
+  return false;
 }
 
 /** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */
