@@ -292,3 +292,9 @@ export const shadow = (level: string): string => {
 
 export const glowShadow = (level: string): string =>
   level === "dark" ? "0 0 16px rgba(0,0,0,0.45)" : "0 0 16px rgba(255,255,255,0.45)";
+
+// Plain numeric constant from a non-`.stylex` module. The StyleX compiler
+// cannot resolve imported values inside `stylex.create()`, so the codemod bails
+// (rather than inlining) and asks the user to relocate it into a `.stylex`
+// defineConsts group. The fixture adapter returns `undefined` for it.
+export const COLUMN_WIDTH = 320;
