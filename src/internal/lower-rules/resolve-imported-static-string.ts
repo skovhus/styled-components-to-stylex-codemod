@@ -38,17 +38,27 @@ export function resolveExpressionToStaticString(
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
   }
-  const fromImport = resolveImportedConstStringInit(expr.name, state);
-  if (fromImport !== null) {
+  const fromImport = resolveImportedConstStaticValue(expr.name, state);
+  if (typeof fromImport === "string") {
     return fromImport;
   }
   return findTopLevelConstStringInit(expr.name, state);
 }
 
-function resolveImportedConstStringInit(
+/**
+ * Resolves an imported binding to a top-level scalar literal (`string` or
+ * `number`) export in another module, following relative-path imports and
+ * re-export chains. Unlike {@link resolveExpressionToStaticString}, this only
+ * inspects imports (never local/scoped bindings) and honors numeric literals,
+ * so callers can inline imported constants that the StyleX compiler cannot
+ * resolve at build time (importing a plain-module value into `stylex.create()`
+ * is invalid). Returns `null` when the import does not resolve to a static
+ * scalar literal.
+ */
+export function resolveImportedConstStaticValue(
   localName: string,
   state: DeclProcessingState["state"],
-): string | null {
+): string | number | null {
   const importEntry = state.importMap.get(localName);
   if (!importEntry || importEntry.source.kind !== "absolutePath") {
     return null;
@@ -66,11 +76,10 @@ function resolveImportedConstStringInit(
 
 /**
  * Searches a list of `VariableDeclarator`s for one named `<name>` and returns
- * its initializer when it resolves to a static string literal. Exported so
- * it can also be used by the in-file resolver in
- * `process-rule-declarations.ts`.
+ * its initializer when it resolves to a static scalar literal (`string` or
+ * `number`).
  */
-function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
+function findConstDeclaratorValue(declarations: unknown[], name: string): string | number | null {
   for (const declarator of declarations) {
     if (
       !declarator ||
@@ -86,10 +95,14 @@ function findConstDeclaratorString(declarations: unknown[], name: string): strin
     if (d.id?.type !== "Identifier" || d.id.name !== name) {
       continue;
     }
-    const value = literalToStaticValue(d.init);
-    return typeof value === "string" ? value : null;
+    return asStaticPrimitive(literalToStaticValue(d.init));
   }
   return null;
+}
+
+/** Narrows a `literalToStaticValue` result to a string/number scalar literal. */
+function asStaticPrimitive(value: unknown): string | number | null {
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 // --- Non-exported helpers ---
@@ -172,7 +185,7 @@ function resolveExportFromFile(
   exportedName: string,
   state: DeclProcessingState["state"],
   visited: Set<string>,
-): string | null {
+): string | number | null {
   if (visited.size >= MAX_REEXPORT_DEPTH) {
     return null;
   }
@@ -186,7 +199,7 @@ function resolveExportFromFile(
   if (!program) {
     return null;
   }
-  return findExportedStringConst(program, exportedName, filePath, state, visited);
+  return findExportedConstValue(program, exportedName, filePath, state, visited);
 }
 
 /**
@@ -229,23 +242,24 @@ function parseImportedSource(
 }
 
 /**
- * Returns the string-literal value of `<program>`'s top-level
- * `export const <exportedName> = "..."` or `export default "..."`, following
- * re-export chains. Anything more complex than a literal initializer is
- * rejected — we only follow exports that are unambiguously static.
+ * Returns the scalar-literal value (`string` or `number`) of `<program>`'s
+ * top-level `export const <exportedName> = <literal>` or
+ * `export default <literal>`, following re-export chains. Anything more complex
+ * than a literal initializer is rejected — we only follow exports that are
+ * unambiguously static.
  */
-function findExportedStringConst(
+function findExportedConstValue(
   program: ParsedProgram,
   exportedName: string,
   programPath: string,
   state: DeclProcessingState["state"],
   visited: Set<string>,
-): string | null {
+): string | number | null {
   if (exportedName === "default") {
-    return findDefaultExportedString(program, state);
+    return findDefaultExportedValue(program, state);
   }
 
-  const direct = findDirectNamedExportString(program, exportedName, state);
+  const direct = findDirectNamedExportValue(program, exportedName, state);
   if (direct !== null) {
     return direct;
   }
@@ -253,14 +267,13 @@ function findExportedStringConst(
   return followReExports(program, exportedName, programPath, state, visited);
 }
 
-function findDefaultExportedString(
+function findDefaultExportedValue(
   program: ParsedProgram,
   state: DeclProcessingState["state"],
-): string | null {
-  return findFirst(program.find(state.j.ExportDefaultDeclaration), (p) => {
-    const value = literalToStaticValue(p.node.declaration);
-    return typeof value === "string" ? value : null;
-  });
+): string | number | null {
+  return findFirst(program.find(state.j.ExportDefaultDeclaration), (p) =>
+    asStaticPrimitive(literalToStaticValue(p.node.declaration)),
+  );
 }
 
 /**
@@ -270,42 +283,42 @@ function findDefaultExportedString(
  * `export { ... } from "..."` (handled by the re-export path) and any
  * non-`const` variable declarations.
  */
-function findDirectNamedExportString(
+function findDirectNamedExportValue(
   program: ParsedProgram,
   exportedName: string,
   state: DeclProcessingState["state"],
-): string | null {
-  // 1. `export const <name> = "..."` (declaration form)
+): string | number | null {
+  // 1. `export const <name> = <literal>` (declaration form)
   const fromDeclaration = findFirst(program.find(state.j.ExportNamedDeclaration), (p) => {
     const decl = p.node.declaration;
     if (decl?.type !== "VariableDeclaration" || decl.kind !== "const") {
       return null;
     }
-    return findConstDeclaratorString(decl.declarations, exportedName);
+    return findConstDeclaratorValue(decl.declarations, exportedName);
   });
   if (fromDeclaration !== null) {
     return fromDeclaration;
   }
 
   // 2. `export { <name> };` (specifier form, no `from`) paired with a
-  //    top-level `const <localName> = "..."` declaration.
+  //    top-level `const <localName> = <literal>` declaration.
   const localBinding = findLocalBindingForReExport(program, exportedName, state);
   if (localBinding === null) {
     return null;
   }
-  return findTopLevelLocalConstString(program, localBinding, state);
+  return findTopLevelLocalConstValue(program, localBinding, state);
 }
 
 /**
- * Finds a top-level `const <name> = "..."` declaration that is NOT part of an
- * `export` statement. Used to resolve the local-binding side of an
+ * Finds a top-level `const <name> = <literal>` declaration that is NOT part of
+ * an `export` statement. Used to resolve the local-binding side of an
  * `export { X };` re-export pair.
  */
-function findTopLevelLocalConstString(
+function findTopLevelLocalConstValue(
   program: ParsedProgram,
   name: string,
   state: DeclProcessingState["state"],
-): string | null {
+): string | number | null {
   return findFirst(
     program
       .find(state.j.VariableDeclaration, { kind: "const" } as { kind: "const" })
@@ -313,7 +326,7 @@ function findTopLevelLocalConstString(
         const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
         return parentType === "Program";
       }),
-    (p) => findConstDeclaratorString(p.node.declarations, name),
+    (p) => findConstDeclaratorValue(p.node.declarations, name),
   );
 }
 
@@ -333,8 +346,8 @@ function findTopLevelConstStringInit(
       if (resolved !== null) {
         return;
       }
-      const found = findConstDeclaratorString(p.node.declarations, name);
-      if (found !== null) {
+      const found = findConstDeclaratorValue(p.node.declarations, name);
+      if (typeof found === "string") {
         resolved = found;
       }
     });
@@ -703,8 +716,8 @@ function followReExports(
   programPath: string,
   state: DeclProcessingState["state"],
   visited: Set<string>,
-): string | null {
-  const resolveTarget = (specifier: string, originalName: string): string | null => {
+): string | number | null {
+  const resolveTarget = (specifier: string, originalName: string): string | number | null => {
     const targetPath = resolveModulePath(state, programPath, specifier);
     if (targetPath === null) {
       return null;

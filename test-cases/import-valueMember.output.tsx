@@ -6,7 +6,12 @@ import { CardSizeConstants, PageSizeConstants } from "./lib/pageSizes.stylex";
 const PEEK_MAX_WIDTH = 380;
 
 export function App() {
-  return <div sx={styles.container}>Fixed modal shell</div>;
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <div sx={styles.container}>Fixed modal shell</div>
+      <div sx={styles.column}>Inlined width column</div>
+    </div>
+  );
 }
 
 const styles = stylex.create({
@@ -22,5 +27,17 @@ const styles = stylex.create({
     minHeight: PageSizeConstants.listInitiativeRowHeight,
     position: "fixed",
     zIndex: $zIndex.modal,
+  },
+  // COLUMN_WIDTH comes from a plain module: it must be inlined as a literal
+  // (and arithmetic on it constant-folded) since the StyleX compiler cannot
+  // resolve imported non-StyleX values. PEEK_MAX_WIDTH above is a local const,
+  // so it stays a same-file reference the compiler can evaluate.
+  column: {
+    height: 40,
+    backgroundColor: "#ddd6fe",
+    /* NOTE: Inlined COLUMN_WIDTH as StyleX requires it to be statically evaluable */
+    width: 320,
+    /* NOTE: Inlined COLUMN_WIDTH * 2 as StyleX requires it to be statically evaluable */
+    minWidth: 640,
   },
 });
