@@ -7,6 +7,7 @@ import type { DeclProcessingState } from "./decl-setup.js";
 import {
   cssDeclarationToStylexDeclarations,
   expandBackgroundShorthandComponents,
+  isLogicalScrollAxisShorthand,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
 } from "../css-prop-mapping.js";
@@ -68,6 +69,20 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     }
 
     if (d.value.kind === "interpolated") {
+      // A logical scroll axis shorthand with a dynamic value cannot be split
+      // into the Start/End longhands StyleX requires, so it would otherwise
+      // emit the unsupported axis shorthand. Bail instead.
+      if (d.property && isLogicalScrollAxisShorthand(d.property)) {
+        state.bailUnsupported(
+          ctx.decl,
+          "Dynamic logical scroll shorthand cannot be expanded — bind a specific longhand (e.g. scroll-padding-inline-start) instead",
+        );
+        if (state.currentDecl === ctx.decl) {
+          continue;
+        }
+        state.bail = true;
+        break;
+      }
       handleInterpolatedDeclaration({
         ctx,
         rule,
@@ -138,10 +153,11 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         d.value.kind === "static" && !d.important
           ? expandBackgroundShorthandComponents(d.valueRaw)
           : null;
-      // The shorthand resets unspecified background longhands to initial; the
-      // expansion does not, so any other background declaration could leak
-      // through and we must bail.
-      if (expanded && !hasOtherBackgroundDeclaration(allRules, d)) {
+      // The expansion emits every background longhand (omitted components reset
+      // to their initial value), so it fully reproduces the shorthand's reset
+      // semantics and a later same-property declaration still wins by source
+      // order.
+      if (expanded) {
         const commentSource = {
           leading: (d as any).leadingComment,
           leadingLine: (d as any).leadingLineComment,
@@ -235,26 +251,4 @@ function resolveInterpolatedPropertyName(
     return null;
   }
   return resolved;
-}
-
-/**
- * Returns true when any other declaration in the decl's rules targets a
- * background property. Used to guard background shorthand expansion, which
- * does not reproduce the shorthand's reset-to-initial semantics.
- */
-function hasOtherBackgroundDeclaration(
-  allRules: readonly CssRuleIR[],
-  current: CssRuleIR["declarations"][number],
-): boolean {
-  for (const rule of allRules) {
-    for (const declaration of rule.declarations) {
-      if (declaration === current) {
-        continue;
-      }
-      if (declaration.property && /^background(-|$)/.test(declaration.property)) {
-        return true;
-      }
-    }
-  }
-  return false;
 }

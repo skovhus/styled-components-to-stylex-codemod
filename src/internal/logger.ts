@@ -80,6 +80,7 @@ export type WarningType =
   | "Unsupported interpolation: property"
   | "Unsupported interpolation: unknown"
   | `Unsupported CSS property "${string}" cannot be emitted in StyleX`
+  | "Dynamic logical scroll shorthand cannot be expanded — bind a specific longhand (e.g. scroll-padding-inline-start) instead"
   | "Unsupported nested conditional interpolation"
   | "Unsupported prop-based inline style expression cannot be safely inlined"
   | "Unsupported prop-based inline style props.theme access is not supported"

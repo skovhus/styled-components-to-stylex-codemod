@@ -16,6 +16,7 @@ import {
 export {
   isCssShorthandProperty,
   isDirectionalShorthandCssProperty,
+  isLogicalScrollAxisShorthand,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   isStylexStringOnlyCssProp,
@@ -109,6 +110,16 @@ function isDirectionalShorthandCssProperty(cssProp: string): boolean {
   return cssProp in DIRECTIONAL_SHORTHAND_MAP;
 }
 
+/**
+ * True for the logical scroll axis shorthands (`scroll-margin-inline`,
+ * `scroll-padding-block`, `scroll-padding-inline`). StyleX accepts only their
+ * Start/End longhands, so a static value is expanded; a dynamic value cannot be
+ * split losslessly and must bail.
+ */
+function isLogicalScrollAxisShorthand(cssProp: string): boolean {
+  return cssProp.trim() in LOGICAL_SCROLL_AXIS_SHORTHANDS;
+}
+
 function isUnsupportedStylexProperty(cssProp: string): boolean {
   return UNSUPPORTED_STYLEX_CSS_PROPS.has(cssProp.trim());
 }
@@ -144,14 +155,15 @@ export function resolveBackgroundStylexPropForVariants(
 
 /**
  * Expands a static multi-component `background` shorthand (single layer) into
- * its StyleX longhands, e.g. `#fff url(a.svg) no-repeat center / cover` →
- * backgroundColor/backgroundImage/backgroundRepeat/backgroundPosition/backgroundSize.
+ * the full set of StyleX background longhands, e.g.
+ * `#fff url(a.svg) no-repeat center / cover`. Components omitted from the
+ * shorthand are emitted at their CSS initial value (e.g. `backgroundColor:
+ * transparent`), reproducing the shorthand's reset semantics so the expansion
+ * fully overrides any background longhand inherited from a merged/extended base.
  *
  * Returns null when the value cannot be expanded losslessly: multiple layers
- * (top-level commas), unrecognized tokens, or duplicate components. Callers
- * must additionally ensure no other `background*` declaration exists for the
- * same component, since the shorthand's reset-to-initial semantics for
- * unspecified longhands are not reproduced.
+ * (top-level commas), unrecognized tokens, duplicate components, or fewer than
+ * two explicit components (single components keep the single-longhand path).
  */
 export function expandBackgroundShorthandComponents(
   rawValue: string,
@@ -238,33 +250,38 @@ export function expandBackgroundShorthandComponents(
     return null;
   }
 
-  const out: Array<{ prop: string; value: string }> = [];
-  if (color !== undefined) {
-    out.push({ prop: "backgroundColor", value: color });
+  // Count explicitly-present components: a single component keeps the existing
+  // single-longhand mapping path (handled by the caller).
+  const presentCount =
+    (color !== undefined ? 1 : 0) +
+    (image !== undefined ? 1 : 0) +
+    (attachment !== undefined ? 1 : 0) +
+    (repeatTokens.length ? 1 : 0) +
+    (positionTokens.length ? 1 : 0) +
+    (sizeTokens.length ? 1 : 0) +
+    (boxTokens.length ? 1 : 0);
+  if (presentCount < 2) {
+    return null;
   }
-  if (image !== undefined) {
-    out.push({ prop: "backgroundImage", value: image });
-  }
-  if (repeatTokens.length) {
-    out.push({ prop: "backgroundRepeat", value: repeatTokens.join(" ") });
-  }
-  if (attachment !== undefined) {
-    out.push({ prop: "backgroundAttachment", value: attachment });
-  }
-  if (positionTokens.length) {
-    out.push({ prop: "backgroundPosition", value: positionTokens.join(" ") });
-  }
-  if (sizeTokens.length) {
-    out.push({ prop: "backgroundSize", value: sizeTokens.join(" ") });
-  }
-  if (boxTokens.length) {
+
+  // Emit every background longhand. Omitted components reset to their CSS
+  // initial value, matching the shorthand's reset semantics, so the expansion
+  // fully overrides any background longhand inherited from a merged/extended
+  // base (e.g. a `styled(Base)` whose base sets `background-color`).
+  return [
+    { prop: "backgroundColor", value: color ?? "transparent" },
+    { prop: "backgroundImage", value: image ?? "none" },
+    { prop: "backgroundRepeat", value: repeatTokens.length ? repeatTokens.join(" ") : "repeat" },
+    { prop: "backgroundAttachment", value: attachment ?? "scroll" },
+    {
+      prop: "backgroundPosition",
+      value: positionTokens.length ? positionTokens.join(" ") : "0% 0%",
+    },
+    { prop: "backgroundSize", value: sizeTokens.length ? sizeTokens.join(" ") : "auto" },
     // Per spec, a single <box> value sets both origin and clip.
-    out.push({ prop: "backgroundOrigin", value: boxTokens[0]! });
-    out.push({ prop: "backgroundClip", value: boxTokens[1] ?? boxTokens[0]! });
-  }
-  // Require at least two components — single components keep the existing
-  // single-longhand mapping path.
-  return out.length >= 2 ? out : null;
+    { prop: "backgroundOrigin", value: boxTokens[0] ?? "padding-box" },
+    { prop: "backgroundClip", value: boxTokens[1] ?? boxTokens[0] ?? "border-box" },
+  ];
 }
 
 export function parseInterpolatedBorderStaticParts(args: {
