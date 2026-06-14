@@ -1,5 +1,4 @@
-// @expected-warning: Adapter resolveValue returned undefined for imported value
-// Lowercase imported runtime condition roots can be misread as component props by wrapper emission.
+// Lowercase imported runtime condition roots are module-scope bindings, not component props.
 import styled from "styled-components";
 import { Browser as browser } from "./lib/helpers";
 

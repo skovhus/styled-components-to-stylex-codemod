@@ -4,8 +4,10 @@
  */
 import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { expandBorderRadiusShorthandValue } from "./css-border-radius.js";
+import { splitCssValueWhitespace } from "./css-value-split.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import {
+  hasTopLevelMatch,
   isBackgroundImageValue,
   isSingleBackgroundComponent,
   looksLikeLength,
@@ -13,6 +15,7 @@ import {
 
 export {
   isCssShorthandProperty,
+  isLogicalScrollAxisShorthand,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   isStylexStringOnlyCssProp,
@@ -68,21 +71,25 @@ const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
   // safely without element-specific knowledge, so callers should bail instead
   // of emitting `all` into stylex.create().
   "all",
-  // StyleX does not currently accept logical scroll longhands, and converting
-  // them to physical sides would change behavior in RTL or vertical writing modes.
+  // StyleX compiles the block-axis scroll-margin longhands to physical
+  // `scroll-margin-top`/`scroll-margin-bottom`, which changes behavior in
+  // vertical writing modes (the shorthand expands to those longhands, so it is
+  // equally lossy). The inline-axis scroll-margin and all scroll-padding
+  // logical properties are preserved losslessly and are supported.
   "scroll-margin-block",
   "scroll-margin-block-start",
   "scroll-margin-block-end",
-  "scroll-margin-inline",
-  "scroll-margin-inline-start",
-  "scroll-margin-inline-end",
-  "scroll-padding-block",
-  "scroll-padding-block-start",
-  "scroll-padding-block-end",
-  "scroll-padding-inline",
-  "scroll-padding-inline-start",
-  "scroll-padding-inline-end",
 ]);
+
+/**
+ * Logical scroll shorthands that expand to Start/End longhands. StyleX's
+ * valid-styles rule accepts only the longhand forms.
+ */
+const LOGICAL_SCROLL_AXIS_SHORTHANDS: Record<string, string> = {
+  "scroll-margin-inline": "scrollMarginInline",
+  "scroll-padding-block": "scrollPaddingBlock",
+  "scroll-padding-inline": "scrollPaddingInline",
+};
 
 /**
  * Returns true if the CSS property is a shorthand that StyleX cannot express directly
@@ -95,6 +102,16 @@ function isCssShorthandProperty(cssProp: string): boolean {
     /^border-(top|right|bottom|left)$/.test(cssProp) ||
     cssProp === "background"
   );
+}
+
+/**
+ * True for the logical scroll axis shorthands (`scroll-margin-inline`,
+ * `scroll-padding-block`, `scroll-padding-inline`). StyleX accepts only their
+ * Start/End longhands, so a static value is expanded; a dynamic value cannot be
+ * split losslessly and must bail.
+ */
+function isLogicalScrollAxisShorthand(cssProp: string): boolean {
+  return cssProp.trim() in LOGICAL_SCROLL_AXIS_SHORTHANDS;
 }
 
 function isUnsupportedStylexProperty(cssProp: string): boolean {
@@ -128,6 +145,137 @@ export function resolveBackgroundStylexPropForVariants(
     return null; // Heterogeneous - can't safely transform
   }
   return hasGradient ? "backgroundImage" : "backgroundColor";
+}
+
+/**
+ * Expands a static multi-component `background` shorthand (single layer) into
+ * the full set of StyleX background longhands, e.g.
+ * `#fff url(a.svg) no-repeat center / cover`. Components omitted from the
+ * shorthand are emitted at their CSS initial value (e.g. `backgroundColor:
+ * transparent`), reproducing the shorthand's reset semantics so the expansion
+ * fully overrides any background longhand inherited from a merged/extended base.
+ *
+ * Returns null when the value cannot be expanded losslessly: multiple layers
+ * (top-level commas), unrecognized tokens, duplicate components, or fewer than
+ * two explicit components (single components keep the single-longhand path).
+ */
+export function expandBackgroundShorthandComponents(
+  rawValue: string,
+): Array<{ prop: string; value: string }> | null {
+  const value = rawValue.trim();
+  if (!value || hasTopLevelMatch(value, /,/)) {
+    return null;
+  }
+  const tokens = tokenizeBackgroundValue(value);
+  if (!tokens) {
+    return null;
+  }
+
+  let color: string | undefined;
+  let image: string | undefined;
+  let attachment: string | undefined;
+  const repeatTokens: string[] = [];
+  const positionTokens: string[] = [];
+  const sizeTokens: string[] = [];
+  const boxTokens: string[] = [];
+  let inSizeMode = false;
+
+  for (const token of tokens) {
+    if (token === "/") {
+      if (inSizeMode || positionTokens.length === 0) {
+        return null;
+      }
+      inSizeMode = true;
+      continue;
+    }
+    if (inSizeMode) {
+      if (sizeTokens.length >= 2 || !isBackgroundSizeToken(token)) {
+        return null;
+      }
+      sizeTokens.push(token);
+      continue;
+    }
+    if (token === "none" || isBackgroundImageValue(token)) {
+      if (image !== undefined) {
+        return null;
+      }
+      image = token;
+      continue;
+    }
+    if (isCssColorToken(token)) {
+      if (color !== undefined) {
+        return null;
+      }
+      color = token;
+      continue;
+    }
+    if (BACKGROUND_REPEAT_KEYWORDS.has(token)) {
+      if (repeatTokens.length >= 2) {
+        return null;
+      }
+      repeatTokens.push(token);
+      continue;
+    }
+    if (BACKGROUND_ATTACHMENT_KEYWORDS.has(token)) {
+      if (attachment !== undefined) {
+        return null;
+      }
+      attachment = token;
+      continue;
+    }
+    if (BACKGROUND_BOX_KEYWORDS.has(token)) {
+      if (boxTokens.length >= 2) {
+        return null;
+      }
+      boxTokens.push(token);
+      continue;
+    }
+    if (isBackgroundPositionToken(token)) {
+      if (positionTokens.length >= 2) {
+        return null;
+      }
+      positionTokens.push(token);
+      continue;
+    }
+    return null;
+  }
+
+  if (inSizeMode && sizeTokens.length === 0) {
+    return null;
+  }
+
+  // Count explicitly-present components: a single component keeps the existing
+  // single-longhand mapping path (handled by the caller).
+  const presentCount =
+    (color !== undefined ? 1 : 0) +
+    (image !== undefined ? 1 : 0) +
+    (attachment !== undefined ? 1 : 0) +
+    (repeatTokens.length ? 1 : 0) +
+    (positionTokens.length ? 1 : 0) +
+    (sizeTokens.length ? 1 : 0) +
+    (boxTokens.length ? 1 : 0);
+  if (presentCount < 2) {
+    return null;
+  }
+
+  // Emit every background longhand. Omitted components reset to their CSS
+  // initial value, matching the shorthand's reset semantics, so the expansion
+  // fully overrides any background longhand inherited from a merged/extended
+  // base (e.g. a `styled(Base)` whose base sets `background-color`).
+  return [
+    { prop: "backgroundColor", value: color ?? "transparent" },
+    { prop: "backgroundImage", value: image ?? "none" },
+    { prop: "backgroundRepeat", value: repeatTokens.length ? repeatTokens.join(" ") : "repeat" },
+    { prop: "backgroundAttachment", value: attachment ?? "scroll" },
+    {
+      prop: "backgroundPosition",
+      value: positionTokens.length ? positionTokens.join(" ") : "0% 0%",
+    },
+    { prop: "backgroundSize", value: sizeTokens.length ? sizeTokens.join(" ") : "auto" },
+    // Per spec, a single <box> value sets both origin and clip.
+    { prop: "backgroundOrigin", value: boxTokens[0] ?? "padding-box" },
+    { prop: "backgroundClip", value: boxTokens[1] ?? boxTokens[0] ?? "border-box" },
+  ];
 }
 
 export function parseInterpolatedBorderStaticParts(args: {
@@ -217,6 +365,29 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
         prop: entry.prop,
         value: { kind: "static", value: entry.value },
       }));
+    }
+  }
+
+  // Logical scroll shorthands (e.g. `scroll-margin-inline: 4px 8px`) are valid
+  // CSS but not accepted by StyleX's valid-styles rule; expand them to their
+  // Start/End longhands, which StyleX preserves losslessly. Split at top-level
+  // whitespace only so function arguments (e.g. `var(--gap, 1rem)`,
+  // `calc(1px + 2px)`) are kept intact rather than broken apart.
+  const logicalScrollAxis = LOGICAL_SCROLL_AXIS_SHORTHANDS[prop];
+  if (logicalScrollAxis && decl.value.kind === "static") {
+    const values = splitCssValueWhitespace(decl.valueRaw.trim());
+    if (values.length >= 1 && values.length <= 2) {
+      const start = values[0]!;
+      const end = values[1] ?? start;
+      const withImportant = (value: string): string =>
+        decl.important ? `${value} !important` : value;
+      return [
+        {
+          prop: `${logicalScrollAxis}Start`,
+          value: { kind: "static", value: withImportant(start) },
+        },
+        { prop: `${logicalScrollAxis}End`, value: { kind: "static", value: withImportant(end) } },
+      ];
     }
   }
 
@@ -478,4 +649,121 @@ function classifyBorderTokens(tokens: string[]): {
     return null;
   }
   return { width, style, color };
+}
+
+const BACKGROUND_REPEAT_KEYWORDS = new Set([
+  "repeat",
+  "repeat-x",
+  "repeat-y",
+  "no-repeat",
+  "space",
+  "round",
+]);
+
+const BACKGROUND_ATTACHMENT_KEYWORDS = new Set(["scroll", "fixed", "local"]);
+
+const BACKGROUND_BOX_KEYWORDS = new Set(["border-box", "padding-box", "content-box"]);
+
+const BACKGROUND_POSITION_KEYWORDS = new Set(["left", "right", "top", "bottom", "center"]);
+
+const CSS_COLOR_FUNCTION_RE = /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(/i;
+
+// Standard CSS named colors (CSS Color Module Level 4) plus transparent/currentcolor.
+const CSS_NAMED_COLORS = new Set(
+  (
+    "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue " +
+    "blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk " +
+    "crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki " +
+    "darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen " +
+    "darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue " +
+    "dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite " +
+    "gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki " +
+    "lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan " +
+    "lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen " +
+    "lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen " +
+    "linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple " +
+    "mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred " +
+    "midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab " +
+    "orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip " +
+    "peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue " +
+    "saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue " +
+    "slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet " +
+    "wheat white whitesmoke yellow yellowgreen transparent currentcolor"
+  ).split(" "),
+);
+
+function isCssColorToken(token: string): boolean {
+  if (token.startsWith("#")) {
+    return /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(token);
+  }
+  if (CSS_COLOR_FUNCTION_RE.test(token)) {
+    return true;
+  }
+  return CSS_NAMED_COLORS.has(token.toLowerCase());
+}
+
+function isBackgroundPositionToken(token: string): boolean {
+  return (
+    BACKGROUND_POSITION_KEYWORDS.has(token.toLowerCase()) ||
+    /^-?\d*\.?\d+(?:[a-z%]*)$/i.test(token) ||
+    /^calc\(/i.test(token)
+  );
+}
+
+function isBackgroundSizeToken(token: string): boolean {
+  const lower = token.toLowerCase();
+  return (
+    lower === "cover" ||
+    lower === "contain" ||
+    lower === "auto" ||
+    /^-?\d*\.?\d+(?:[a-z%]*)$/i.test(token) ||
+    /^calc\(/i.test(token)
+  );
+}
+
+/**
+ * Splits a background shorthand value into top-level tokens, keeping function
+ * calls intact and emitting `/` (position/size separator) as its own token.
+ * Returns null for values containing placeholders or unbalanced parens.
+ */
+function tokenizeBackgroundValue(value: string): string[] | null {
+  if (value.includes("__SC_EXPR_")) {
+    return null;
+  }
+  const tokens: string[] = [];
+  let current = "";
+  let depth = 0;
+  const flush = (): void => {
+    if (current) {
+      tokens.push(current);
+      current = "";
+    }
+  };
+  for (const c of value) {
+    if (c === "(") {
+      depth++;
+      current += c;
+      continue;
+    }
+    if (c === ")") {
+      depth = Math.max(0, depth - 1);
+      current += c;
+      continue;
+    }
+    if (depth === 0 && /\s/.test(c)) {
+      flush();
+      continue;
+    }
+    if (depth === 0 && c === "/") {
+      flush();
+      tokens.push("/");
+      continue;
+    }
+    current += c;
+  }
+  if (depth !== 0) {
+    return null;
+  }
+  flush();
+  return tokens.length ? tokens : null;
 }

@@ -1,5 +1,9 @@
 // @expected-warning: Unsupported interpolation: call expression
-// A later longhand declaration must not be overridden by an earlier runtime shorthand branch.
+// A later physical side partially overriding an earlier runtime logical shorthand
+// branch (the fixture adapter emits logical `marginBlock`/`marginInline`) is
+// writing-mode ambiguous: `margin-top` removes the block-start side in
+// horizontal-tb but the inline-start side in vertical writing modes. Without the
+// element's writing-mode the subtraction cannot be done losslessly, so bail.
 import styled from "styled-components";
 import { Browser } from "./lib/helpers";
 

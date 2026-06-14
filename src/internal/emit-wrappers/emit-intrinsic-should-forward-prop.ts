@@ -115,6 +115,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const { props } = emitter.collectConditionProps({
         when,
         ...(knownConditionProps ? { knownProps: knownConditionProps } : {}),
+        nonPropRoots: d.nonPropConditionRoots,
       });
       for (const p of props) {
         if (p) {
@@ -432,6 +433,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         const { props } = emitter.collectConditionProps({
           when,
           ...(knownProps ? { knownProps } : {}),
+          nonPropRoots: d.nonPropConditionRoots,
         });
         for (const p of props) {
           if (p && !dropProps.includes(p)) {
@@ -456,6 +458,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           const { props } = emitter.collectConditionProps({
             when: extra.when,
             ...(knownProps ? { knownProps } : {}),
+            nonPropRoots: d.nonPropConditionRoots,
           });
           for (const p of props) {
             if (p && !destructureParts.includes(p)) {
@@ -535,6 +538,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           destructureProps: destructureParts,
           booleanProps,
           ...(knownProps ? { knownProps } : {}),
+          nonPropRoots: d.nonPropConditionRoots,
         });
         expr = emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean });
       } else {

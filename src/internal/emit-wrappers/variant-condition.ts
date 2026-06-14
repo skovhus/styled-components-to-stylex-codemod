@@ -34,6 +34,7 @@ export function parseVariantWhenToAst(
   when: string,
   booleanProps?: ReadonlySet<string>,
   knownProps?: ReadonlySet<string>,
+  nonPropRoots?: ReadonlySet<string>,
 ): VariantConditionResult {
   const buildMemberExpr = (raw: string): ExpressionKind | null => {
     if (!raw.includes(".")) {
@@ -90,7 +91,10 @@ export function parseVariantWhenToAst(
         // Treat dotted refs as prop-root conditions (e.g., user.role, $layer.isTop)
         // so wrapper emitters can destructure the root identifier. Theme refs are
         // resolved via useTheme and should not be pulled from component props.
-        const propName = root && root !== "theme" && isConditionPropIdentifier(root) ? root : null;
+        const propName =
+          root && root !== "theme" && !nonPropRoots?.has(root) && isConditionPropIdentifier(root)
+            ? root
+            : null;
         return { propName, expr: memberExpr };
       }
       return { propName: null, expr: j.identifier(trimmedRaw) };
@@ -99,7 +103,11 @@ export function parseVariantWhenToAst(
     // treatment as dotted theme refs (line 90) to avoid dual-binding conflicts.
     return {
       propName:
-        trimmedRaw === "theme" || !isConditionPropIdentifier(trimmedRaw) ? null : trimmedRaw,
+        trimmedRaw === "theme" ||
+        nonPropRoots?.has(trimmedRaw) ||
+        !isConditionPropIdentifier(trimmedRaw)
+          ? null
+          : trimmedRaw,
       expr: j.identifier(trimmedRaw),
     };
   };
@@ -113,7 +121,7 @@ export function parseVariantWhenToAst(
   // before checking for || to avoid incorrect splitting
   if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
     const inner = trimmed.slice(2, -1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps, nonPropRoots);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -127,7 +135,9 @@ export function parseVariantWhenToAst(
       .split("&&")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps));
+    const parsed = parts.map((p) =>
+      parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots),
+    );
     const firstParsed = parsed[0];
     if (!firstParsed) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -147,7 +157,9 @@ export function parseVariantWhenToAst(
       .split(" || ")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps));
+    const parsed = parts.map((p) =>
+      parseVariantWhenToAst(j, p, booleanProps, knownProps, nonPropRoots),
+    );
     const firstParsedOr = parsed[0];
     if (!firstParsedOr) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -164,7 +176,7 @@ export function parseVariantWhenToAst(
   // Handle simple negation without parentheses: !prop
   if (trimmed.startsWith("!")) {
     const inner = trimmed.slice(1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps, nonPropRoots);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -409,10 +421,11 @@ export function collectConditionProps(
     destructureProps?: string[];
     booleanProps?: ReadonlySet<string>;
     knownProps?: ReadonlySet<string>;
+    nonPropRoots?: ReadonlySet<string>;
   },
 ): VariantConditionResult {
-  const { when, destructureProps, booleanProps, knownProps } = args;
-  const parsed = parseVariantWhenToAst(j, when, booleanProps, knownProps);
+  const { when, destructureProps, booleanProps, knownProps, nonPropRoots } = args;
+  const parsed = parseVariantWhenToAst(j, when, booleanProps, knownProps, nonPropRoots);
   if (destructureProps) {
     for (const p of parsed.props) {
       if (p && !destructureProps.includes(p)) {

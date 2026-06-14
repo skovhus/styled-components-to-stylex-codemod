@@ -385,6 +385,12 @@ export type StyledDecl = {
   }>;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  /**
+   * Condition root identifiers that are module-scope bindings (e.g. imported
+   * runtime flags like `browser.isTouchDevice`), not component props. Wrapper
+   * emission must not destructure these from props.
+   */
+  nonPropConditionRoots?: Set<string>;
   /** Props whose generated variant lookups need a keyof cast because their preserved type is broader. */
   variantLookupCastProps?: Set<string>;
   /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */

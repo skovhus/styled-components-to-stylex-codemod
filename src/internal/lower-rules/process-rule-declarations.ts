@@ -6,6 +6,8 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import {
   cssDeclarationToStylexDeclarations,
+  expandBackgroundShorthandComponents,
+  isLogicalScrollAxisShorthand,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
 } from "../css-prop-mapping.js";
@@ -67,6 +69,20 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     }
 
     if (d.value.kind === "interpolated") {
+      // A logical scroll axis shorthand with a dynamic value cannot be split
+      // into the Start/End longhands StyleX requires, so it would otherwise
+      // emit the unsupported axis shorthand. Bail instead.
+      if (d.property && isLogicalScrollAxisShorthand(d.property)) {
+        state.bailUnsupported(
+          ctx.decl,
+          "Dynamic logical scroll shorthand cannot be expanded — bind a specific longhand (e.g. scroll-padding-inline-start) instead",
+        );
+        if (state.currentDecl === ctx.decl) {
+          continue;
+        }
+        state.bail = true;
+        break;
+      }
       handleInterpolatedDeclaration({
         ctx,
         rule,
@@ -133,6 +149,29 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     }
 
     if (d.property === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw)) {
+      // Only expand a standalone multi-component background. The expansion emits
+      // every longhand (omitted components reset to their initial value), which
+      // is correct in isolation, but a sibling `background`/`background-*`
+      // declaration may take the single-longhand path (no reset) and leak stale
+      // longhands across the cascade — bail when any other background
+      // declaration is present.
+      const expanded =
+        d.value.kind === "static" && !d.important && !hasOtherBackgroundDeclaration(allRules, d)
+          ? expandBackgroundShorthandComponents(d.valueRaw)
+          : null;
+      if (expanded) {
+        const commentSource = {
+          leading: (d as any).leadingComment,
+          leadingLine: (d as any).leadingLineComment,
+          trailingLine: (d as any).trailingLineComment,
+        };
+        let isFirst = true;
+        for (const { prop, value } of expanded) {
+          applyResolvedPropValue(prop, value, isFirst ? commentSource : null, d.property);
+          isFirst = false;
+        }
+        continue;
+      }
       state.bailUnsupported(
         ctx.decl,
         "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
@@ -214,4 +253,27 @@ function resolveInterpolatedPropertyName(
     return null;
   }
   return resolved;
+}
+
+/**
+ * True when any declaration other than `current` (across all of the component's
+ * rules) targets a `background`/`background-*` property. A multi-component
+ * background expansion only reproduces reset semantics in isolation, so the
+ * presence of a sibling background declaration makes the expansion unsafe.
+ */
+function hasOtherBackgroundDeclaration(
+  allRules: readonly CssRuleIR[],
+  current: CssRuleIR["declarations"][number],
+): boolean {
+  for (const rule of allRules) {
+    for (const declaration of rule.declarations) {
+      if (declaration === current) {
+        continue;
+      }
+      if (declaration.property && /^background(-|$)/.test(declaration.property)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

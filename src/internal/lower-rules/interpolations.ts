@@ -13,6 +13,7 @@ import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
+import { markProvenSingleTokenValue } from "./utils.js";
 import { isDirectionalThemeResult } from "./theme.js";
 import { maybeOmitPxUnitFromStylexValue } from "./inline-styles.js";
 
@@ -278,12 +279,15 @@ export function tryHandleInterpolatedStringValue(args: {
   const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
     const out = outputs[i]!;
-    setValue(
-      out.prop,
-      maybeOmitPxUnitFromStylexValue(j, tl as any, out.prop, d.important, {
-        numericIdentifiers: args.numericIdentifiers,
-      }),
-    );
+    const emitted = maybeOmitPxUnitFromStylexValue(j, tl as any, out.prop, d.important, {
+      numericIdentifiers: args.numericIdentifiers,
+    });
+    if (emitted !== tl && hasSingleSlotUnitSuffix(d.value)) {
+      // The px-omission rewrite only fires for proven-numeric expressions, so a
+      // single-slot value with a unit suffix is guaranteed to be one CSS token.
+      markProvenSingleTokenValue(emitted);
+    }
+    setValue(out.prop, emitted);
     // Add leading comment if present (e.g., for inlined static member expressions)
     if (i === 0 && ((d as any).leadingComment || (d as any).leadingLineComment)) {
       addPropComments(styleObj, out.prop, {

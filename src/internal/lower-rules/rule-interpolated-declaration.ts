@@ -1583,7 +1583,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) {
       continue;
     }
-    if (isImportedShorthandUnitValue(d, decl, importMap)) {
+    const numericIdentifiers = getNumericImportedStylexIdentifiers(
+      j,
+      filePath,
+      importMap,
+      resolverImports,
+    );
+    if (isImportedShorthandUnitValue(d, decl, importMap, numericIdentifiers)) {
       bailUnsupportedLocal(decl, "Unsupported interpolation: call expression");
       continue;
     }
@@ -1597,12 +1603,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
-        numericIdentifiers: getNumericImportedStylexIdentifiers(
-          j,
-          filePath,
-          importMap,
-          resolverImports,
-        ),
+        numericIdentifiers,
         setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {
@@ -4007,8 +4008,21 @@ function tryHandleRuntimeConditionalStaticBranches(
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
     return true;
   }
-  if (hasLaterDeclarationOverlap(rule, allRules, d, new Set(Object.keys(consequentStyle)))) {
+  if (
+    !subtractLaterStaticOverrides({
+      rule,
+      allRules,
+      currentDecl: d,
+      branchStyles: [consequentStyle, alternateStyle],
+    })
+  ) {
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
+  }
+  if (!Object.keys(consequentStyle).length && !Object.keys(alternateStyle).length) {
+    // Every branch property is unconditionally overridden by a later static
+    // declaration, so the conditional is dead — the later declarations carry
+    // the final values.
     return true;
   }
 
@@ -4018,7 +4032,33 @@ function tryHandleRuntimeConditionalStaticBranches(
   }
   applyVariant({ when }, consequentStyle);
   decl.needsWrapperComponent = true;
+  recordNonPropConditionRoots(decl, expr.test);
   return true;
+}
+
+/**
+ * Records the root identifiers of an imported runtime condition on the decl so
+ * wrapper emission treats them as module-scope bindings rather than component
+ * props (which matters for lowercase roots like `browser.isTouchDevice`).
+ */
+function recordNonPropConditionRoots(decl: StyledDecl, test: ExpressionKind): void {
+  const roots = (decl.nonPropConditionRoots ??= new Set<string>());
+  const visit = (expr: ExpressionKind): void => {
+    if (expr.type === "LogicalExpression") {
+      visit(expr.left as ExpressionKind);
+      visit(expr.right as ExpressionKind);
+      return;
+    }
+    if (expr.type === "UnaryExpression") {
+      visit(expr.argument as ExpressionKind);
+      return;
+    }
+    const info = extractRootAndPath(expr);
+    if (info && info.path.length > 0) {
+      roots.add(info.rootName);
+    }
+  };
+  visit(test);
 }
 
 function buildStaticBranchStyle(
@@ -4054,50 +4094,210 @@ function sameStyleProps(left: Record<string, unknown>, right: Record<string, unk
   return leftKeys.length === rightKeys.size && leftKeys.every((key) => rightKeys.has(key));
 }
 
-function hasLaterDeclarationOverlap(
-  rule: CssRuleIR,
-  allRules: readonly CssRuleIR[],
-  currentDecl: CssDeclarationIR,
-  stylexProps: ReadonlySet<string>,
-): boolean {
+/**
+ * Removes branch properties that are unconditionally overridden by later static
+ * declarations in the same selector context, so the runtime variant cannot
+ * invert the original CSS cascade. Partially overridden directional props are
+ * narrowed to the longhands that survive the override (e.g. `marginBlock`
+ * overridden by a later `margin-top` becomes `marginBlockEnd`).
+ *
+ * Returns false when a later overlapping declaration cannot be subtracted
+ * safely (conditional at-rule context, dynamic value, property-less helper, or
+ * a multi-token branch value that cannot be split per longhand) — the caller
+ * must bail in that case.
+ */
+function subtractLaterStaticOverrides(args: {
+  rule: CssRuleIR;
+  allRules: readonly CssRuleIR[];
+  currentDecl: CssDeclarationIR;
+  branchStyles: Array<Record<string, unknown>>;
+}): boolean {
+  const { rule, allRules, currentDecl, branchStyles } = args;
   const currentIndex = rule.declarations.indexOf(currentDecl);
   if (currentIndex === -1) {
-    return false;
-  }
-  if (declarationsOverlap(rule.declarations.slice(currentIndex + 1), stylexProps)) {
     return true;
   }
-
+  const laterContexts: Array<{
+    declarations: readonly CssDeclarationIR[];
+    unconditional: boolean;
+  }> = [{ declarations: rule.declarations.slice(currentIndex + 1), unconditional: true }];
   const currentRuleIndex = allRules.indexOf(rule);
-  if (currentRuleIndex === -1) {
-    return false;
-  }
-  for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
-    if (rule.selector !== laterRule.selector) {
-      continue;
+  if (currentRuleIndex !== -1) {
+    for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
+      if (laterRule.selector !== rule.selector) {
+        continue;
+      }
+      laterContexts.push({
+        declarations: laterRule.declarations,
+        unconditional: sameAtRuleStack(laterRule.atRuleStack, rule.atRuleStack),
+      });
     }
-    if (declarationsOverlap(laterRule.declarations, stylexProps)) {
-      return true;
-    }
   }
-  return false;
-}
 
-function declarationsOverlap(
-  declarations: readonly CssDeclarationIR[],
-  stylexProps: ReadonlySet<string>,
-): boolean {
-  for (const laterDecl of declarations) {
-    if (!laterDecl.property) {
-      return true;
-    }
-    for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
-      if ([...stylexProps].some((prop) => stylexPropsOverlap(prop, out.prop))) {
-        return true;
+  const branchProps = (): string[] => [
+    ...new Set(branchStyles.flatMap((style) => Object.keys(style))),
+  ];
+  for (const context of laterContexts) {
+    for (const laterDecl of context.declarations) {
+      if (!laterDecl.property) {
+        // Property-less interpolation (e.g. a helper mixin) may set anything.
+        if (branchProps().length) {
+          return false;
+        }
+        continue;
+      }
+      // A later `border`/`border-<side>` shorthand resets the style/color
+      // sub-properties it omits, but cssDeclarationToStylexDeclarations only
+      // reports the explicit longhands (e.g. just borderTopWidth for
+      // `border-top: 1px`). Subtracting those would leave the branch's
+      // borderStyle/borderColor in place, drawing a border the cascade reset
+      // away — bail when such a shorthand overlaps a branch property.
+      if (isBorderShorthandProperty(laterDecl.property)) {
+        const borderProps = new Set(
+          cssDeclarationToStylexDeclarations(laterDecl).map((out) => out.prop),
+        );
+        if (
+          branchProps().some((prop) =>
+            [...borderProps].some((borderProp) => stylexPropsOverlap(prop, borderProp)),
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
+      for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
+        const overrideProp = out.prop;
+        const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
+        if (!overlapped.length) {
+          continue;
+        }
+        // An earlier `!important` declaration wins over a later non-important one
+        // regardless of source order. Subtracting it would drop the conditional
+        // branch and let the later declaration clobber the base, inverting the
+        // cascade — bail instead so the important branches are preserved.
+        if (currentDecl.important && !laterDecl.important) {
+          return false;
+        }
+        if (!context.unconditional || laterDecl.value.kind !== "static") {
+          return false;
+        }
+        for (const branch of branchStyles) {
+          if (!subtractOverrideFromBranch(branch, overlapped, overrideProp)) {
+            return false;
+          }
+        }
       }
     }
   }
-  return false;
+  return true;
+}
+
+function sameAtRuleStack(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+
+/** True for the `border` / `border-<side>` shorthands (not the longhands). */
+function isBorderShorthandProperty(property: string): boolean {
+  return /^border(?:-(?:top|right|bottom|left))?$/.test(property.trim());
+}
+
+function subtractOverrideFromBranch(
+  branch: Record<string, unknown>,
+  overlappedProps: string[],
+  overrideProp: string,
+): boolean {
+  const overridePhysical = new Set(physicalLonghandExpansion(overrideProp));
+  const overrideIsLogical = isLogicalDirectionalProp(overrideProp);
+  for (const branchProp of overlappedProps) {
+    if (!(branchProp in branch)) {
+      continue;
+    }
+    const branchPhysical = physicalLonghandExpansion(branchProp);
+    const remainder = branchPhysical.filter((prop) => !overridePhysical.has(prop));
+    if (remainder.length === branchPhysical.length) {
+      // Related (same directional group) but physically disjoint — no override.
+      continue;
+    }
+    // A logical directional longhand (e.g. `marginInline`/`marginBlock`) maps to
+    // physical sides differently per writing mode, so its overlap with a fixed
+    // physical side is only knowable for horizontal-tb. Without the element's
+    // `writing-mode`, a mixed logical/physical override is ambiguous — bail
+    // rather than subtract using a hard-coded axis assumption.
+    if (isLogicalDirectionalProp(branchProp) !== overrideIsLogical) {
+      return false;
+    }
+    const value = branch[branchProp];
+    delete branch[branchProp];
+    if (!remainder.length) {
+      continue;
+    }
+    if (!isSingleCssToken(value)) {
+      return false;
+    }
+    for (const physical of remainder) {
+      // Same representation on both sides: a logical override leaves a logical
+      // survivor, a physical override a physical one.
+      const name =
+        overrideIsLogical && LOGICAL_TO_PHYSICAL[branchProp]
+          ? logicalFormForPhysical(branchProp, physical)
+          : physical;
+      if (!name) {
+        return false;
+      }
+      branch[name] = value;
+    }
+  }
+  return true;
+}
+
+/**
+ * True for a logical directional longhand whose physical side(s) depend on the
+ * writing mode — `marginInline`, `paddingBlockEnd`, `scrollMarginInlineStart`,
+ * etc. The physical-neutral full shorthands (`margin`, `padding`) and physical
+ * sides (`marginTop`) are not logical.
+ */
+function isLogicalDirectionalProp(prop: string): boolean {
+  return LOGICAL_TO_PHYSICAL[prop] !== undefined;
+}
+
+/** Physical longhands covered by a StyleX directional/border property. */
+function physicalLonghandExpansion(prop: string): string[] {
+  const group = SHORTHAND_LONGHANDS[prop];
+  if (group) {
+    return [...group.physical];
+  }
+  const logical = LOGICAL_TO_PHYSICAL[prop];
+  if (logical) {
+    return [...logical];
+  }
+  const borderMatch = prop.match(/^border(Top|Right|Bottom|Left)?(Width|Style|Color)$/);
+  if (borderMatch) {
+    const side = borderMatch[1];
+    const kind = borderMatch[2]!;
+    return side ? [prop] : ["Top", "Right", "Bottom", "Left"].map((s) => `border${s}${kind}`);
+  }
+  return [prop];
+}
+
+/** Maps a physical longhand back to the Start/End form of a logical branch prop. */
+function logicalFormForPhysical(logicalProp: string, physical: string): string | null {
+  for (const [name, physicalProps] of Object.entries(LOGICAL_TO_PHYSICAL)) {
+    if (
+      physicalProps.length === 1 &&
+      physicalProps[0] === physical &&
+      name.startsWith(logicalProp)
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function isSingleCssToken(value: unknown): boolean {
+  if (typeof value === "number") {
+    return true;
+  }
+  return typeof value === "string" && value.trim() !== "" && !/\s/.test(value.trim());
 }
 
 function stylexPropsOverlap(left: string, right: string): boolean {
@@ -4154,12 +4354,7 @@ function isImportedRuntimeCondition(
   importMap: ReadonlyMap<string, unknown>,
 ): boolean {
   const info = extractRootAndPath(expr);
-  if (
-    info &&
-    info.path.length > 0 &&
-    importMap.has(info.rootName) &&
-    isRuntimeConditionImportRoot(info.rootName)
-  ) {
+  if (info && info.path.length > 0 && importMap.has(info.rootName)) {
     return true;
   }
   if (expr.type === "LogicalExpression" && expr.operator === "&&") {
@@ -4174,14 +4369,11 @@ function isImportedRuntimeCondition(
   return false;
 }
 
-function isRuntimeConditionImportRoot(rootName: string): boolean {
-  return /^[A-Z]/.test(rootName);
-}
-
 function isImportedShorthandUnitValue(
   d: CssDeclarationIR,
   decl: StyledDecl,
   importMap: ReadonlyMap<string, unknown>,
+  numericIdentifiers: ReadonlySet<string>,
 ): boolean {
   if (!d.property || !isCssShorthandProperty(d.property)) {
     return false;
@@ -4197,7 +4389,24 @@ function isImportedShorthandUnitValue(
       ? (decl.templateExpressions[slotPart.slotId] as ExpressionKind | undefined)
       : undefined;
   const info = extractRootAndPath(expr);
-  return !!info && importMap.has(info.rootName);
+  if (!info || !importMap.has(info.rootName)) {
+    return false;
+  }
+  // `margin`/`padding` whose whole value is a single proven-numeric token (e.g.
+  // `margin: ${NumericConsts.x}px`) are valid in StyleX as-is: the value cannot
+  // expand to multiple tokens and StyleX's compiler expands the shorthand
+  // internally, so the interpolated-string handler can emit it directly. The
+  // `scroll-margin`/`scroll-padding` shorthands are excluded because StyleX does
+  // not accept them — they must be written as physical longhands.
+  if (
+    (d.property === "margin" || d.property === "padding") &&
+    staticParts.prefix.trim() === "" &&
+    /^[a-zA-Z%]+$/.test(staticParts.suffix.trim()) &&
+    numericIdentifiers.has(info.rootName)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {

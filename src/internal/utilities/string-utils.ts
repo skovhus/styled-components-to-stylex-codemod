@@ -167,7 +167,8 @@ export function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
+/** Returns true when the pattern matches a character outside any parentheses. */
+export function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
   let depth = 0;
   for (const c of value) {
     if (c === "(") {

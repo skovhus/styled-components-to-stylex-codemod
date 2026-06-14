@@ -48,7 +48,13 @@ import {
 } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
-import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
+import {
+  isProvenSingleTokenValue,
+  isStyleConditionKey,
+  mapAst,
+  mergeStyleObjects,
+  walkAst,
+} from "./utils.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import {
   expandBorderRadiusInStyleObject,
@@ -56,6 +62,10 @@ import {
 } from "../css-border-radius.js";
 import { staticStringValue } from "./style-object-normalization.js";
 import { splitCssValueWhitespace } from "../css-value-split.js";
+import {
+  findImportedRootPropCollision,
+  hasConflictingLogicalPhysicalScrollProps,
+} from "./validate-decl-conflicts.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -89,6 +99,22 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     resolvedStyleObjects,
     warnings,
   } = state;
+
+  const collidingRoot = findImportedRootPropCollision(decl, Object.keys(variantStyleKeys ?? {}));
+  if (collidingRoot) {
+    state.bailUnsupported(
+      decl,
+      "Imported runtime condition root collides with a component prop of the same name",
+    );
+    return;
+  }
+  if (hasConflictingLogicalPhysicalScrollProps(decl)) {
+    state.bailUnsupported(
+      decl,
+      "Mixed logical and physical scroll properties cannot be normalized without a known writing-mode",
+    );
+    return;
+  }
 
   mergeConditionBucket(styleObj, perPropPseudo);
   mergeConditionBucket(styleObj, perPropMedia);
@@ -4000,7 +4026,7 @@ function warnOpaqueShorthands(
 ): void {
   for (const prop of OPAQUE_SHORTHAND_PROPS) {
     const val = styleObj[prop];
-    if (val !== undefined && isAstNode(val)) {
+    if (val !== undefined && isAstNode(val) && !isProvenSingleTokenValue(val)) {
       warnings.push({
         severity: "warning",
         type: "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens",
