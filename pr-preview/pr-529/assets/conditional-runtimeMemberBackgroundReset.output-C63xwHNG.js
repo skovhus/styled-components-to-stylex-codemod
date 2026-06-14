@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`xjbqb8w x7hi7t2 xiy17q3 x1fdtg7e x1xsqp64 x1cwfr1t x12koezg x1u7o2vf x1dmp6jm x1vqgdyp`,children:`Background reset`});export{n as App};
