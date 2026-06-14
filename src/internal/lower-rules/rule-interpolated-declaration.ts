@@ -3991,6 +3991,19 @@ function tryHandleRuntimeConditionalStaticBranches(
     return false;
   }
 
+  // If an imported runtime-condition root shares its name with an explicit
+  // component prop, wrapper emission cannot tell the two apart (the decl-wide
+  // non-prop marking would suppress destructuring of the genuine prop in
+  // unrelated variants). Bail rather than emit a condition that silently refers
+  // to the wrong binding.
+  if (importedRuntimeRootCollidesWithProp(decl, expr.test)) {
+    state.bailUnsupported(
+      decl,
+      "Imported runtime condition root collides with a component prop of the same name",
+    );
+    return true;
+  }
+
   const buildBranchValue = (slotValue: string | number): string => {
     let value = "";
     for (const part of parts) {
@@ -4043,6 +4056,31 @@ function tryHandleRuntimeConditionalStaticBranches(
  */
 function recordNonPropConditionRoots(decl: StyledDecl, test: ExpressionKind): void {
   const roots = (decl.nonPropConditionRoots ??= new Set<string>());
+  for (const rootName of importedConditionRootNames(test)) {
+    roots.add(rootName);
+  }
+}
+
+/**
+ * Returns true when any root of the imported runtime condition is also an
+ * explicit component prop, which makes the non-prop classification ambiguous.
+ */
+function importedRuntimeRootCollidesWithProp(decl: StyledDecl, test: ExpressionKind): boolean {
+  const explicitProps = decl.typeScriptExplicitPropNames;
+  if (!explicitProps || explicitProps.size === 0) {
+    return false;
+  }
+  for (const rootName of importedConditionRootNames(test)) {
+    if (explicitProps.has(rootName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Root identifiers of a (possibly compound) imported runtime condition. */
+function importedConditionRootNames(test: ExpressionKind): string[] {
+  const roots: string[] = [];
   const visit = (expr: ExpressionKind): void => {
     if (expr.type === "LogicalExpression") {
       visit(expr.left as ExpressionKind);
@@ -4055,10 +4093,11 @@ function recordNonPropConditionRoots(decl: StyledDecl, test: ExpressionKind): vo
     }
     const info = extractRootAndPath(expr);
     if (info && info.path.length > 0) {
-      roots.add(info.rootName);
+      roots.push(info.rootName);
     }
   };
   visit(test);
+  return roots;
 }
 
 function buildStaticBranchStyle(
