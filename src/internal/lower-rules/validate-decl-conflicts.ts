@@ -68,7 +68,10 @@ function hasConflictingLogicalPhysicalScrollProps(decl: StyledDecl): boolean {
         const side = camel.slice(family.length);
         if (/^(?:Inline|Block)/.test(side)) {
           hasLogical = true;
-        } else if (/^(?:Top|Right|Bottom|Left)$/.test(side)) {
+        } else if (side === "" || /^(?:Top|Right|Bottom|Left)$/.test(side)) {
+          // The full `scroll-margin`/`scroll-padding` shorthand (side === "")
+          // expands to physical Top/Right/Bottom/Left longhands, so treat it as
+          // a physical declaration for this conflict check.
           hasPhysical = true;
         }
       }
