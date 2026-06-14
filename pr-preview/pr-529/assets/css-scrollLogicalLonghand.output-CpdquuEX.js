@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`x1dgifkl xheuv7f xfj1q1m x1h27z3z xrv5bki x19gn9ri xy5hps6 x1tamke2`,children:`Logical scroll longhand`});export{n as App};
