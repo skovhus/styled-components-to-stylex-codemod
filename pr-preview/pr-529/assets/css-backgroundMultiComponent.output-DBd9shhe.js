@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{style:{display:`flex`,gap:8},children:[(0,t.jsx)(`div`,{className:`x1aekulm x7hi7t2 xiy17q3 x1xsqp64 x18d0r48 x1votaj3 x1tamke2`,children:`Background shorthand`}),(0,t.jsx)(`div`,{className:`x11rcpc x1w3jsh0 x1nr1p0w xenc873 x1tamke2`,children:`Tile shorthand`})]});export{n as App};
