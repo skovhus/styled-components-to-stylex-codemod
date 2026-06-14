@@ -824,6 +824,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   margin: var(--x-margin);
 }
 
+.x1ynv69i:not(#\#) {
+  margin: 58px;
+}
+
 .xjwt9iq:not(#\#) {
   margin: var(--x4kk98v);
 }
@@ -948,6 +952,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding: var(--x1ukvky8);
 }
 
+.x192urd2:not(#\#) {
+  padding: 58px;
+}
+
 .xhxy2q7:not(#\#) {
   padding: var(--xdppooy);
 }
@@ -992,6 +1000,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x12hz28l.x12hz28l:not(#\#) {
     padding: 8px;
   }
+}
+
+.x1xsqp64:not(#\#):not(#\#) {
+  background-position: center;
+}
+
+.xenc873:not(#\#):not(#\#) {
+  background-position: 0 0;
 }
 
 .xx9gxyx:not(#\#):not(#\#) {
@@ -2218,6 +2234,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   backface-visibility: hidden;
 }
 
+.x1nr1p0w:not(#\#):not(#\#):not(#\#) {
+  background-attachment: fixed;
+}
+
+.x1fdtg7e:not(#\#):not(#\#):not(#\#) {
+  background-attachment: scroll;
+}
+
+.x1u7o2vf:not(#\#):not(#\#):not(#\#) {
+  background-clip: border-box;
+}
+
 .x1ta4xzc:not(#\#):not(#\#):not(#\#) {
   -webkit-background-clip: text;
   background-clip: text;
@@ -2457,6 +2485,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xkafh1q:not(#\#):not(#\#):not(#\#) {
   background-color: #f6f7fb;
+}
+
+.x1aekulm:not(#\#):not(#\#):not(#\#) {
+  background-color: #f7f7ff;
 }
 
 .x8qejs1:not(#\#):not(#\#):not(#\#) {
@@ -2947,6 +2979,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-image: repeating-linear-gradient(red 0%, #00f 10%);
 }
 
+.x7hi7t2:not(#\#):not(#\#):not(#\#) {
+  background-image: url("/asset.svg");
+}
+
 .x14nwb87:not(#\#):not(#\#):not(#\#) {
   background-image: url("/icon.png");
 }
@@ -2957,6 +2993,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1e87kdn:not(#\#):not(#\#):not(#\#) {
   background-image: var(--x-backgroundImage);
+}
+
+.x12koezg:not(#\#):not(#\#):not(#\#) {
+  background-origin: padding-box;
+}
+
+.xiy17q3:not(#\#):not(#\#):not(#\#) {
+  background-repeat: no-repeat;
+}
+
+.x1w3jsh0:not(#\#):not(#\#):not(#\#) {
+  background-repeat: repeat-x;
+}
+
+.x1cwfr1t:not(#\#):not(#\#):not(#\#) {
+  background-size: auto;
+}
+
+.x18d0r48:not(#\#):not(#\#):not(#\#) {
+  background-size: cover;
 }
 
 .xz0q8qm:not(#\#):not(#\#):not(#\#) {
@@ -3903,6 +3959,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1r8uycs:not(#\#):not(#\#):not(#\#) {
   row-gap: var(--x-rowGap);
+}
+
+.xxpwe5i:not(#\#):not(#\#):not(#\#) {
+  scroll-margin-inline-end: 8px;
+}
+
+.xdcjhg9:not(#\#):not(#\#):not(#\#) {
+  scroll-margin-inline-start: max(4px, 1vw);
+}
+
+.x7hxqm5:not(#\#):not(#\#):not(#\#) {
+  scroll-padding-block-end: 3px;
+}
+
+.xe4q620:not(#\#):not(#\#):not(#\#) {
+  scroll-padding-block-start: 3px;
+}
+
+.x1h27z3z:not(#\#):not(#\#):not(#\#) {
+  scroll-padding-inline-end: 7px;
+}
+
+.xfj1q1m:not(#\#):not(#\#):not(#\#) {
+  scroll-padding-inline-start: 7px;
 }
 
 .x24f09q:not(#\#):not(#\#):not(#\#) {
@@ -5121,6 +5201,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-left-style: solid;
 }
 
+.xe0pwq:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-left-width: 1px;
+}
+
 .x19sr0n1:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-left-width: 2px;
 }
@@ -5155,6 +5239,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xs1s249:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-right-width: 1px;
+}
+
+.xyy74w7:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-right-width: 2px;
 }
 
 .xmh9dlu:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -6029,6 +6117,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xnfr1j:not(#\#):not(#\#):not(#\#):not(#\#) {
   top: 1px;
+}
+
+.xs7f9wi:not(#\#):not(#\#):not(#\#):not(#\#) {
+  top: 2px;
 }
 
 .xndqk7f:not(#\#):not(#\#):not(#\#):not(#\#) {
