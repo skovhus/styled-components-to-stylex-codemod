@@ -149,14 +149,16 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     }
 
     if (d.property === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw)) {
+      // Only expand a standalone multi-component background. The expansion emits
+      // every longhand (omitted components reset to their initial value), which
+      // is correct in isolation, but a sibling `background`/`background-*`
+      // declaration may take the single-longhand path (no reset) and leak stale
+      // longhands across the cascade — bail when any other background
+      // declaration is present.
       const expanded =
-        d.value.kind === "static" && !d.important
+        d.value.kind === "static" && !d.important && !hasOtherBackgroundDeclaration(allRules, d)
           ? expandBackgroundShorthandComponents(d.valueRaw)
           : null;
-      // The expansion emits every background longhand (omitted components reset
-      // to their initial value), so it fully reproduces the shorthand's reset
-      // semantics and a later same-property declaration still wins by source
-      // order.
       if (expanded) {
         const commentSource = {
           leading: (d as any).leadingComment,
@@ -251,4 +253,27 @@ function resolveInterpolatedPropertyName(
     return null;
   }
   return resolved;
+}
+
+/**
+ * True when any declaration other than `current` (across all of the component's
+ * rules) targets a `background`/`background-*` property. A multi-component
+ * background expansion only reproduces reset semantics in isolation, so the
+ * presence of a sibling background declaration makes the expansion unsafe.
+ */
+function hasOtherBackgroundDeclaration(
+  allRules: readonly CssRuleIR[],
+  current: CssRuleIR["declarations"][number],
+): boolean {
+  for (const rule of allRules) {
+    for (const declaration of rule.declarations) {
+      if (declaration === current) {
+        continue;
+      }
+      if (declaration.property && /^background(-|$)/.test(declaration.property)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

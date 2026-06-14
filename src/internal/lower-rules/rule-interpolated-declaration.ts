@@ -21,7 +21,6 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
-  expandBackgroundShorthandComponents,
   isCssShorthandProperty,
   isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
@@ -4147,17 +4146,8 @@ function subtractLaterStaticOverrides(args: {
         }
         continue;
       }
-      const laterProps = laterDeclStylexPropNames(laterDecl);
-      if (laterProps === null) {
-        // A later shorthand we cannot enumerate losslessly (e.g. an
-        // unexpandable multi-component background) might reset any branch
-        // property — bail.
-        if (branchProps().length) {
-          return false;
-        }
-        continue;
-      }
-      for (const overrideProp of laterProps) {
+      for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
+        const overrideProp = out.prop;
         const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
         if (!overlapped.length) {
           continue;
@@ -4187,38 +4177,13 @@ function sameAtRuleStack(left: readonly string[], right: readonly string[]): boo
   return left.length === right.length && left.every((entry, i) => entry === right[i]);
 }
 
-/**
- * StyleX property names a later declaration sets, used for cascade-overlap
- * detection. A multi-component `background` shorthand is expanded to its full
- * reset set (so e.g. its implicit `backgroundColor: transparent` reset is
- * visible to overlap detection). Returns null when a shorthand cannot be
- * enumerated losslessly and the caller must bail.
- */
-function laterDeclStylexPropNames(laterDecl: CssDeclarationIR): string[] | null {
-  if (
-    laterDecl.property === "background" &&
-    laterDecl.value.kind === "static" &&
-    isUnsupportedBackgroundShorthandValue(laterDecl.valueRaw)
-  ) {
-    const expanded = expandBackgroundShorthandComponents(laterDecl.valueRaw);
-    return expanded ? expanded.map((entry) => entry.prop) : null;
-  }
-  return cssDeclarationToStylexDeclarations(laterDecl).map((out) => out.prop);
-}
-
 function subtractOverrideFromBranch(
   branch: Record<string, unknown>,
   overlappedProps: string[],
   overrideProp: string,
 ): boolean {
   const overridePhysical = new Set(physicalLonghandExpansion(overrideProp));
-  // A logical override leaves a logical survivor (direction/writing-mode aware);
-  // a physical override leaves a deterministic physical survivor. Anchoring on
-  // the override's representation keeps the remainder direction-correct — e.g.
-  // `margin-inline` (logical) partially overridden by physical `margin-left`
-  // survives as physical `margin-right`, not logical `margin-inline-end` (which
-  // would target the left side in RTL).
-  const overrideIsLogical = LOGICAL_TO_PHYSICAL[overrideProp] !== undefined;
+  const overrideIsLogical = isLogicalDirectionalProp(overrideProp);
   for (const branchProp of overlappedProps) {
     if (!(branchProp in branch)) {
       continue;
@@ -4229,6 +4194,14 @@ function subtractOverrideFromBranch(
       // Related (same directional group) but physically disjoint — no override.
       continue;
     }
+    // A logical directional longhand (e.g. `marginInline`/`marginBlock`) maps to
+    // physical sides differently per writing mode, so its overlap with a fixed
+    // physical side is only knowable for horizontal-tb. Without the element's
+    // `writing-mode`, a mixed logical/physical override is ambiguous — bail
+    // rather than subtract using a hard-coded axis assumption.
+    if (isLogicalDirectionalProp(branchProp) !== overrideIsLogical) {
+      return false;
+    }
     const value = branch[branchProp];
     delete branch[branchProp];
     if (!remainder.length) {
@@ -4238,6 +4211,8 @@ function subtractOverrideFromBranch(
       return false;
     }
     for (const physical of remainder) {
+      // Same representation on both sides: a logical override leaves a logical
+      // survivor, a physical override a physical one.
       const name =
         overrideIsLogical && LOGICAL_TO_PHYSICAL[branchProp]
           ? logicalFormForPhysical(branchProp, physical)
@@ -4249,6 +4224,16 @@ function subtractOverrideFromBranch(
     }
   }
   return true;
+}
+
+/**
+ * True for a logical directional longhand whose physical side(s) depend on the
+ * writing mode — `marginInline`, `paddingBlockEnd`, `scrollMarginInlineStart`,
+ * etc. The physical-neutral full shorthands (`margin`, `padding`) and physical
+ * sides (`marginTop`) are not logical.
+ */
+function isLogicalDirectionalProp(prop: string): boolean {
+  return LOGICAL_TO_PHYSICAL[prop] !== undefined;
 }
 
 /** Physical longhands covered by a StyleX directional/border property. */
