@@ -46,7 +46,6 @@ import {
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
-import { resolveImportedConstStaticValue } from "./resolve-imported-static-string.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
@@ -1509,22 +1508,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
             ? (expr.body as any)
             : (expr as any);
-        // Imported constant (e.g. `${COLUMN_WIDTH}` or `${COLUMN_WIDTH * 2}`):
-        // values imported from a plain (non-`.stylex`) module are not statically
-        // resolvable by the StyleX compiler, so inline (and constant-fold) the
-        // literal value. Local constants are left as-is — the StyleX compiler can
-        // evaluate same-file bindings.
-        const importedStatic = resolveImportedStaticExpr(baseExpr, state);
-        if (importedStatic?.usedImport) {
-          decl.templateExpressions[part.slotId] = staticValueToLiteral(
-            j,
-            importedStatic.value,
-          ) as any;
-          const source = expressionToSource(j, baseExpr) ?? "imported constant";
-          (d as any).leadingComment =
-            `NOTE: Inlined ${source} as StyleX requires it to be statically evaluable`;
-          continue;
-        }
         if (
           baseExpr?.type !== "MemberExpression" &&
           baseExpr?.type !== "OptionalMemberExpression"
@@ -4215,69 +4198,6 @@ function isImportedShorthandUnitValue(
       : undefined;
   const info = extractRootAndPath(expr);
   return !!info && importMap.has(info.rootName);
-}
-
-/**
- * Folds an expression built from imported plain-module constants and numeric
- * literals into a single scalar value, so it can be inlined into
- * `stylex.create()` (which rejects references to non-StyleX imported values).
- *
- * Returns `null` when the expression can't be statically resolved. The
- * `usedImport` flag reports whether resolution actually traversed an imported
- * constant — callers only inline when it did, leaving pure-literal and
- * local/member expressions (which the StyleX compiler can already evaluate, or
- * which other handlers own) untouched.
- */
-function resolveImportedStaticExpr(
-  baseExpr: unknown,
-  state: DeclProcessingState["state"],
-): { value: string | number; usedImport: boolean } | null {
-  if (!baseExpr || typeof baseExpr !== "object") {
-    return null;
-  }
-  const node = baseExpr as {
-    type?: string;
-    name?: string;
-    operator?: string;
-    argument?: unknown;
-    left?: unknown;
-    right?: unknown;
-  };
-  if (node.type === "Identifier" && typeof node.name === "string") {
-    const resolved = resolveImportedConstStaticValue(node.name, state);
-    return resolved === null ? null : { value: resolved, usedImport: true };
-  }
-  const literal = literalToStaticValue(baseExpr);
-  if (typeof literal === "string" || typeof literal === "number") {
-    return { value: literal, usedImport: false };
-  }
-  if (node.type === "UnaryExpression" && node.operator === "-") {
-    const arg = resolveImportedStaticExpr(node.argument, state);
-    return arg && typeof arg.value === "number"
-      ? { value: -arg.value, usedImport: arg.usedImport }
-      : null;
-  }
-  if (node.type === "BinaryExpression") {
-    const left = resolveImportedStaticExpr(node.left, state);
-    const right = resolveImportedStaticExpr(node.right, state);
-    if (!left || !right || typeof left.value !== "number" || typeof right.value !== "number") {
-      return null;
-    }
-    const usedImport = left.usedImport || right.usedImport;
-    switch (node.operator) {
-      case "+":
-        return { value: left.value + right.value, usedImport };
-      case "-":
-        return { value: left.value - right.value, usedImport };
-      case "*":
-        return { value: left.value * right.value, usedImport };
-      case "/":
-        return right.value === 0 ? null : { value: left.value / right.value, usedImport };
-      default:
-        return null;
-    }
-  }
-  return null;
 }
 
 function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {
