@@ -33,7 +33,7 @@ type ColoredBoxProps = React.PropsWithChildren<{
 function ColoredBox(props: ColoredBoxProps) {
   const { children, color } = props;
   return (
-    <div sx={[styles.coloredBox, color != null && styles.coloredBoxBackgroundColor(color)]}>
+    <div sx={[styles.coloredBox, color ? styles.coloredBoxBackgroundColor(color) : undefined]}>
       {children}
     </div>
   );

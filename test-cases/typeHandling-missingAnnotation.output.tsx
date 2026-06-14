@@ -22,7 +22,7 @@ export function Box(
       sx={[
         styles.box,
         bordered ? styles.boxBordered : styles.boxNotBordered,
-        bg != null && styles.boxBackgroundColor(bg),
+        bg ? styles.boxBackgroundColor(bg) : undefined,
       ]}
     />
   );

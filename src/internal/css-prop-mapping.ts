@@ -238,6 +238,18 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     return [];
   }
 
+  // `overflow: <x> <y>` two-value shorthand — StyleX's `overflow` type only accepts a
+  // single keyword, so expand to the overflowX/overflowY longhands.
+  if (prop === "overflow" && decl.value.kind === "static") {
+    const tokens = decl.valueRaw.trim().split(/\s+/);
+    if (tokens.length === 2) {
+      return [
+        { prop: "overflowX", value: { kind: "static", value: tokens[0]! } },
+        { prop: "overflowY", value: { kind: "static", value: tokens[1]! } },
+      ];
+    }
+  }
+
   if (prop === "animation" && decl.value.kind === "static" && decl.valueRaw.trim() === "none") {
     return [{ prop: "animationName", value: decl.value }];
   }

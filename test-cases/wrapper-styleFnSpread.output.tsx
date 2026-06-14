@@ -15,7 +15,7 @@ function StyledExternal(props: StyledExternalProps) {
     <ExternalComponent
       {...rest}
       {...mergedSx(
-        [styles.external, props.$color != null && styles.externalColor(props.$color), sx],
+        [styles.external, props.$color ? styles.externalColor(props.$color) : undefined, sx],
         className,
         style,
       )}

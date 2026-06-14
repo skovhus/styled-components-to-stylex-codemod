@@ -31,6 +31,14 @@ const CardContent = styled.div`
   flex: 1;
 `;
 
+// Nested ternary where the dynamic branch references a second prop through a
+// short-named arrow param (must be rewritten, not leaked, into the style fn)
+const FadeBox = styled.div<{ active?: boolean; size?: string }>`
+  padding: 8px;
+  background-color: lavender;
+  opacity: ${(p) => (p.active ? (p.size === "large" ? 1 : 0.5) : 0.1)};
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column" }}>
     <CardContainer checked={false} disabled={false}>
@@ -42,5 +50,10 @@ export const App = () => (
     <CardContainer checked={true} disabled={true}>
       <CardContent>Checked, disabled</CardContent>
     </CardContainer>
+    <FadeBox active size="large">
+      Active large (opacity 1)
+    </FadeBox>
+    <FadeBox active>Active small (opacity 0.5)</FadeBox>
+    <FadeBox>Inactive (opacity 0.1)</FadeBox>
   </div>
 );

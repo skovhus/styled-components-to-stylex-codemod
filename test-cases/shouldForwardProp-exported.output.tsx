@@ -38,7 +38,7 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
       {...rest}
       sx={[
         styles.explicitFilterButton,
-        customProp != null && styles.explicitFilterButtonBackgroundColor(customProp),
+        customProp ? styles.explicitFilterButtonBackgroundColor(customProp) : undefined,
         styles.explicitFilterButtonPadding(anotherProp),
       ]}
     />

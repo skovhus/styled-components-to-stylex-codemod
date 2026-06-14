@@ -21,7 +21,7 @@ export function Scrollable(props: ScrollableProps) {
       {...stylex.props(
         styles.scrollable,
         applyBackground ? styles.scrollableApplyBackground : undefined,
-        props.gutter != null && styles.scrollableScrollbarGutter(props.gutter),
+        props.gutter ? styles.scrollableScrollbarGutter(props.gutter) : undefined,
       )}
     />
   );

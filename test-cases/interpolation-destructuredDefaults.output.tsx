@@ -49,6 +49,39 @@ function Box(props: BoxProps) {
   );
 }
 
+type PillProps = { rounded?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+// Truthy boolean default in a ternary:
+// When $rounded is undefined, the default (true) applies → 12px radius
+// Only an explicit false should produce 0 radius
+function Pill(props: PillProps) {
+  const { children, rounded } = props;
+  return (
+    <span sx={[styles.pill, (rounded === undefined || rounded) && styles.pillRounded]}>
+      {children}
+    </span>
+  );
+}
+
+type FrameProps = { framed?: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
+
+// Truthy boolean default gating a conditional block:
+// When $framed is undefined, the default (true) applies → border is shown
+function Frame(props: FrameProps) {
+  const { children, framed } = props;
+  return (
+    <div sx={[styles.frame, (framed === undefined || framed) && styles.frameFramed]}>
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <>
     <Button>Default (should be hotpink)</Button>
@@ -60,6 +93,11 @@ export const App = () => (
     <Box>Default (should be 10px)</Box>
     <Box margin={0}>Zero (should be 5px)</Box>
     <Box margin={20}>20px</Box>
+    <Pill>Default (rounded)</Pill>
+    <Pill rounded={false}>Square</Pill>
+    <Pill rounded>Rounded</Pill>
+    <Frame>Default (framed)</Frame>
+    <Frame framed={false}>No frame</Frame>
   </>
 );
 
@@ -67,4 +105,21 @@ const styles = stylex.create({
   button: (color: string | undefined) => ({
     color,
   }),
+  pill: {
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "lightseagreen",
+    borderRadius: "0",
+  },
+  pillRounded: {
+    borderRadius: 12,
+  },
+  frame: {
+    padding: 8,
+  },
+  frameFramed: {
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "darkslategray",
+  },
 });

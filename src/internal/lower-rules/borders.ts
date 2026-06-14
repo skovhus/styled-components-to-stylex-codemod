@@ -268,6 +268,26 @@ export function tryHandleInterpolatedBorder(
   if (color) {
     applyResolvedPropValue(colorProp, color);
   }
+
+  // When the static width/style/color tokens were applied above, the declaration's
+  // interpolated value still contains them as static parts (e.g. "1px solid ").
+  // Blank them out before deferring to generic handlers, so the dynamic value for the
+  // rewritten longhand property doesn't re-include the already-applied static text.
+  // (Reaching this point with a non-empty staticRaw means every static token was
+  // classified and applied — unclassifiable tokens return false earlier.)
+  const stripConsumedStaticParts = (): void => {
+    const value = d.value as
+      | { kind?: string; parts?: Array<{ kind?: string; value?: string }> }
+      | undefined;
+    if (!staticRaw || value?.kind !== "interpolated" || !Array.isArray(value.parts)) {
+      return;
+    }
+    for (const part of value.parts) {
+      if (part?.kind === "static") {
+        part.value = "";
+      }
+    }
+  };
   const hasStaticWidthOrStyle = Boolean(width || style);
   const targetProp =
     interpolationTarget === "color"
@@ -379,6 +399,7 @@ export function tryHandleInterpolatedBorder(
     if (isMemberExpression(cons) || isMemberExpression(alt)) {
       // Defer to the dynamic resolver by treating this as the target border interpolation.
       d.property = targetCssProperty;
+      stripConsumedStaticParts();
       return false;
     }
   }
@@ -681,6 +702,7 @@ export function tryHandleInterpolatedBorder(
     if (body?.type === "MemberExpression") {
       // Mutate the declaration's property so fallback handlers use the target property
       d.property = targetCssProperty;
+      stripConsumedStaticParts();
       return false; // Let the generic handler resolve the theme value
     }
   }

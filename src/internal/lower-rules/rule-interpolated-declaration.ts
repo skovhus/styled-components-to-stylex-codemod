@@ -1621,10 +1621,46 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (tryEmitObservedCssBlockVariantBuckets(expr)) {
           continue;
         }
+        // A helper whose template interpolates component props (beyond theme access)
+        // carries conditional variants/dynamic values that applyCssHelperMixin does
+        // not wire into the consumer — only the helper's base style key would be
+        // referenced, silently dropping the prop-dependent styles. Bail instead.
+        const bailOnPropDependentCssHelper = (helperDecl: StyledDecl): boolean => {
+          for (const helperExpr of (helperDecl.templateExpressions ?? []) as Array<{
+            type?: string;
+          }>) {
+            if (
+              !helperExpr ||
+              (helperExpr.type !== "ArrowFunctionExpression" &&
+                helperExpr.type !== "FunctionExpression")
+            ) {
+              continue;
+            }
+            const propsUsed = new Set([
+              ...collectPropsFromArrowFn(helperExpr as never),
+              ...collectPropsFromArrowFnDestructured(helperExpr as never),
+            ]);
+            propsUsed.delete("theme");
+            if (propsUsed.size > 0) {
+              warnings.push({
+                severity: "warning",
+                type: "css helper with prop-based interpolation cannot be reused as a mixin",
+                loc: decl.loc,
+                context: { localName: decl.localName, mixin: helperDecl.localName },
+              });
+              bail = true;
+              return true;
+            }
+          }
+          return false;
+        };
         // Handle css helper identifier: ${primaryStyles}
         if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
           const helperDecl = declByLocalName.get(expr.name);
           if (helperDecl) {
+            if (bailOnPropDependentCssHelper(helperDecl)) {
+              break;
+            }
             applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
             continue;
           }
@@ -1638,6 +1674,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const calleeName = expr.callee.name as string;
           const helperDecl = declByLocalName.get(calleeName);
           if (helperDecl?.isCssHelper) {
+            if (bailOnPropDependentCssHelper(helperDecl)) {
+              break;
+            }
             applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
             continue;
           }
@@ -1829,7 +1868,31 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
-    const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
+    // The fallback below resolves a single interpolation slot. If multiple
+    // function-valued slots remain in one declaration (e.g.
+    // `padding: ${p => p.$v}px ${p => p.$h}px`) and no specialized handler
+    // consumed them, emitting only the first slot would silently drop the
+    // others — bail instead. Slots holding static expressions (identifiers,
+    // constants) are fine: the template builders below substitute them in place.
+    const remainingSlotParts = d.value.parts.filter((p: any) => p.kind === "slot");
+    const functionSlotCount = remainingSlotParts.filter((p: any) => {
+      const slotExpr = decl.templateExpressions[p.slotId] as { type?: string } | undefined;
+      return (
+        slotExpr?.type === "ArrowFunctionExpression" || slotExpr?.type === "FunctionExpression"
+      );
+    }).length;
+    if (functionSlotCount > 1) {
+      warnings.push({
+        severity: "error",
+        type: "Unsupported interpolation: multiple dynamic slots in one declaration",
+        loc: decl.loc,
+        context: { localName: decl.localName, property: d.property },
+      });
+      bail = true;
+      break;
+    }
+
+    const slotPart = remainingSlotParts[0];
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
@@ -2626,14 +2689,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? scalarizePropsObjectDynamicValue({
                 j,
                 valueExpr: dynamicValueExpr,
-                paramName: "props",
+                paramName,
                 propNames: dynamicProps,
               })
             : null;
         const dynamicStyleValueExpr = scalarDynamic?.valueExpr ?? dynamicValueExpr;
+        // The non-scalar fallback keeps the original arrow's member accesses
+        // (e.g. `p.size`), so the function param must reuse that name.
         const dynamicStyleParams: ArrowFunctionParams = scalarDynamic
           ? scalarDynamic.paramNames.map((propName) => j.identifier(propName))
-          : [j.identifier("props")];
+          : [j.identifier(paramName)];
         if (scalarDynamic) {
           annotateScalarParams(dynamicStyleParams, scalarDynamic.paramNames);
         }
@@ -3148,11 +3213,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           // be optional at runtime (untyped / JS components).
           const hasExplicitType = !!decl.propsType;
           const isOptional = ctx.isJsxPropOptional(jsxProp);
+          // When this value is pseudo-gated and a static base for the same
+          // property exists, getPropValue folds that base into the function's
+          // `default`. The folded base is only emitted when the function runs,
+          // so the function must be called unconditionally — otherwise an absent
+          // optional prop would drop the base (e.g. `background: slategray;
+          // &:hover { background: ${p => p.$c} }` rendered without `$c`).
+          const foldsStaticBaseIntoPseudoDefault =
+            !media &&
+            !!pseudos?.length &&
+            staticBaseValueWouldFold((styleObj as Record<string, unknown>)[out.prop]);
           styleFnFromProps.push({
             fnKey,
             jsxProp,
             ...(callArg ? { callArg } : {}),
-            ...(hasExplicitType && !isOptional ? { condition: "always" as const } : {}),
+            ...((hasExplicitType && !isOptional) || foldsStaticBaseIntoPseudoDefault
+              ? { condition: "always" as const }
+              : {}),
           });
 
           if (!styleFnDecls.has(fnKey)) {
@@ -3169,6 +3246,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (resolvedCallArg && /\.(ts|tsx)$/.test(filePath)) {
               (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                 j.tsStringKeyword(),
+              );
+            }
+            // Forcing an always-call on an optional prop passes `T | undefined`
+            // into the style function, so widen the param to accept undefined.
+            if (
+              foldsStaticBaseIntoPseudoDefault &&
+              isOptional &&
+              jsxProp !== "__props" &&
+              /\.(ts|tsx)$/.test(filePath)
+            ) {
+              const annotated = (param as { typeAnnotation?: { typeAnnotation?: unknown } })
+                .typeAnnotation?.typeAnnotation;
+              const baseTypeNode = (annotated as ExpressionKind | undefined) ?? j.tsStringKeyword();
+              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                j.tsUnionType([baseTypeNode as never, j.tsUndefinedKeyword()]),
               );
             }
             if (jsxProp?.startsWith?.("$")) {
@@ -3265,8 +3357,42 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
             const valueExpr = buildValueExpr();
             const getPropValue = (): ExpressionKind => {
+              if (!media && !pseudos?.length) {
+                return valueExpr;
+              }
+              if (!media && pseudos?.length) {
+                // Pseudo-gated dynamic value (e.g. `&:hover { color: ${p => p.$c} }`).
+                // Fold the existing static base value (if any) into the function's
+                // `default` so the base declaration isn't clobbered by the later
+                // style-function entry in the stylex.props() array.
+                const existingStatic = (styleObj as Record<string, unknown>)[out.prop];
+                let defaultValue: ExpressionKind = j.literal(null);
+                if (existingStatic !== undefined && existingStatic !== null) {
+                  if (typeof existingStatic === "object") {
+                    if ("type" in (existingStatic as Record<string, unknown>)) {
+                      defaultValue = cloneAstNode(existingStatic) as ExpressionKind;
+                      delete (styleObj as Record<string, unknown>)[out.prop];
+                    }
+                    // Plain condition buckets (prior pseudo/media objects) stay in
+                    // styleObj; the null default keeps this function pseudo-only.
+                  } else {
+                    defaultValue = staticValueToLiteral(
+                      j,
+                      existingStatic as string | number | boolean,
+                    ) as ExpressionKind;
+                    delete (styleObj as Record<string, unknown>)[out.prop];
+                  }
+                }
+                return j.objectExpression([
+                  j.property("init", j.identifier("default"), defaultValue),
+                  ...pseudos.map((ps) => j.property("init", j.literal(ps), valueExpr)),
+                ]);
+              }
               if (!media) {
                 return valueExpr;
+              }
+              if (pseudos?.length) {
+                return buildPseudoMediaPropValue({ j, valueExpr, pseudos, media });
               }
               const existingFn = styleFnDecls.get(fnKey);
               let existingValue: ExpressionKind | null = null;
@@ -3701,6 +3827,22 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return (
     pseudoElement === "::before" || pseudoElement === "::after" || pseudoElement === "::placeholder"
   );
+}
+
+/**
+ * Whether a base style value for a property would be folded into a pseudo-gated
+ * dynamic style function's `default` (mirrors the fold logic in getPropValue):
+ * plain primitives and AST-node values fold; existing pseudo/media condition
+ * buckets (plain objects without a `type` discriminator) do not.
+ */
+function staticBaseValueWouldFold(existingStatic: unknown): boolean {
+  if (existingStatic === undefined || existingStatic === null) {
+    return false;
+  }
+  if (typeof existingStatic === "object") {
+    return "type" in (existingStatic as Record<string, unknown>);
+  }
+  return true;
 }
 
 function tryHandleLocalCustomPropertyDefinition(args: {

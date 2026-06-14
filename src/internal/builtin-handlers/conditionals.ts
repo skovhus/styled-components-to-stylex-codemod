@@ -858,42 +858,45 @@ export function tryResolveConditionalValue(
     isDestructuredFromParam(expr, test.name)
   ) {
     const destructuredProp = test.name;
-    const cons = getBranch(consequent);
-    const alt = getBranch(alternate);
-    if (cons && alt) {
-      const allUsages = new Set([cons.usage, alt.usage]);
-      if (allUsages.size === 1) {
-        const usage = cons.usage;
-        const variants = [
-          {
-            nameHint: "truthy",
-            when: destructuredProp,
-            expr: cons.expr,
-            imports: cons.imports,
-          },
-          {
-            nameHint: "falsy",
-            when: `!${destructuredProp}`,
-            expr: alt.expr,
-            imports: alt.imports,
-          },
-        ];
-        return usage === "props"
-          ? { type: "splitVariantsResolvedStyles", variants }
-          : { type: "splitVariantsResolvedValue", variants };
+    const whens = destructuredBooleanWhens(destructuredProp, getArrowFnParamBindings(expr));
+    if (whens) {
+      const cons = getBranch(consequent);
+      const alt = getBranch(alternate);
+      if (cons && alt) {
+        const allUsages = new Set([cons.usage, alt.usage]);
+        if (allUsages.size === 1) {
+          const usage = cons.usage;
+          const variants = [
+            {
+              nameHint: "truthy",
+              when: whens.truthy,
+              expr: cons.expr,
+              imports: cons.imports,
+            },
+            {
+              nameHint: "falsy",
+              when: whens.falsy,
+              expr: alt.expr,
+              imports: alt.imports,
+            },
+          ];
+          return usage === "props"
+            ? { type: "splitVariantsResolvedStyles", variants }
+            : { type: "splitVariantsResolvedValue", variants };
+        }
       }
-    }
-    const oneSided = buildOneSidedVariantResult({
-      cons,
-      alt,
-      alternate,
-      truthyWhen: destructuredProp,
-    });
-    if (oneSided) {
-      return oneSided;
-    }
-    if (!cons || !alt) {
-      return buildRuntimeCallResult();
+      const oneSided = buildOneSidedVariantResult({
+        cons,
+        alt,
+        alternate,
+        truthyWhen: whens.truthy,
+      });
+      if (oneSided) {
+        return oneSided;
+      }
+      if (!cons || !alt) {
+        return buildRuntimeCallResult();
+      }
     }
   }
 
@@ -906,7 +909,10 @@ export function tryResolveConditionalValue(
     typeof test.name === "string"
   ) {
     const resolvedProp = resolveIdentifierToPropName(test, paramBindings);
-    if (resolvedProp) {
+    const resolvedWhens = resolvedProp
+      ? destructuredBooleanWhens(resolvedProp, paramBindings)
+      : null;
+    if (resolvedProp && resolvedWhens) {
       const cons = getBranch(consequent);
       const alt = getBranch(alternate);
       if (cons && alt) {
@@ -914,8 +920,13 @@ export function tryResolveConditionalValue(
         if (allUsages.size === 1) {
           const usage = cons.usage;
           const variants = [
-            { nameHint: "truthy", when: resolvedProp, expr: cons.expr, imports: cons.imports },
-            { nameHint: "falsy", when: `!${resolvedProp}`, expr: alt.expr, imports: alt.imports },
+            {
+              nameHint: "truthy",
+              when: resolvedWhens.truthy,
+              expr: cons.expr,
+              imports: cons.imports,
+            },
+            { nameHint: "falsy", when: resolvedWhens.falsy, expr: alt.expr, imports: alt.imports },
           ];
           return usage === "props"
             ? { type: "splitVariantsResolvedStyles", variants }
@@ -945,7 +956,7 @@ export function tryResolveConditionalValue(
         cons,
         alt,
         alternate,
-        truthyWhen: resolvedProp,
+        truthyWhen: resolvedWhens.truthy,
       });
       if (oneSided) {
         return oneSided;
@@ -1099,6 +1110,10 @@ export function tryResolveConditionalCssBlock(
   if (!testProp) {
     return null;
   }
+  const whens = destructuredBooleanWhens(testProp, bindings);
+  if (!whens) {
+    return null;
+  }
 
   // Try static string/template literal first
   const cssText = literalToString(right);
@@ -1109,7 +1124,7 @@ export function tryResolveConditionalCssBlock(
     }
     return {
       type: "splitVariants",
-      variants: [{ nameHint: "truthy", when: testProp, style }],
+      variants: [{ nameHint: "truthy", when: whens.truthy, style }],
     };
   }
 
@@ -1119,7 +1134,7 @@ export function tryResolveConditionalCssBlock(
   }
   return resolveThemeTemplateToCssVariant(right, paramName, ctx, {
     nameHint: "truthy",
-    when: testProp,
+    when: whens.truthy,
   });
 }
 
@@ -1935,4 +1950,32 @@ function replaceThemeRefsWithHookVar(
   };
 
   return replace(cloned);
+}
+
+/**
+ * Builds truthy/falsy `when` condition strings for a destructured boolean-ish prop,
+ * accounting for destructuring defaults. A default applies only when the prop is
+ * `undefined`, so a statically-truthy default means the truthy branch must also
+ * apply when the prop is unset (`prop === undefined || prop`).
+ *
+ * Returns null when the prop has a default whose truthiness cannot be determined
+ * statically — callers should fall back to other handlers instead of emitting a
+ * condition that ignores the default.
+ */
+function destructuredBooleanWhens(
+  propName: string,
+  bindings: ArrowFnParamBindings | null,
+): { truthy: string; falsy: string } | null {
+  if (bindings?.kind !== "destructured" || !bindings.defaults?.has(propName)) {
+    return { truthy: propName, falsy: `!${propName}` };
+  }
+  const defaultValue = literalToStaticValue(bindings.defaults.get(propName));
+  if (defaultValue === null) {
+    return null;
+  }
+  if (defaultValue) {
+    const truthy = `${propName} === undefined || ${propName}`;
+    return { truthy, falsy: `!(${truthy})` };
+  }
+  return { truthy: propName, falsy: `!${propName}` };
 }

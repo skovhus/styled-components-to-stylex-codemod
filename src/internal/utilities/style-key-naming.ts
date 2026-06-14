@@ -165,6 +165,18 @@ export function toSuffixFromProp(propName: string): string {
     }
   }
 
+  // Default-aware truthiness idiom emitted for destructuring defaults:
+  //   `big === undefined || big` -> `Big` (the leading `$` of the whole string is
+  //   already stripped above, so normalize both sides before comparing)
+  const defaultTruthyMatch = trimmed.match(/^(.+?) === undefined \|\| (.+)$/);
+  if (defaultTruthyMatch) {
+    const lhs = defaultTruthyMatch[1]!.replace(/^\$/, "");
+    const rhs = defaultTruthyMatch[2]!.replace(/^\$/, "");
+    if (lhs === rhs) {
+      return toSuffixFromProp(lhs);
+    }
+  }
+
   // Handle || conditions (e.g., for nested ternary default branches):
   //   `mode === "gradient" || mode === "pattern"` -> `ModeGradientOrModePattern`
   if (trimmed.includes(" || ")) {

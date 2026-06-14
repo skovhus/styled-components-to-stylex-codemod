@@ -313,12 +313,12 @@ export const App = () => (
     </Flex>
 
     {/* Non-polymorphic wrapper around generic Flex */}
-    <Flex onContextMenu={(e) => e.stopPropagation()} {...stylex.props(styles.flex, styles.padded)}>
+    <Flex onContextMenu={(e) => e.stopPropagation()} sx={styles.padded}>
       Padded content
     </Flex>
 
     {/* styled(Flex) must preserve Flex prop behavior and ignore invalid wrapper CSS */}
-    <Flex wrap gap={4} {...stylex.props(styles.flex, styles.nameRow)}>
+    <Flex wrap gap={4} sx={styles.nameRow}>
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Name</div>
       <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Value</div>
     </Flex>

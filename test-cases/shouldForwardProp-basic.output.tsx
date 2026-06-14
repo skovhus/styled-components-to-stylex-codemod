@@ -14,7 +14,7 @@ function Button(props: ButtonProps) {
       {...rest}
       sx={[
         styles.button,
-        color != null && styles.buttonBackgroundColor(color),
+        color ? styles.buttonBackgroundColor(color) : undefined,
         size === "large" && styles.buttonSizeLarge,
       ]}
     />
@@ -45,8 +45,8 @@ function Box(props: BoxProps) {
       {...rest}
       sx={[
         styles.box,
-        background != null && styles.boxBackgroundColor(background),
-        padding != null && styles.boxPadding(padding),
+        background ? styles.boxBackgroundColor(background) : undefined,
+        padding ? styles.boxPadding(padding) : undefined,
       ]}
     />
   );

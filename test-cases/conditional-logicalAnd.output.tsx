@@ -79,6 +79,63 @@ export function StatusBar(props: StatusBarProps) {
   return <div {...rest} sx={[styles.statusBar, isDisconnected && styles.statusBarDisconnected]} />;
 }
 
+type LateOverrideProps = { hot?: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
+
+// Pattern 7: Conditional block BEFORE an unconditional declaration of the same
+// property — the later base declaration always wins (CSS cascade: last
+// declaration in the generated class), so the conditional color is dead
+function LateOverride(props: LateOverrideProps) {
+  const { hot, ...rest } = props;
+  return <div {...rest} sx={styles.lateOverride} />;
+}
+
+type ImportantBlockProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+// Pattern 8: An `!important` conditional still wins over a LATER non-important
+// base declaration of the same property (CSS importance beats source order), so
+// the variant must be preserved rather than cleared. Covers both the css-block
+// form and the ternary-with-undefined-alternate form.
+function ImportantBlock(props: ImportantBlockProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantBlock, hot && styles.importantBlockHot]}>{children}</div>;
+}
+
+type ImportantTernaryProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+function ImportantTernary(props: ImportantTernaryProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantTernary, hot && styles.importantTernaryHot]}>{children}</div>;
+}
+
+type ImportantNumericProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+// Numeric `!important` conditional value (importance must survive even though
+// the resolved branch is a number, not a string literal).
+function ImportantNumeric(props: ImportantNumericProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantNumeric, hot && styles.importantNumericHot]}>{children}</div>;
+}
+
+type ImportantTokenProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+// Theme-token `!important` conditional value (resolves to a member expression,
+// not a literal — importance must still survive the later-base cleanup).
+function ImportantToken(props: ImportantTokenProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantToken, hot && styles.importantTokenHot]}>{children}</div>;
+}
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -108,6 +165,20 @@ export const App = () => (
     <Card isHighlighted={false}>Normal</Card>
     <StatusBar isDisconnected>Disconnected</StatusBar>
     <StatusBar>Connected</StatusBar>
+
+    {/* Pattern 7: later base declaration wins over the earlier conditional */}
+    <LateOverride hot>Hot (still blue)</LateOverride>
+    <LateOverride>Default (blue)</LateOverride>
+
+    {/* Pattern 8: !important conditional wins over the later non-important base */}
+    <ImportantBlock hot>Hot (red, important)</ImportantBlock>
+    <ImportantBlock>Default (blue)</ImportantBlock>
+    <ImportantTernary hot>Hot (red, important)</ImportantTernary>
+    <ImportantTernary>Default (blue)</ImportantTernary>
+    <ImportantNumeric hot>Hot (opacity 1, important)</ImportantNumeric>
+    <ImportantNumeric>Default (opacity 0.5)</ImportantNumeric>
+    <ImportantToken hot>Hot (token color, important)</ImportantToken>
+    <ImportantToken>Default (blue)</ImportantToken>
   </div>
 );
 
@@ -152,5 +223,37 @@ const styles = stylex.create({
   },
   statusBarDisconnected: {
     backgroundColor: $colors.bgSub,
+  },
+  lateOverride: {
+    color: "blue",
+    padding: 4,
+  },
+  importantBlock: {
+    color: "blue",
+    padding: 4,
+  },
+  importantBlockHot: {
+    color: "red !important",
+  },
+  importantTernary: {
+    color: "blue",
+    padding: 4,
+  },
+  importantTernaryHot: {
+    color: "red !important",
+  },
+  importantNumeric: {
+    opacity: 0.5,
+    padding: 4,
+  },
+  importantNumericHot: {
+    opacity: "1 !important",
+  },
+  importantToken: {
+    color: "blue",
+    padding: 4,
+  },
+  importantTokenHot: {
+    color: `${$colors.primaryColor} !important`,
   },
 });
