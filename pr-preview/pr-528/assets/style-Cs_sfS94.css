@@ -3239,6 +3239,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #639;
 }
 
+.xzw3067:not(#\#):not(#\#):not(#\#) {
+  color: red !important;
+}
+
 .x1e2nbdu:not(#\#):not(#\#):not(#\#) {
   color: red;
 }
