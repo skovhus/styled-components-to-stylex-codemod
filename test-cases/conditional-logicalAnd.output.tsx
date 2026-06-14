@@ -125,6 +125,17 @@ function ImportantNumeric(props: ImportantNumericProps) {
   return <div sx={[styles.importantNumeric, hot && styles.importantNumericHot]}>{children}</div>;
 }
 
+type ImportantTokenProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+// Theme-token `!important` conditional value (resolves to a member expression,
+// not a literal — importance must still survive the later-base cleanup).
+function ImportantToken(props: ImportantTokenProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantToken, hot && styles.importantTokenHot]}>{children}</div>;
+}
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -166,6 +177,8 @@ export const App = () => (
     <ImportantTernary>Default (blue)</ImportantTernary>
     <ImportantNumeric hot>Hot (opacity 1, important)</ImportantNumeric>
     <ImportantNumeric>Default (opacity 0.5)</ImportantNumeric>
+    <ImportantToken hot>Hot (token color, important)</ImportantToken>
+    <ImportantToken>Default (blue)</ImportantToken>
   </div>
 );
 
@@ -235,5 +248,12 @@ const styles = stylex.create({
   },
   importantNumericHot: {
     opacity: "1 !important",
+  },
+  importantToken: {
+    color: "blue",
+    padding: 4,
+  },
+  importantTokenHot: {
+    color: `${$colors.primaryColor} !important`,
   },
 });

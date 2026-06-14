@@ -288,23 +288,65 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       if (!d.important || !valueAst || typeof valueAst !== "object") {
         return valueAst;
       }
-      const node = valueAst as { type?: string; value?: unknown };
-      // `!important` must be carried as a string value in StyleX. String and
-      // numeric literals (e.g. `opacity: 1 !important`) both need annotating;
-      // a numeric literal becomes a string so the marker survives.
+      const node = valueAst as {
+        type?: string;
+        value?: unknown;
+        quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+        expressions?: unknown[];
+      };
+      // `!important` must be carried as a string value in StyleX. String/numeric
+      // literals become a string carrying the marker; a template literal gets the
+      // marker appended to its trailing quasi; any other value expression
+      // (theme token member access, helper call, identifier) is wrapped in a
+      // template literal — matching the canonical `${token} !important` form the
+      // base-style path emits.
       if (
         node.type === "StringLiteral" ||
         node.type === "Literal" ||
         node.type === "NumericLiteral"
       ) {
-        if (typeof node.value === "string" && !node.value.includes("!important")) {
-          return j.literal(`${node.value} !important`);
+        if (typeof node.value === "string") {
+          return node.value.includes("!important")
+            ? valueAst
+            : j.literal(`${node.value} !important`);
         }
         if (typeof node.value === "number") {
           return j.literal(`${node.value} !important`);
         }
+        return valueAst;
       }
-      return valueAst;
+      if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
+        const quasis = node.quasis;
+        const lastIndex = quasis.length - 1;
+        const last = quasis[lastIndex];
+        const lastText = last?.value?.cooked ?? last?.value?.raw ?? "";
+        if (lastText.includes("!important")) {
+          return valueAst;
+        }
+        const newQuasis = quasis.map((q, i) =>
+          i === lastIndex
+            ? j.templateElement(
+                { raw: `${lastText} !important`, cooked: `${lastText} !important` },
+                true,
+              )
+            : j.templateElement(
+                {
+                  raw: q?.value?.raw ?? q?.value?.cooked ?? "",
+                  cooked: q?.value?.cooked ?? q?.value?.raw ?? "",
+                },
+                false,
+              ),
+        );
+        return j.templateLiteral(newQuasis, (node.expressions ?? []) as never[]);
+      }
+      // Wrap an arbitrary value expression: `${expr} !important`.
+      return j.templateLiteral(
+        [
+          j.templateElement({ raw: "", cooked: "" }, false),
+          j.templateElement({ raw: " !important", cooked: " !important" }, true),
+        ],
+        [valueAst as never],
+      );
     };
 
     // Helper: apply a single prop value to target, respecting media/pseudo context.

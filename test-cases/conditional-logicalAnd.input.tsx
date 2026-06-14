@@ -85,6 +85,14 @@ const ImportantNumeric = styled.div<{ $hot?: boolean }>`
   padding: 4px;
 `;
 
+// Theme-token `!important` conditional value (resolves to a member expression,
+// not a literal — importance must still survive the later-base cleanup).
+const ImportantToken = styled.div<{ $hot?: boolean }>`
+  color: ${(props) => (props.$hot ? props.theme.color.primaryColor : undefined)} !important;
+  color: blue;
+  padding: 4px;
+`;
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -126,5 +134,7 @@ export const App = () => (
     <ImportantTernary>Default (blue)</ImportantTernary>
     <ImportantNumeric $hot>Hot (opacity 1, important)</ImportantNumeric>
     <ImportantNumeric>Default (opacity 0.5)</ImportantNumeric>
+    <ImportantToken $hot>Hot (token color, important)</ImportantToken>
+    <ImportantToken>Default (blue)</ImportantToken>
   </div>
 );
