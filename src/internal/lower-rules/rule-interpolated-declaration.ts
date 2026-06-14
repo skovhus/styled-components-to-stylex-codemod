@@ -4152,6 +4152,13 @@ function subtractLaterStaticOverrides(args: {
         if (!overlapped.length) {
           continue;
         }
+        // An earlier `!important` declaration wins over a later non-important one
+        // regardless of source order. Subtracting it would drop the conditional
+        // branch and let the later declaration clobber the base, inverting the
+        // cascade — bail instead so the important branches are preserved.
+        if (currentDecl.important && !laterDecl.important) {
+          return false;
+        }
         if (!context.unconditional || laterDecl.value.kind !== "static") {
           return false;
         }

@@ -4,6 +4,7 @@
  */
 import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { expandBorderRadiusShorthandValue } from "./css-border-radius.js";
+import { splitCssValueWhitespace } from "./css-value-split.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import {
   hasTopLevelMatch,
@@ -358,10 +359,12 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
 
   // Logical scroll shorthands (e.g. `scroll-margin-inline: 4px 8px`) are valid
   // CSS but not accepted by StyleX's valid-styles rule; expand them to their
-  // Start/End longhands, which StyleX preserves losslessly.
+  // Start/End longhands, which StyleX preserves losslessly. Split at top-level
+  // whitespace only so function arguments (e.g. `var(--gap, 1rem)`,
+  // `calc(1px + 2px)`) are kept intact rather than broken apart.
   const logicalScrollAxis = LOGICAL_SCROLL_AXIS_SHORTHANDS[prop];
   if (logicalScrollAxis && decl.value.kind === "static") {
-    const values = decl.valueRaw.trim().split(/\s+/).filter(Boolean);
+    const values = splitCssValueWhitespace(decl.valueRaw.trim());
     if (values.length >= 1 && values.length <= 2) {
       const start = values[0]!;
       const end = values[1] ?? start;

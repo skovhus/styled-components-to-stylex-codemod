@@ -9,7 +9,9 @@ const Box = styled.div`
   scroll-padding-block-start: 2px;
   scroll-padding-block-end: 3px;
   scroll-padding-inline: 7px;
-  scroll-margin-inline: 5px 9px;
+  /* Function values keep their internal whitespace intact (no naive split). */
+  scroll-margin-inline: max(4px, 1vw) 8px;
+  scroll-padding-block: calc(1px + 2px);
   background-color: lavender;
   padding: 16px;
 `;
