@@ -3279,6 +3279,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: var(--x19sfxkz);
 }
 
+.x2md7fx:not(#\#):not(#\#):not(#\#) {
+  color: var(--x1e13nsu) !important;
+}
+
 .xgfgdi1:not(#\#):not(#\#):not(#\#) {
   color: var(--x1e13nsu);
 }
