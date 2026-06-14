@@ -289,12 +289,20 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
         return valueAst;
       }
       const node = valueAst as { type?: string; value?: unknown };
+      // `!important` must be carried as a string value in StyleX. String and
+      // numeric literals (e.g. `opacity: 1 !important`) both need annotating;
+      // a numeric literal becomes a string so the marker survives.
       if (
-        (node.type === "StringLiteral" || node.type === "Literal") &&
-        typeof node.value === "string" &&
-        !node.value.includes("!important")
+        node.type === "StringLiteral" ||
+        node.type === "Literal" ||
+        node.type === "NumericLiteral"
       ) {
-        return j.literal(`${node.value} !important`);
+        if (typeof node.value === "string" && !node.value.includes("!important")) {
+          return j.literal(`${node.value} !important`);
+        }
+        if (typeof node.value === "number") {
+          return j.literal(`${node.value} !important`);
+        }
       }
       return valueAst;
     };

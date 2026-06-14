@@ -77,6 +77,14 @@ const ImportantTernary = styled.div<{ $hot?: boolean }>`
   padding: 4px;
 `;
 
+// Numeric `!important` conditional value (importance must survive even though
+// the resolved branch is a number, not a string literal).
+const ImportantNumeric = styled.div<{ $hot?: boolean }>`
+  opacity: ${(props) => (props.$hot ? 1 : undefined)} !important;
+  opacity: 0.5;
+  padding: 4px;
+`;
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -116,5 +124,7 @@ export const App = () => (
     <ImportantBlock>Default (blue)</ImportantBlock>
     <ImportantTernary $hot>Hot (red, important)</ImportantTernary>
     <ImportantTernary>Default (blue)</ImportantTernary>
+    <ImportantNumeric $hot>Hot (opacity 1, important)</ImportantNumeric>
+    <ImportantNumeric>Default (opacity 0.5)</ImportantNumeric>
   </div>
 );

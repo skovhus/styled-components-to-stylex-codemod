@@ -114,6 +114,17 @@ function ImportantTernary(props: ImportantTernaryProps) {
   return <div sx={[styles.importantTernary, hot && styles.importantTernaryHot]}>{children}</div>;
 }
 
+type ImportantNumericProps = React.PropsWithChildren<{
+  hot?: boolean;
+}>;
+
+// Numeric `!important` conditional value (importance must survive even though
+// the resolved branch is a number, not a string literal).
+function ImportantNumeric(props: ImportantNumericProps) {
+  const { children, hot } = props;
+  return <div sx={[styles.importantNumeric, hot && styles.importantNumericHot]}>{children}</div>;
+}
+
 export const App = () => (
   <div>
     {/* Pattern 1: with and without $zIndex */}
@@ -153,6 +164,8 @@ export const App = () => (
     <ImportantBlock>Default (blue)</ImportantBlock>
     <ImportantTernary hot>Hot (red, important)</ImportantTernary>
     <ImportantTernary>Default (blue)</ImportantTernary>
+    <ImportantNumeric hot>Hot (opacity 1, important)</ImportantNumeric>
+    <ImportantNumeric>Default (opacity 0.5)</ImportantNumeric>
   </div>
 );
 
@@ -215,5 +228,12 @@ const styles = stylex.create({
   },
   importantTernaryHot: {
     color: "red !important",
+  },
+  importantNumeric: {
+    opacity: 0.5,
+    padding: 4,
+  },
+  importantNumericHot: {
+    opacity: "1 !important",
   },
 });
