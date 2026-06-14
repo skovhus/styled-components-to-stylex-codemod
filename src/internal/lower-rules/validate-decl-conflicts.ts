@@ -112,6 +112,24 @@ function collectDirectPropReferences(decl: StyledDecl): Set<string> {
     add(cv.outerProp);
     add(cv.innerProp);
   }
+  const attrs = decl.attrsInfo;
+  if (attrs) {
+    for (const entry of attrs.defaultAttrs ?? []) {
+      add(entry.jsxProp);
+    }
+    for (const entry of attrs.dynamicAttrs ?? []) {
+      add(entry.jsxProp);
+    }
+    for (const entry of attrs.conditionalAttrs ?? []) {
+      add(entry.jsxProp);
+    }
+    for (const entry of attrs.invertedBoolAttrs ?? []) {
+      add(entry.jsxProp);
+    }
+    for (const entry of attrs.attrsDynamicStyles ?? []) {
+      add(entry.jsxProp);
+    }
+  }
   return props;
 }
 

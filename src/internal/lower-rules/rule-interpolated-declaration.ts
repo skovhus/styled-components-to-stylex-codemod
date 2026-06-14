@@ -4146,6 +4146,25 @@ function subtractLaterStaticOverrides(args: {
         }
         continue;
       }
+      // A later `border`/`border-<side>` shorthand resets the style/color
+      // sub-properties it omits, but cssDeclarationToStylexDeclarations only
+      // reports the explicit longhands (e.g. just borderTopWidth for
+      // `border-top: 1px`). Subtracting those would leave the branch's
+      // borderStyle/borderColor in place, drawing a border the cascade reset
+      // away — bail when such a shorthand overlaps a branch property.
+      if (isBorderShorthandProperty(laterDecl.property)) {
+        const borderProps = new Set(
+          cssDeclarationToStylexDeclarations(laterDecl).map((out) => out.prop),
+        );
+        if (
+          branchProps().some((prop) =>
+            [...borderProps].some((borderProp) => stylexPropsOverlap(prop, borderProp)),
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
       for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
         const overrideProp = out.prop;
         const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
@@ -4175,6 +4194,11 @@ function subtractLaterStaticOverrides(args: {
 
 function sameAtRuleStack(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+
+/** True for the `border` / `border-<side>` shorthands (not the longhands). */
+function isBorderShorthandProperty(property: string): boolean {
+  return /^border(?:-(?:top|right|bottom|left))?$/.test(property.trim());
 }
 
 function subtractOverrideFromBranch(
