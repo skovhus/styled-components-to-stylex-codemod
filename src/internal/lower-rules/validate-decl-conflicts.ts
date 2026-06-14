@@ -3,7 +3,6 @@
  * silently change semantics and should bail instead.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 
 export { findImportedRootPropCollision, hasConflictingLogicalPhysicalScrollProps };
@@ -45,32 +44,43 @@ function findImportedRootPropCollision(
 
 /**
  * Returns true when the component declares both a logical scroll longhand
- * (e.g. `scroll-padding-inline-start`) and a physical scroll side it maps to
- * (e.g. `scroll-padding-left`). StyleX's logical/physical conflict
- * normalization resolves these to physical sides assuming horizontal-tb, which
- * silently drops the logical value's RTL/vertical behavior, so bail.
+ * (e.g. `scroll-padding-inline-start`) and a physical scroll side
+ * (e.g. `scroll-padding-left`) in the same scroll family. StyleX's
+ * logical/physical conflict normalization resolves these to physical sides
+ * assuming horizontal-tb LTR, but the logical-to-physical mapping depends on
+ * `writing-mode`/`direction` (e.g. `inline-start` is the right side in RTL),
+ * so any such mix may silently preserve or override the wrong side — bail.
  */
 function hasConflictingLogicalPhysicalScrollProps(decl: StyledDecl): boolean {
-  const declaredScrollProps = new Set<string>();
-  for (const rule of decl.rules) {
-    for (const declaration of rule.declarations) {
-      const prop = declaration.property?.trim();
-      if (prop && /^scroll-(margin|padding)-/.test(prop)) {
-        declaredScrollProps.add(kebabToCamel(prop));
+  for (const family of SCROLL_FAMILIES) {
+    let hasLogical = false;
+    let hasPhysical = false;
+    for (const rule of decl.rules) {
+      for (const declaration of rule.declarations) {
+        const prop = declaration.property?.trim();
+        if (!prop) {
+          continue;
+        }
+        const camel = kebabToCamel(prop);
+        if (!camel.startsWith(family)) {
+          continue;
+        }
+        const side = camel.slice(family.length);
+        if (/^(?:Inline|Block)/.test(side)) {
+          hasLogical = true;
+        } else if (/^(?:Top|Right|Bottom|Left)$/.test(side)) {
+          hasPhysical = true;
+        }
       }
     }
-  }
-  if (declaredScrollProps.size === 0) {
-    return false;
-  }
-  for (const prop of declaredScrollProps) {
-    const physicalSides = LOGICAL_TO_PHYSICAL[prop];
-    if (physicalSides && physicalSides.some((side) => declaredScrollProps.has(side))) {
+    if (hasLogical && hasPhysical) {
       return true;
     }
   }
   return false;
 }
+
+const SCROLL_FAMILIES = ["scrollMargin", "scrollPadding"] as const;
 
 function collectDirectPropReferences(decl: StyledDecl): Set<string> {
   const props = new Set<string>();
