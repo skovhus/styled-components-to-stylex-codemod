@@ -1442,10 +1442,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       };
       const resolveValueResult = resolveValue(resolveValueContext);
       if (!resolveValueResult) {
-        // Adapter returned undefined for an identified imported value - bail
+        // Adapter returned undefined for an identified imported value - bail.
+        // A bare identifier from a relative, non-`.stylex` module is a plain
+        // owned constant: the StyleX compiler can't resolve it inside
+        // `stylex.create()`, and inlining it would silently destroy the shared
+        // source of truth. Bail with actionable guidance to relocate it into a
+        // `.stylex` defineConsts/defineVars group (member access / package
+        // imports keep the generic message — defineConsts may not apply).
+        const isPlainOwnedConstant =
+          info.path.length === 0 &&
+          imp.source.kind === "absolutePath" &&
+          !isStylexImportSource(imp.source.value);
         warnings.push({
           severity: "error",
-          type: "Adapter resolveValue returned undefined for imported value",
+          type: isPlainOwnedConstant
+            ? "Imported constant cannot be referenced inside stylex.create() — move it into a `.stylex` defineConsts/defineVars group (or map it via adapter.resolveValue)"
+            : "Adapter resolveValue returned undefined for imported value",
           loc: getNodeLocStart(expr) ?? decl.loc,
           context: {
             localName: decl.localName,

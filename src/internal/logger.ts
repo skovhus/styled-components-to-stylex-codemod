@@ -24,6 +24,7 @@ export type WarningType =
   | 'Adapter resolveValue cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")'
   | "Adapter resolveValue returned an unparseable value expression"
   | "Adapter resolveValue returned undefined for imported value"
+  | "Imported constant cannot be referenced inside stylex.create() — move it into a `.stylex` defineConsts/defineVars group (or map it via adapter.resolveValue)"
   | "Arrow function: body is not a recognized pattern (expected ternary, logical, call, or member expression)"
   | "Arrow function: conditional branches could not be resolved to static or theme values"
   | "Arrow function: helper call body is not supported"
