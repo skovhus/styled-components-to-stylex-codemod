@@ -22,7 +22,11 @@ import { createImportResolver } from "./import-resolution.js";
 import { collectExportedComponents } from "../analyze-before-emit/exported-components.js";
 import { componentsReferencedAsValue } from "../utilities/component-value-references.js";
 import { literalToStaticValue } from "./types.js";
-import { buildEnumValueMap, cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import {
+  buildEnumValueMap,
+  cloneAstNode,
+  collectPatternBindingNames,
+} from "../utilities/jscodeshift-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import {
   createComponentPropUsageInfo,
@@ -212,6 +216,26 @@ export function createLowerRulesState(ctx: TransformContext) {
       staticIdentifierValues.set(node.id.name, staticValue);
     }
   });
+  // Drop names that are also bound in a nested scope (function params or
+  // non-top-level declarations). The fold map is keyed purely by name with no
+  // scope information, so a same-named local binding could otherwise shadow the
+  // top-level value at the point of use and be mis-folded (e.g. `const gap = 8`
+  // shadowed by a `gap` parameter). Dropping them is safe: worst case we skip an
+  // optimization rather than emit wrong output.
+  if (staticIdentifierValues.size > 0) {
+    const shadowingNames = new Set<string>();
+    root.find(j.Function).forEach((fnPath) => {
+      collectPatternBindingNames((fnPath.node as { params?: unknown }).params, shadowingNames);
+    });
+    root.find(j.VariableDeclarator).forEach((declPath) => {
+      if (!isTopLevelConstDeclarator(declPath)) {
+        collectPatternBindingNames((declPath.node as { id?: unknown }).id, shadowingNames);
+      }
+    });
+    for (const name of shadowingNames) {
+      staticIdentifierValues.delete(name);
+    }
+  }
   root
     .find(j.ExpressionStatement, {
       expression: {

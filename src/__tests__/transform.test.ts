@@ -6913,6 +6913,123 @@ export const Box = styled.div\`
     expect(code).toContain('borderColor: "#abc"');
   });
 
+  it("should not treat non-unit trailing text after a resolved helper as a CSS unit", () => {
+    const source = `
+import styled from "styled-components";
+import { asset } from "./helpers";
+
+export const Box = styled.div\`
+  mask-image: url(\${asset()}icons/logo.svg);
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "asset") {
+          return {
+            usage: "create" as const,
+            expr: "$assets.base",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$assets" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-nonUnitSuffixText.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    // "icons" is not a CSS unit, so it must never be consumed as a unit suffix:
+    // the full URL text must be preserved, not corrupted to ".../logo.svg".
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("url(${$assets.base}icons/logo.svg)");
+    expect(code).not.toContain("$assets.base}/logo.svg");
+  });
+
+  it("should not fold a top-level const shadowed by a function parameter", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+const gap = 8;
+
+export function App({ gap }: { gap: number }) {
+  const Box = styled.div\`
+    margin-left: \${gap - runtimeValue()}px;
+  \`;
+  return <Box>{gap}</Box>;
+}
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-shadowedConstArithmetic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    // `gap` here is the function parameter, not the top-level `const gap = 8`,
+    // so the arithmetic must not be folded using the top-level value.
+    expect(result.code ?? "").not.toContain("calc(8px");
+  });
+
   it.each([
     {
       name: "static direct helper arg",

@@ -588,9 +588,16 @@ function resolvedValueCarriesUnit(node: any): boolean {
   return true;
 }
 
+// Recognized CSS length/percentage/fraction units. Used so that ordinary
+// trailing text after a slot (e.g. `icons` in `url(${asset()}icons/x.svg)`) is
+// not misclassified as a unit suffix and folded/consumed.
+const CSS_UNIT_PATTERN =
+  /^(?:px|rem|em|ex|ch|cap|ic|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|lvw|lvh|dvw|dvh|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc|fr|%)$/i;
+
 function getAdjacentUnitAfterParts(parts: any[], slotIndex: number): string | null {
   const after = parts[slotIndex + 1]?.kind === "static" ? (parts[slotIndex + 1]?.value ?? "") : "";
-  return after.match(/^([a-zA-Z%]+)/)?.[1] ?? null;
+  const candidate = after.match(/^([a-zA-Z%]+)/)?.[1];
+  return candidate && CSS_UNIT_PATTERN.test(candidate) ? candidate : null;
 }
 
 function appendExpressionToTemplate(
