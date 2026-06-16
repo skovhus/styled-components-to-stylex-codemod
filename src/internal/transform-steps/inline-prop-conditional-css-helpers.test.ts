@@ -11,7 +11,7 @@ const j = jscodeshift.withParser("tsx");
 describe("inlinePropConditionalCssHelpersStep", () => {
   it("inlines a top-level prop-conditional helper and empties (but keeps) the helper decl", () => {
     const helper = cssHelperDecl("sizing", [rule("&", [interpolatedDecl("width", 0)])]);
-    const consumer = consumerDecl("Tile", [
+    const consumer = consumerDecl("Tile", "sizing", [
       rule("&", [helperReferenceDecl(0), staticDecl("color", "red")]),
     ]);
     const ctx = createContext([consumer, helper]);
@@ -35,24 +35,40 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(2);
   });
 
-  it("does not inline when the consumer authored a rule matching the helper's nested selector", () => {
+  it("does not inline a helper that carries a nested selector block", () => {
     const helper = cssHelperDecl("interactive", [
       rule("&", [interpolatedDecl("opacity", 0)]),
       rule("&:hover", [staticDecl("background-color", "gold")]),
     ]);
-    const consumerReference = helperReferenceDecl(0);
-    const consumer = consumerDecl("Card", [
-      rule("&", [consumerReference, staticDecl("padding", "8px")]),
-      rule("&:hover", [staticDecl("background-color", "green")]),
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Toggle", "interactive", [
+      rule("&", [reference, staticDecl("padding", "8px")]),
     ]);
     const ctx = createContext([consumer, helper]);
 
     inlinePropConditionalCssHelpersStep(ctx);
 
-    // Comment #2: appending the helper's `&:hover` into the consumer's authored `&:hover`
-    // would flip cascade order, so the reference is left intact for the existing mixin bail.
+    // Comment #3: a helper's nested rule (e.g. `&:hover`) cannot be spliced into the
+    // consumer's `&` block while preserving cascade order, so the reference is left intact.
     expect(helper.rules).toHaveLength(2);
-    expect(consumer.rules[0]!.declarations).toContain(consumerReference);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(1);
+  });
+
+  it("does not inline a helper that chains another mixin reference", () => {
+    // `${parts.reset}` composes as a separate (member) css helper — represented as a
+    // property-less declaration. Comment #4: inlining would reorder the cascade, so bail.
+    const helper = cssHelperDecl("composed", [
+      rule("&", [interpolatedDecl("opacity", 0), helperReferenceDecl(1)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "composed", [rule("&", [reference])]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
     expect(consumer.templateExpressions).toHaveLength(1);
   });
 });
@@ -79,13 +95,13 @@ function cssHelperDecl(localName: string, rules: CssRuleIR[]): StyledDecl {
   } as StyledDecl;
 }
 
-function consumerDecl(localName: string, rules: CssRuleIR[]): StyledDecl {
+function consumerDecl(localName: string, helperName: string, rules: CssRuleIR[]): StyledDecl {
   return {
     localName,
     base: { kind: "intrinsic", tagName: "div" },
     styleKey: localName,
     rules,
-    templateExpressions: [parseExpr("sizing")],
+    templateExpressions: [parseExpr(helperName)],
   } as StyledDecl;
 }
 

@@ -20,23 +20,12 @@ function Panel(props: PanelProps) {
   return <div sx={[styles.panel, big && styles.panelBig]}>{children}</div>;
 }
 
-type ToggleProps = React.PropsWithChildren<{
-  on?: boolean;
-}>;
-
-function Toggle(props: ToggleProps) {
-  const { children, on } = props;
-  return <button sx={[styles.toggle, on && styles.toggleOn]}>{children}</button>;
-}
-
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tile big>Big tile (100px)</Tile>
     <Tile>Small tile (50px)</Tile>
     <Panel big>Big panel</Panel>
     <Panel>Small panel</Panel>
-    <Toggle on>On</Toggle>
-    <Toggle>Off</Toggle>
   </div>
 );
 
@@ -56,18 +45,5 @@ const styles = stylex.create({
   },
   panelBig: {
     width: 100,
-  },
-  toggle: {
-    cursor: "pointer",
-    opacity: "0.5",
-    paddingBlock: 6,
-    paddingInline: 10,
-    backgroundColor: {
-      default: null,
-      ":hover": "gold",
-    },
-  },
-  toggleOn: {
-    opacity: "1",
   },
 });

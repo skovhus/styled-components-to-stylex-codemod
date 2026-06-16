@@ -6,6 +6,11 @@
  * helper's CSS declarations directly into each consumer at the `${helper}` reference site,
  * remapping the helper's interpolation slots onto the consumer. The consumer's normal rule
  * lowering then handles the prop conditional the same way it would for an inline declaration.
+ *
+ * Inlining is intentionally conservative: only a helper that is a single top-level `&` block
+ * with no chained mixin references is spliced. Helpers with nested selectors/at-rules or
+ * chained `${otherMixin}` references would require source-order-aware merging into the
+ * consumer to preserve the CSS cascade, so they are left for the existing mixin bail instead.
  */
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -43,20 +48,13 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     if (consumer.isCssHelper) {
       continue;
     }
-    const references = collectInlinableHelperReferences(consumer, declByLocalName);
-    if (references.length === 0) {
-      continue;
-    }
-    // Snapshot the consumer's own (authored) rules before any inlining so nested helper
-    // rules can detect — and bail on — merges into a consumer-authored selector.
-    const authoredRules = new Set(consumer.rules);
-    for (const reference of references) {
+    for (const reference of collectInlinableHelperReferences(consumer, declByLocalName)) {
       const helperDecl = reference.helperDecl;
-      if (!isInlinableHelper(helperDecl, cssHelperNames)) {
+      if (!isInlinableHelper(helperDecl)) {
         retainedHelpers.add(helperDecl.localName);
         continue;
       }
-      if (inlineHelperReference(consumer, reference, authoredRules)) {
+      if (inlineHelperReference(consumer, reference)) {
         fullyInlinedHelpers.add(helperDecl.localName);
         ctx.markChanged();
       } else {
@@ -97,7 +95,7 @@ type HelperReference = {
  * Finds property-less `${helper}` references (single-slot identifier interpolations)
  * that sit in the consumer's top-level `&` rule. Only top-level references are returned;
  * references nested under selectors/at-rules are left for the existing bail path because
- * merging a helper's own nested rules under another selector is not generally safe.
+ * merging a helper's own declarations under another selector is not generally safe.
  */
 function collectInlinableHelperReferences(
   consumer: StyledDecl,
@@ -136,11 +134,16 @@ function referencedHelperName(d: CssDeclarationIR, consumer: StyledDecl): string
 }
 
 /**
- * A helper is inlinable when it carries a prop-based interpolation (the case that the
- * mixin path bails on) and it is a private, locally-defined helper whose rules are
- * statically splice-able (no interpolated selectors, no references to other helpers).
+ * A helper is inlinable when it carries a prop-based interpolation (the case the mixin path
+ * bails on) and is shaped so its declarations can be spliced into the consumer's `&` block
+ * without disturbing the CSS cascade:
+ *
+ *  - private (not exported / preserved for cross-file use),
+ *  - every rule is the top-level `&` block (no nested selectors, no at-rules), and
+ *  - no chained mixin references (a property-less `${otherMixin}` / `${parts.reset}` slot)
+ *    — those compose as separate style keys whose ordering we cannot preserve by splicing.
  */
-function isInlinableHelper(helperDecl: StyledDecl, cssHelperNames: ReadonlySet<string>): boolean {
+function isInlinableHelper(helperDecl: StyledDecl): boolean {
   if (helperDecl.isExported || helperDecl.preserveCssHelperDeclaration) {
     return false;
   }
@@ -148,14 +151,13 @@ function isInlinableHelper(helperDecl: StyledDecl, cssHelperNames: ReadonlySet<s
     return false;
   }
   for (const rule of helperDecl.rules) {
-    if (rule.selector.includes("__SC_EXPR_")) {
+    if (rule.selector.trim() !== "&" || rule.atRuleStack.length > 0) {
       return false;
     }
-  }
-  // Bail if the helper interpolates another css helper — chained inlining is out of scope.
-  for (const expr of helperDecl.templateExpressions as Array<{ type?: string; name?: string }>) {
-    if (expr?.type === "Identifier" && expr.name && cssHelperNames.has(expr.name)) {
-      return false;
+    for (const declaration of rule.declarations) {
+      if (!declaration.property) {
+        return false;
+      }
     }
   }
   return true;
@@ -180,20 +182,11 @@ function helperUsesProps(helperDecl: StyledDecl): boolean {
 }
 
 /**
- * Splices the helper's declarations into the consumer at the reference site, remapping
- * the helper's interpolation slots onto freshly-appended consumer template expressions.
- * Returns false (without mutating) when the helper shape is not safe to inline.
- *
- * `authoredRules` is the set of the consumer's own rules captured before any inlining; a
- * helper nested rule (e.g. `&:hover`) that would merge into a consumer-authored rule bails,
- * because appending its declarations cannot preserve the `${helper}` reference's cascade
- * position relative to the consumer's own rule for that selector.
+ * Splices the helper's `&`-block declarations into the consumer at the reference site,
+ * remapping the helper's interpolation slots onto freshly-appended consumer template
+ * expressions. Returns false (without mutating) when the reference is no longer present.
  */
-function inlineHelperReference(
-  consumer: StyledDecl,
-  reference: HelperReference,
-  authoredRules: ReadonlySet<CssRuleIR>,
-): boolean {
+function inlineHelperReference(consumer: StyledDecl, reference: HelperReference): boolean {
   const { rule, referenceDecl, helperDecl } = reference;
   const declIndex = rule.declarations.indexOf(referenceDecl);
   if (declIndex === -1) {
@@ -202,49 +195,15 @@ function inlineHelperReference(
   const slotOffset = consumer.templateExpressions.length;
   const inheritedSourceOrder = referenceDecl.sourceOrder;
 
-  const baseDecls: CssDeclarationIR[] = [];
-  type NestedRuleDecls = {
-    selector: string;
-    atRuleStack: string[];
-    declarations: CssDeclarationIR[];
-  };
-  const nestedRuleDecls: NestedRuleDecls[] = [];
+  // isInlinableHelper guarantees every helper rule is the top-level `&` block.
+  const inlinedDecls = helperDecl.rules.flatMap((helperRule) =>
+    helperRule.declarations.map((d) => remapDeclaration(d, slotOffset, inheritedSourceOrder)),
+  );
 
-  for (const helperRule of helperDecl.rules) {
-    const remapped = helperRule.declarations.map((d) =>
-      remapDeclaration(d, slotOffset, inheritedSourceOrder),
-    );
-    if (remapped.length === 0) {
-      continue;
-    }
-    if (helperRule.selector.trim() === "&" && helperRule.atRuleStack.length === 0) {
-      baseDecls.push(...remapped);
-    } else {
-      const existing = findMatchingRule(
-        consumer.rules,
-        helperRule.selector,
-        helperRule.atRuleStack,
-      );
-      if (existing && authoredRules.has(existing)) {
-        return false;
-      }
-      nestedRuleDecls.push({
-        selector: helperRule.selector,
-        atRuleStack: helperRule.atRuleStack,
-        declarations: remapped,
-      });
-    }
-  }
-
-  // Commit: append cloned helper template expressions, then splice declarations.
   for (const expr of helperDecl.templateExpressions) {
     consumer.templateExpressions.push(cloneAstNode(expr));
   }
-  rule.declarations.splice(declIndex, 1, ...baseDecls);
-  for (const nested of nestedRuleDecls) {
-    const target = findOrCreateRule(consumer.rules, nested.selector, nested.atRuleStack);
-    target.declarations.push(...nested.declarations);
-  }
+  rule.declarations.splice(declIndex, 1, ...inlinedDecls);
   return true;
 }
 
@@ -281,26 +240,4 @@ function offsetPlaceholders(valueRaw: string, slotOffset: number): string {
     /__SC_EXPR_(\d+)__/g,
     (_, n: string) => `__SC_EXPR_${Number(n) + slotOffset}__`,
   );
-}
-
-function findMatchingRule(
-  rules: readonly CssRuleIR[],
-  selector: string,
-  atRuleStack: readonly string[],
-): CssRuleIR | undefined {
-  return rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, atRuleStack));
-}
-
-function findOrCreateRule(rules: CssRuleIR[], selector: string, atRuleStack: string[]): CssRuleIR {
-  const existing = findMatchingRule(rules, selector, atRuleStack);
-  if (existing) {
-    return existing;
-  }
-  const created: CssRuleIR = { selector, atRuleStack: [...atRuleStack], declarations: [] };
-  rules.push(created);
-  return created;
-}
-
-function sameArray(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
