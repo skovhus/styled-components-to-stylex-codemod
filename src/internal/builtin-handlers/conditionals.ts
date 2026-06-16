@@ -40,7 +40,6 @@ import {
 import type {
   ConditionalExpressionBody,
   DynamicNode,
-  ExpressionKind,
   HandlerResult,
   InternalHandlerContext,
   ThemeParamInfo,
@@ -172,96 +171,6 @@ export function tryResolveConditionalValue(
     }
     return null;
   };
-
-  // Helper to resolve a theme member expression branch to an AST node with imports
-  const resolveThemeBranchValue = (
-    branch: unknown,
-  ): { astNode: ExpressionKind; imports: ImportSpec[] } | null => {
-    const themeInfo = resolveThemeFromMemberExpr(branch);
-    if (!themeInfo) {
-      return null;
-    }
-    const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
-    const res = resolveTheme({
-      kind: "theme",
-      path: themeInfo.path,
-      filePath: ctx.filePath,
-      loc: getNodeLocStart(branch) ?? undefined,
-    });
-    if (!res) {
-      return null;
-    }
-    const astNode = parseExpr(ctx.api, res.expr);
-    if (!astNode) {
-      return null;
-    }
-    return { astNode, imports: res.imports };
-  };
-
-  const themeBoolInfo = checkThemeBooleanTest(body.test);
-  if (themeBoolInfo && node.css.property) {
-    const { consequent, alternate } = body;
-    // Determine true/false branches based on negation
-    const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
-    const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
-
-    // Resolve both branches as static values (excluding booleans, which aren't valid CSS values)
-    const trueRaw = literalToStaticValue(trueBranch);
-    const falseRaw = literalToStaticValue(falseBranch);
-    let trueValue: unknown = trueRaw !== null && typeof trueRaw !== "boolean" ? trueRaw : null;
-    let falseValue: unknown = falseRaw !== null && typeof falseRaw !== "boolean" ? falseRaw : null;
-    const trueImports: ImportSpec[] = [];
-    const falseImports: ImportSpec[] = [];
-
-    // Fallback: resolve theme member expressions (e.g., props.theme.color.labelBase)
-    if (trueValue === null) {
-      const resolved = resolveThemeBranchValue(trueBranch);
-      if (resolved) {
-        trueValue = resolved.astNode;
-        trueImports.push(...resolved.imports);
-      }
-    }
-    if (falseValue === null) {
-      const resolved = resolveThemeBranchValue(falseBranch);
-      if (resolved) {
-        falseValue = resolved.astNode;
-        falseImports.push(...resolved.imports);
-      }
-    }
-
-    if (trueValue !== null && falseValue !== null) {
-      return {
-        type: "splitThemeBooleanVariants",
-        cssProp: node.css.property,
-        themeProp: themeBoolInfo.themeProp,
-        trueValue,
-        falseValue,
-        trueImports,
-        falseImports,
-      };
-    }
-
-    // Fallback: one branch resolved but the other is an unresolvable call expression.
-    // Use the resolved branch as the base StyleX value and emit the unresolvable
-    // branch as a conditional inline style guarded by the theme boolean.
-    const inlineStyleFallback = tryBuildThemeBooleanInlineStyleFallback({
-      trueValue,
-      falseValue,
-      trueImports,
-      falseImports,
-      trueBranch,
-      falseBranch,
-      themeBoolInfo,
-      cssProp: node.css.property,
-      paramName,
-      info,
-    });
-    if (inlineStyleFallback) {
-      return inlineStyleFallback;
-    }
-    // Can't resolve branches as static values - fall through to other handlers
-    // which may bail with a warning
-  }
 
   type BranchUsage = "props" | "create";
   type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
@@ -496,6 +405,87 @@ export function tryResolveConditionalValue(
   const getBranch = (value: unknown): Branch => {
     return branchToExpr(value);
   };
+
+  const resolveThemeBooleanStyleValue = (
+    branch: unknown,
+  ): { value: unknown; imports: ImportSpec[] } | null => {
+    const raw = literalToStaticValue(branch);
+    if (raw !== null && typeof raw !== "boolean") {
+      return { value: raw, imports: [] };
+    }
+
+    const themeInfo = resolveThemeFromMemberExpr(branch);
+    if (themeInfo) {
+      const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
+      const res = resolveTheme({
+        kind: "theme",
+        path: themeInfo.path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(branch) ?? undefined,
+      });
+      if (!res) {
+        return null;
+      }
+      const astNode = parseExpr(ctx.api, res.expr);
+      return astNode ? { value: astNode, imports: res.imports } : null;
+    }
+
+    const resolved = getBranch(branch);
+    if (!resolved || resolved.usage !== "create") {
+      return null;
+    }
+
+    const astNode = parseExpr(ctx.api, resolved.expr);
+    return astNode ? { value: astNode, imports: resolved.imports } : null;
+  };
+
+  const themeBoolInfo = checkThemeBooleanTest(body.test);
+  if (themeBoolInfo && node.css.property) {
+    const { consequent, alternate } = body;
+    // Determine true/false branches based on negation
+    const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
+    const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
+
+    const trueResolved = resolveThemeBooleanStyleValue(trueBranch);
+    const falseResolved = resolveThemeBooleanStyleValue(falseBranch);
+    const trueValue = trueResolved?.value ?? null;
+    const falseValue = falseResolved?.value ?? null;
+    const trueImports = trueResolved?.imports ?? [];
+    const falseImports = falseResolved?.imports ?? [];
+
+    if (trueValue !== null && falseValue !== null) {
+      return {
+        type: "splitThemeBooleanVariants",
+        cssProp: node.css.property,
+        themeProp: themeBoolInfo.themeProp,
+        trueValue,
+        falseValue,
+        trueImports,
+        falseImports,
+      };
+    }
+
+    // Fallback: one branch resolved but the other is an unresolvable call expression.
+    // Use the resolved branch as the base StyleX value and emit the unresolvable
+    // branch as a conditional inline style guarded by the theme boolean.
+    const inlineStyleFallback = tryBuildThemeBooleanInlineStyleFallback({
+      trueValue,
+      falseValue,
+      trueImports,
+      falseImports,
+      trueBranch,
+      falseBranch,
+      themeBoolInfo,
+      cssProp: node.css.property,
+      paramName,
+      info,
+    });
+    if (inlineStyleFallback) {
+      return inlineStyleFallback;
+    }
+    // Can't resolve branches as static values - fall through to other handlers
+    // which may bail with a warning
+  }
 
   // Convert `prop ? value : undefined/null/false/""` into a positive-only
   // `splitVariantsResolved*` result (one variant bucket gated on `prop`).

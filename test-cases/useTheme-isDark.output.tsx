@@ -10,6 +10,22 @@ function Text({ children }: { children?: React.ReactNode }) {
   );
 }
 
+// theme.isDark choosing between curried color helper calls
+function HelperColorBox({ children }: { children?: React.ReactNode }) {
+  const theme = useTheme();
+
+  return (
+    <div
+      sx={[
+        styles.helperColorBox,
+        theme.isDark ? styles.helperColorBoxDark : styles.helperColorBoxLight,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 // theme.isDark controlling an entire CSS block (empty string vs padding)
 function Box({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
@@ -41,6 +57,7 @@ function DayPicker({ children }: { children?: React.ReactNode }) {
 export const App = () => (
   <div>
     <Text>Label</Text>
+    <HelperColorBox>Helper color box</HelperColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
@@ -57,6 +74,16 @@ const styles = stylex.create({
   textLight: {
     color: $colors.labelMuted,
     borderColor: $colors.bgBorderFaint,
+  },
+  helperColorBox: {
+    color: $colors.labelBase,
+    padding: 12,
+  },
+  helperColorBoxDark: {
+    backgroundColor: $colors.bgBorderSolid,
+  },
+  helperColorBoxLight: {
+    backgroundColor: $colors.bgBaseHover,
   },
   boxLight: {
     padding: pixelVars.thin,

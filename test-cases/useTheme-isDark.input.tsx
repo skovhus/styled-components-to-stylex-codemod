@@ -1,6 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
-import { thinPixel } from "./lib/helpers";
+import { color, thinPixel } from "./lib/helpers";
 
 const Text = styled.span`
   font-size: 12px;
@@ -8,6 +8,14 @@ const Text = styled.span`
     props.theme.isDark ? props.theme.color.labelBase : props.theme.color.labelMuted};
   border-color: ${(props) =>
     props.theme.isDark ? props.theme.color.bgSub : props.theme.color.bgBorderFaint};
+`;
+
+// theme.isDark choosing between curried color helper calls
+const HelperColorBox = styled.div`
+  background: ${(props) =>
+    props.theme.isDark ? color("bgBorderSolid")(props) : color("bgBaseHover")(props)};
+  color: ${color("labelBase")};
+  padding: 12px;
 `;
 
 // theme.isDark controlling an entire CSS block (empty string vs padding)
@@ -26,6 +34,7 @@ const DayPicker = styled.div`
 export const App = () => (
   <div>
     <Text>Label</Text>
+    <HelperColorBox>Helper color box</HelperColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
