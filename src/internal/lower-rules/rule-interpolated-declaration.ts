@@ -3723,6 +3723,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             };
           }
           if (op === "||" || op === "??") {
+            const left = (body as { left?: { type?: string } } | null)?.left;
+            // Only theme-rooted left operands are indexed theme lookups
+            // (e.g. props.theme.color[props.x] || fallback). A prop-rooted
+            // member access splices an opaque `css` result into the template
+            // (e.g. props => props.$styles ?? ""), which is the same bail as
+            // an un-wrapped member-expression interpolation.
+            if (isMemberExpression(left) && !memberExpressionTouchesTheme(left)) {
+              return {
+                type: "Unsupported interpolation: member expression",
+                context: { memberExpression: left?.type, operator: op },
+              };
+            }
             return {
               type: "Arrow function: indexed theme lookup pattern not matched",
               context: { property: d.property, operator: op },
@@ -3796,6 +3808,25 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   if (bail) {
     state.markBail();
   }
+}
+
+/**
+ * Returns true if any part of a member/identifier chain references `theme`
+ * (e.g. `props.theme.color[x]` or a destructured `theme.color[x]`). Used to
+ * distinguish indexed theme lookups from prop-rooted member accesses.
+ */
+function memberExpressionTouchesTheme(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; name?: string; object?: unknown; property?: unknown };
+  if (n.type === "Identifier") {
+    return n.name === "theme";
+  }
+  if (isMemberExpression(n)) {
+    return memberExpressionTouchesTheme(n.property) || memberExpressionTouchesTheme(n.object);
+  }
+  return false;
 }
 
 /**
