@@ -1,0 +1,1 @@
+var e={listInitiativeRowHeight:58},t={cardWidth:`10`};export{e as n,t};
