@@ -643,7 +643,7 @@ export const App = () => (
     <span sx={styles.callbackScopeStyleText}>Callback scope style</span>
     <StyledIcon title="Attrs icon size" />
     <AttrsSxButton>Attrs sx</AttrsSxButton>
-    <div title="Line1\nLine2" sx={styles.escapedTemplateTitle}>
+    <div title={"Line1\nLine2"} sx={styles.escapedTemplateTitle}>
       Escaped template title (hover to see)
     </div>
     <div title="Plain template" sx={styles.plainTemplateTitle}>

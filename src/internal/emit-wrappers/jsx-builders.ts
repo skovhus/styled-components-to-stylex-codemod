@@ -197,6 +197,12 @@ export function buildStaticAttrFromValue(
 ): JSXAttribute | null {
   const booleanTrueAsShorthand = options?.booleanTrueAsShorthand ?? true;
   if (typeof value === "string") {
+    // Emit strings with escape-requiring characters (newlines, tabs, etc.) as
+    // expression containers so the JS escapes are interpreted at runtime.
+    // JSX string attributes don't interpret escape sequences - they're literal.
+    if (stringNeedsExpressionContainer(value)) {
+      return j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value)));
+    }
     return j.jsxAttribute(j.jsxIdentifier(key), j.literal(value));
   }
   if (typeof value === "boolean") {
@@ -230,6 +236,20 @@ function isStaticAttrExpression(value: unknown): value is ExpressionKind {
   return (
     !!value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string"
   );
+}
+
+/**
+ * Check if a string contains characters that require escaping in a JS string literal.
+ * Such strings must be emitted as JSX expression containers (`attr={"value"}`) rather
+ * than direct JSX string attributes (`attr="value"`), because JSX string attributes
+ * don't interpret JS escape sequences - they're literal strings.
+ */
+function stringNeedsExpressionContainer(value: string): boolean {
+  // Check for control characters (ASCII 0-31) or backslash, which are common escape
+  // sequences that would be mangled in JSX string attrs. Using Unicode escapes to
+  // avoid lint errors about control characters in regex.
+  // eslint-disable-next-line no-control-regex
+  return /[\u0000-\u001f\\]/.test(value);
 }
 
 // ---------------------------------------------------------------------------
