@@ -575,6 +575,8 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
 
 const CASCADE_CONFLICT_WARNING =
   "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+const PARTIAL_MIGRATION_INCOMPLETE_WARNING =
+  "Partial migration left styled-components declarations unconverted";
 
 describe("cascade conflict detection", () => {
   const WARNING_TYPE = CASCADE_CONFLICT_WARNING;
@@ -1112,6 +1114,15 @@ export const App = () => (
 
     expect(result.code).not.toBeNull();
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["CustomGroupHeader"],
+          convertedDeclarations: ["Notice"],
+        }),
+      }),
+    );
     // Local component migrated to StyleX.
     expect(result.code).toMatch(/sx=\{styles\.notice\}/);
     // Imported root left as styled-components.
@@ -1262,6 +1273,17 @@ export const App = () => (
     expect(result.code).toContain('import styled from "styled-components"');
     // Warning emitted for the skipped decl
     expect(result.warnings.some((w) => w.type.startsWith("Unsupported selector"))).toBe(true);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarationCount: 1,
+          skippedDeclarations: ["Complex"],
+          convertedDeclarationCount: 1,
+          convertedDeclarations: ["Container"],
+        }),
+      }),
+    );
   });
 
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
@@ -6261,6 +6283,103 @@ export const Box = styled.div\`
     expect(code).not.toContain(")px");
   });
 
+  it("should preserve CSS length token semantics for resolved helper arithmetic patterns", () => {
+    const source = `
+import styled from "styled-components";
+import { color, runtimeValue } from "./helpers";
+
+const LOCAL_NUMERIC_CONSTANT = 20;
+
+export const Box = styled.div\`
+  margin-right: \${1 + runtimeValue()}px;
+  margin-left: \${LOCAL_NUMERIC_CONSTANT - runtimeValue()}px;
+  margin-top: -\${6 + runtimeValue()}px;
+  padding: \${8 - runtimeValue()}px 12px;
+  width: \${runtimeValue() * 2}px;
+  height: \${runtimeValue()}px;
+  top: -\${runtimeValue()}px;
+  border: \${runtimeValue()}px solid \${color("bgBorderThin")};
+  background-size: calc(100% + \${runtimeValue() * 2}px) calc(100% + \${runtimeValue() * 2}px);
+  mask: radial-gradient(circle, #000 8px, #fff \${runtimeValue() + 8}px);
+\`;
+`;
+
+    const adapterWithLengthTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$size.thinPixel",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$size" }],
+              },
+            ],
+          };
+        }
+        if (ctx.calleeImportedName === "color") {
+          return {
+            usage: "create" as const,
+            expr: "$colors.bgBorderThin",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedLengthTokenArithmetic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLengthTokenResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('import { $size, $colors } from "./tokens.stylex";');
+    expect(code).toContain("marginRight: `calc(1px + ${$size.thinPixel})`");
+    expect(code).toContain("marginLeft: `calc(20px - ${$size.thinPixel})`");
+    expect(code).toContain("marginTop: `calc(-6px - ${$size.thinPixel})`");
+    expect(code).toContain("paddingBlock: `calc(8px - ${$size.thinPixel})`");
+    expect(code).toContain("paddingInline: 12");
+    expect(code).toContain("width: `calc(${$size.thinPixel} * 2)`");
+    expect(code).toContain("height: $size.thinPixel");
+    expect(code).toContain("top: `calc(-1 * ${$size.thinPixel})`");
+    expect(code).toContain("borderWidth: $size.thinPixel");
+    expect(code).toContain('borderStyle: "solid"');
+    expect(code).toContain("borderColor: $colors.bgBorderThin");
+    expect(code).toContain(
+      "backgroundSize: `calc(100% + calc(${$size.thinPixel} * 2)) calc(100% + calc(${$size.thinPixel} * 2))`",
+    );
+    expect(code).toContain(
+      "mask: `radial-gradient(circle, #000 8px, #fff calc(${$size.thinPixel} + 8px))`",
+    );
+    expect(code).not.toContain("${$size.thinPixel}px");
+    expect(code).not.toContain("1 + $size.thinPixel");
+    expect(code).not.toContain("LOCAL_NUMERIC_CONSTANT - $size.thinPixel");
+  });
+
   it("should bail instead of emitting calc for resolved helper arithmetic with string operands", () => {
     const source = `
 import styled from "styled-components";
@@ -6521,7 +6640,7 @@ export const Box = styled.div\`
     },
   );
 
-  it("should bail when resolved helper arithmetic has surrounding static text", () => {
+  it("should preserve resolved helper arithmetic inside CSS functions", () => {
     const source = `
 import styled from "styled-components";
 import { runtimeValue } from "./helpers";
@@ -6570,16 +6689,21 @@ export const Box = styled.div\`
       { adapter: adapterWithTokenResolution },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toContain(
-      "Unsupported interpolation: call expression",
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain(
+      "transform: `translateX(calc(8px - ${$spacing.runtimeValue}))`",
     );
   });
 
   it.each([
     {
-      name: "unresolved arithmetic operand",
-      declarations: "const base = 8;",
+      name: "mutable arithmetic operand",
+      declarations: "let base = 8;",
+      css: "padding-top: ${base - runtimeValue()}px;",
+    },
+    {
+      name: "function-valued constant operand",
+      declarations: "const base = () => 8;",
       css: "padding-top: ${base - runtimeValue()}px;",
     },
     {
@@ -6665,7 +6789,7 @@ export const Box = styled.div\`
     );
   });
 
-  it("should bail for resolved helper slots with adjacent units in multi-slot backgrounds", () => {
+  it("should preserve resolved helper slots with adjacent units in multi-slot backgrounds", () => {
     const source = `
 import styled from "styled-components";
 import { other, runtimeValue } from "./helpers";
@@ -6712,10 +6836,215 @@ export const Box = styled.div\`
       { adapter: adapterWithTokenResolution },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toContain(
-      "Unsupported interpolation: call expression",
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain(
+      "backgroundImage: `linear-gradient(${$spacing.runtimeValue}, ${$spacing.other})`",
     );
+    expect(result.code ?? "").not.toContain("}px");
+  });
+
+  it("should preserve adjacent units when a resolved helper yields a unitless literal", () => {
+    const source = `
+import styled from "styled-components";
+import { space, color } from "./helpers";
+
+export const Box = styled.div\`
+  mask: radial-gradient(circle, #000 8px, #fff \${space()}px);
+  width: calc(100% - \${space()}rem);
+  padding: \${space()}rem 12px;
+  margin: \${space()}px 4px;
+  border: \${space()}px solid \${color()};
+  top: \${space()}px;
+  bottom: -\${space()}px;
+\`;
+`;
+
+    // The helper resolves to a bare unitless literal (not a unit-bearing token),
+    // so the adjacent unit suffix must be preserved rather than folded away.
+    const adapterWithLiteralResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "space") {
+          return { usage: "create" as const, expr: "'8'", imports: [] };
+        }
+        if (ctx.calleeImportedName === "color") {
+          return { usage: "create" as const, expr: "'#abc'", imports: [] };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedUnitlessLiteralAdjacentUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLiteralResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("radial-gradient(circle, #000 8px, #fff 8px)");
+    expect(code).toContain("calc(100% - 8rem)");
+    // The unit must not be dropped, leaving a bare value next to the closing paren.
+    expect(code).not.toContain("#fff 8)");
+    expect(code).not.toContain("100% - 8)");
+    // Directional shorthand expansion must keep the authored unit on the slot
+    // entry (a bare numeric would silently default to px in StyleX, losing rem).
+    expect(code).toContain('paddingBlock: "8rem"');
+    expect(code).toContain("paddingInline: 12");
+    expect(code).toContain("marginBlock: 8");
+    expect(code).toContain("marginInline: 4");
+    // Border width must keep its authored unit: with the unit preserved it
+    // becomes numeric `8` (= 8px in StyleX), never the unitless string "8".
+    expect(code).toContain("borderWidth: 8,");
+    expect(code).not.toContain('borderWidth: "8"');
+    expect(code).toContain('borderStyle: "solid"');
+    expect(code).toContain('borderColor: "#abc"');
+    // Single-slot values must keep the authored unit, including when negated.
+    expect(code).toContain("top: 8,");
+    expect(code).toContain("bottom: -8,");
+    expect(code).not.toContain("calc(-1");
+  });
+
+  it("should not treat non-unit trailing text after a resolved helper as a CSS unit", () => {
+    const source = `
+import styled from "styled-components";
+import { asset } from "./helpers";
+
+export const Box = styled.div\`
+  mask-image: url(\${asset()}icons/logo.svg);
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "asset") {
+          return {
+            usage: "create" as const,
+            expr: "$assets.base",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$assets" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-nonUnitSuffixText.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    // "icons" is not a CSS unit, so it must never be consumed as a unit suffix:
+    // the full URL text must be preserved, not corrupted to ".../logo.svg".
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("url(${$assets.base}icons/logo.svg)");
+    expect(code).not.toContain("$assets.base}/logo.svg");
+  });
+
+  it.each([
+    {
+      name: "function parameter",
+      signature: "export function App({ gap }: { gap: number })",
+      localBinding: "",
+    },
+    {
+      name: "nested function declaration",
+      signature: "export function App()",
+      localBinding: "  function gap() {}\n",
+    },
+  ])("should not fold a top-level const shadowed by a $name", ({ signature, localBinding }) => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+const gap = 8;
+
+${signature} {
+${localBinding}  const Box = styled.div\`
+    margin-left: \${gap - runtimeValue()}px;
+  \`;
+  return <Box />;
+}
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-shadowedConstArithmetic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    // `gap` here is the function parameter, not the top-level `const gap = 8`,
+    // so the arithmetic must not be folded using the top-level value.
+    expect(result.code ?? "").not.toContain("calc(8px");
   });
 
   it.each([

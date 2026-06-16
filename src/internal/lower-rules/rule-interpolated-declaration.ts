@@ -51,6 +51,7 @@ import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
 import {
   extractStaticPartsForDecl,
+  type ResolveImportedValueOptions,
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./interpolations.js";
@@ -125,7 +126,10 @@ type ResolvedImportedValue = {
   skipStaticWrap?: boolean;
 };
 type ImportedValueResolution = ResolvedImportedValue | { bail: true } | null;
-type ResolveImportedValueExpr = (expr: any, allowCssCalc?: boolean) => ImportedValueResolution;
+type ResolveImportedValueExpr = (
+  expr: any,
+  options?: ResolveImportedValueOptions,
+) => ImportedValueResolution;
 
 type InterpolatedDeclarationContext = {
   ctx: DeclProcessingState;
@@ -217,6 +221,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     declByLocalName,
     cssHelperValuesByKey,
     staticPropertyValues,
+    staticIdentifierValues,
     warnPropInlineStyle,
     applyCssHelperMixin,
     hasLocalThemeBinding,
@@ -1162,8 +1167,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const allowCssCalcForImportedArithmetic = isEntireInterpolatedValueSingleSlot(d, decl);
     const resolveImportedValueExpr: ResolveImportedValueExpr = (
       expr,
-      allowCssCalc = allowCssCalcForImportedArithmetic,
+      options = allowCssCalcForImportedArithmetic,
     ) => {
+      const allowCssCalc = typeof options === "boolean" ? options : (options.allowCssCalc ?? false);
+      const cssCalcUnit = typeof options === "boolean" ? undefined : options.cssCalcUnit;
+      const forceNegate = typeof options === "boolean" ? false : options.negate === true;
       const resolveChildExpression = (child: any): ImportedValueResolution =>
         resolveImportedValueExpr(child, false);
       const isBailResolution = (result: ImportedValueResolution): result is { bail: true } =>
@@ -1224,7 +1232,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const imports = mergeImports(leftResult, rightResult);
         if (allowCssCalc && isCssCalcOperator(expr.operator)) {
           const staticParts = singleSlotStaticParts ?? { prefix: "", suffix: "" };
-          if (staticParts.prefix) {
+          const calcUnit = cssCalcUnit ?? staticParts.suffix;
+          const hasNegativePrefix =
+            !cssCalcUnit &&
+            staticParts.prefix === "-" &&
+            /^-?(?:[a-zA-Z%]+)$/.test(staticParts.suffix) &&
+            (expr.operator === "+" || expr.operator === "-");
+          if (staticParts.prefix && !hasNegativePrefix && !cssCalcUnit) {
             warnings.push({
               severity: "warning",
               type: "Unsupported interpolation: call expression",
@@ -1236,7 +1250,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const calcExpr = buildCssCalcTemplateExpression({
             j,
             operator: expr.operator,
-            unit: expr.operator === "+" || expr.operator === "-" ? staticParts.suffix : "",
+            unit: expr.operator === "+" || expr.operator === "-" ? calcUnit : "",
+            negate: forceNegate || hasNegativePrefix,
+            staticIdentifierValues,
             left: { node: resolvedLeft, allowExpression: Boolean(leftResult) },
             right: { node: resolvedRight, allowExpression: Boolean(rightResult) },
           });
@@ -1244,10 +1260,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             return {
               resolved: calcExpr,
               imports,
-              skipStaticWrap: staticParts.suffix !== "",
+              skipStaticWrap: calcUnit !== "",
             };
           }
-          if (staticParts.suffix && imports.length > 0) {
+          if (calcUnit && imports.length > 0) {
             return bailResolvedUnitExpression(expr);
           }
         }
@@ -1409,7 +1425,38 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
         const resolvedCall = resolveCallExpr(expr);
         if (resolvedCall) {
-          return resolvedCall;
+          if (!cssCalcUnit) {
+            return resolvedCall;
+          }
+          // A bare unitless literal (e.g. a helper resolving to `8`/`"8"`) does
+          // not carry the authored unit. Fold the unit into the literal so it is
+          // preserved (e.g. `${space()}px` -> "8px") rather than emitting a
+          // unitless value or `calc(-1 * 8)`. Any leading negation is applied by
+          // the static-prefix handling downstream, so emit the positive value.
+          const literalValue = literalToStaticValue(resolvedCall.resolved);
+          const numericLiteral =
+            typeof literalValue === "number"
+              ? literalValue
+              : typeof literalValue === "string" &&
+                  literalValue.trim() !== "" &&
+                  Number.isFinite(Number(literalValue))
+                ? Number(literalValue)
+                : null;
+          if (numericLiteral !== null) {
+            return {
+              resolved: j.literal(`${numericLiteral}${cssCalcUnit}`) as ExpressionKind,
+              imports: resolvedCall.imports,
+              skipStaticWrap: true,
+            };
+          }
+          if (forceNegate) {
+            return {
+              resolved: buildNegatedCssTokenTemplate(j, resolvedCall.resolved),
+              imports: resolvedCall.imports,
+              skipStaticWrap: true,
+            };
+          }
+          return { ...resolvedCall, skipStaticWrap: true };
         }
         warnings.push({
           severity: "warning",
@@ -5012,6 +5059,8 @@ function buildCssCalcTemplateExpression(args: {
   j: JSCodeshift;
   operator: string;
   unit?: string;
+  negate?: boolean;
+  staticIdentifierValues?: ReadonlyMap<string, string | number | boolean>;
   left: { node: unknown; allowExpression: boolean };
   right: { node: unknown; allowExpression: boolean };
 }): ExpressionKind | null {
@@ -5019,14 +5068,24 @@ function buildCssCalcTemplateExpression(args: {
   const quasis: string[] = [];
   let currentQuasi = "calc(";
 
-  const appendOperand = (operand: { node: unknown; allowExpression: boolean }): boolean => {
-    const staticText = expressionToCalcStaticText(operand.node, args.unit);
+  const appendOperand = (
+    operand: { node: unknown; allowExpression: boolean },
+    options: { negate?: boolean } = {},
+  ): boolean => {
+    const staticText = expressionToCalcStaticText(
+      operand.node,
+      args.unit,
+      args.staticIdentifierValues,
+    );
     if (staticText !== null) {
-      currentQuasi += staticText;
+      currentQuasi += options.negate ? negateCalcStaticText(staticText) : staticText;
       return true;
     }
     if (!operand.allowExpression || !isStylexCalcExpression(operand.node)) {
       return false;
+    }
+    if (options.negate) {
+      currentQuasi += "-1 * ";
     }
     quasis.push(currentQuasi);
     currentQuasi = "";
@@ -5034,10 +5093,11 @@ function buildCssCalcTemplateExpression(args: {
     return true;
   };
 
-  if (!appendOperand(args.left)) {
+  if (!appendOperand(args.left, { negate: args.negate })) {
     return null;
   }
-  currentQuasi += ` ${args.operator} `;
+  const operator = args.negate ? negateCssCalcOperator(args.operator) : args.operator;
+  currentQuasi += ` ${operator} `;
   if (!appendOperand(args.right)) {
     return null;
   }
@@ -5059,10 +5119,40 @@ function buildCssCalcTemplateExpression(args: {
   ) as ExpressionKind;
 }
 
-function expressionToCalcStaticText(node: unknown, unit = ""): string | null {
+function buildNegatedCssTokenTemplate(j: JSCodeshift, expression: ExpressionKind): ExpressionKind {
+  return j.templateLiteral(
+    [
+      j.templateElement({ raw: "calc(-1 * ", cooked: "calc(-1 * " }, false),
+      j.templateElement({ raw: ")", cooked: ")" }, true),
+    ],
+    [expression],
+  ) as ExpressionKind;
+}
+
+function negateCssCalcOperator(operator: string): string {
+  return operator === "+" ? "-" : operator === "-" ? "+" : operator;
+}
+
+function negateCalcStaticText(value: string): string {
+  return value.startsWith("-") ? value.slice(1) : `-${value}`;
+}
+
+function expressionToCalcStaticText(
+  node: unknown,
+  unit = "",
+  staticIdentifierValues?: ReadonlyMap<string, string | number | boolean>,
+): string | null {
   const staticValue = literalToStaticValue(node);
   if (typeof staticValue === "number") {
     return `${staticValue}${unit}`;
+  }
+  const identifierName =
+    node && typeof node === "object" && (node as { type?: string }).type === "Identifier"
+      ? (node as { name?: string }).name
+      : undefined;
+  const identifierValue = identifierName ? staticIdentifierValues?.get(identifierName) : undefined;
+  if (typeof identifierValue === "number") {
+    return `${identifierValue}${unit}`;
   }
   return null;
 }

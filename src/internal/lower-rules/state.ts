@@ -22,7 +22,11 @@ import { createImportResolver } from "./import-resolution.js";
 import { collectExportedComponents } from "../analyze-before-emit/exported-components.js";
 import { componentsReferencedAsValue } from "../utilities/component-value-references.js";
 import { literalToStaticValue } from "./types.js";
-import { buildEnumValueMap, cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import {
+  buildEnumValueMap,
+  cloneAstNode,
+  collectPatternBindingNames,
+} from "../utilities/jscodeshift-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import {
   createComponentPropUsageInfo,
@@ -195,6 +199,55 @@ export function createLowerRulesState(ctx: TransformContext) {
   // Track static property values: Map<ownerName, Map<propertyName, value>>
   // This allows us to resolve member expressions like Divider.HEIGHT to their literal values.
   const staticPropertyValues = new Map<string, Map<string, string | number | boolean>>();
+  const staticIdentifierValues = new Map<string, string | number | boolean>();
+  root.find(j.VariableDeclarator).forEach((p) => {
+    if (!isTopLevelConstDeclarator(p)) {
+      return;
+    }
+    const node = p.node as { id?: { type?: string; name?: string }; init?: unknown };
+    if (node.id?.type !== "Identifier" || !node.id.name) {
+      return;
+    }
+    // Reject function-valued constants (e.g. `const BASE = () => 8`): coercing
+    // their body would let arithmetic/value resolution treat a function object
+    // as a static literal, silently mistransforming the runtime semantics.
+    const staticValue = literalToStaticValue(node.init, { allowStaticArrowFunctions: false });
+    if (staticValue !== null) {
+      staticIdentifierValues.set(node.id.name, staticValue);
+    }
+  });
+  // Drop names that are also bound in a nested scope (function params or
+  // non-top-level declarations). The fold map is keyed purely by name with no
+  // scope information, so a same-named local binding could otherwise shadow the
+  // top-level value at the point of use and be mis-folded (e.g. `const gap = 8`
+  // shadowed by a `gap` parameter). Dropping them is safe: worst case we skip an
+  // optimization rather than emit wrong output.
+  if (staticIdentifierValues.size > 0) {
+    const shadowingNames = new Set<string>();
+    root.find(j.Function).forEach((fnPath) => {
+      collectPatternBindingNames((fnPath.node as { params?: unknown }).params, shadowingNames);
+      // A named function declaration/expression binds its own name in a scope
+      // that can shadow a top-level const (e.g. a nested `function gap() {}`).
+      const fnId = (fnPath.node as { id?: { name?: string } }).id;
+      if (fnId?.name) {
+        shadowingNames.add(fnId.name);
+      }
+    });
+    root.find(j.ClassDeclaration).forEach((classPath) => {
+      const classId = (classPath.node as { id?: { name?: string } }).id;
+      if (classId?.name) {
+        shadowingNames.add(classId.name);
+      }
+    });
+    root.find(j.VariableDeclarator).forEach((declPath) => {
+      if (!isTopLevelConstDeclarator(declPath)) {
+        collectPatternBindingNames((declPath.node as { id?: unknown }).id, shadowingNames);
+      }
+    });
+    for (const name of shadowingNames) {
+      staticIdentifierValues.delete(name);
+    }
+  }
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -215,7 +268,7 @@ export function createLowerRulesState(ctx: TransformContext) {
       const ownerName = expr.left?.object?.name;
       const propName = expr.left?.property?.name;
       if (ownerName && propName) {
-        const staticValue = literalToStaticValue(expr.right);
+        const staticValue = literalToStaticValue(expr.right, { allowStaticArrowFunctions: false });
         let ownerMap = staticPropertyValues.get(ownerName);
         if (!ownerMap) {
           ownerMap = new Map();
@@ -334,6 +387,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,
+    staticIdentifierValues,
     usedCssHelperFunctions: new Set<string>(),
     warnPropInlineStyle,
     applyCssHelperMixin,
@@ -442,6 +496,33 @@ function clonePropUsageByComponent(
     });
   }
   return cloned;
+}
+
+function isTopLevelConstDeclarator(path: { parentPath?: unknown }): boolean {
+  const declarationPath = path.parentPath as
+    | { node?: { type?: string; kind?: string }; parentPath?: unknown }
+    | undefined;
+  if (!declarationPath) {
+    return false;
+  }
+  const declaration = declarationPath?.node;
+  if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {
+    return false;
+  }
+  let current = declarationPath.parentPath as
+    | { node?: { type?: string }; parentPath?: unknown }
+    | undefined;
+  while (current?.node) {
+    const type = current.node.type;
+    if (type === "Program") {
+      return true;
+    }
+    if (type !== "VariableDeclaration" && type !== "ExportNamedDeclaration") {
+      return false;
+    }
+    current = current.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  }
+  return false;
 }
 
 function collectOpeningPropUsage(attributes: unknown[] | undefined): ComponentPropUsageCandidate {

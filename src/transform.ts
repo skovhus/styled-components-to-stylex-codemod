@@ -51,6 +51,7 @@ import { propagateSxFromClassNameStep } from "./internal/transform-steps/propaga
 import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-static-props.js";
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
 import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
+import { warnPartialMigrationIncompleteStep } from "./internal/transform-steps/warn-partial-migration-incomplete.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export type {
@@ -67,8 +68,9 @@ export type {
  */
 export default function transform(file: FileInfo, api: API, options: Options): string | null {
   try {
-    const result = transformWithWarnings(file, api, options as TransformOptions);
-    Logger.logWarnings(result.warnings, file.path);
+    const transformOptions = options as TransformOptions & { silent?: boolean };
+    const result = transformWithWarnings(file, api, transformOptions);
+    Logger.logWarnings(result.warnings, file.path, { silent: transformOptions.silent === true });
 
     // Store sidecar .stylex.ts content in the options side-channel for the runner to write
     if (result.sidecarFiles && result.sidecarFiles.length > 0) {
@@ -181,6 +183,7 @@ export function transformWithWarnings(
     postProcessStep,
     cleanupCssImportStep,
     ensureReactImportStep,
+    warnPartialMigrationIncompleteStep,
   ];
 
   for (const step of pipeline) {

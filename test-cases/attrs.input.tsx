@@ -459,6 +459,23 @@ const AttrsSxButton = styled(SxAwareButton).attrs({
   color: #2563eb;
 `;
 
+// Pattern 16: static attrs with template literal containing escape sequences
+// The cooked value (with actual newline) must be used, not the raw source text
+const EscapedTemplateTitle = styled.div.attrs({
+  title: `Line1\nLine2`,
+})`
+  padding: 8px;
+  background-color: #fdf4ff;
+`;
+
+// Pattern 16b: static attrs with regular template literal (no escapes)
+const PlainTemplateTitle = styled.div.attrs({
+  title: `Plain template`,
+})`
+  padding: 8px;
+  background-color: #fff1f2;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -515,5 +532,7 @@ export const App = () => (
     <CallbackScopeStyleText>Callback scope style</CallbackScopeStyleText>
     <StyledIcon title="Attrs icon size" />
     <AttrsSxButton>Attrs sx</AttrsSxButton>
+    <EscapedTemplateTitle>Escaped template title (hover to see)</EscapedTemplateTitle>
+    <PlainTemplateTitle>Plain template title (hover to see)</PlainTemplateTitle>
   </>
 );

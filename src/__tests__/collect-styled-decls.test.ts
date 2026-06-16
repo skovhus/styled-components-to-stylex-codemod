@@ -18,6 +18,20 @@ function collectFirstDecl(source: string) {
 }
 
 describe("collectStyledDecls attrs literal extraction", () => {
+  it("collects signed numeric attrs as static values", () => {
+    const decl = collectFirstDecl(`
+import styled from "styled-components";
+
+const Box = styled.button.attrs({
+  tabIndex: -1,
+})\`
+  color: red;
+\`;
+`);
+
+    expect(decl.attrsInfo?.staticAttrs).toMatchObject({ tabIndex: -1 });
+  });
+
   it("does not coerce module-scope function bindings into static attr styles", () => {
     const decl = collectFirstDecl(`
 import styled from "styled-components";

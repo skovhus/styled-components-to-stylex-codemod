@@ -651,6 +651,13 @@ export function collectPatternBindingNames(node: unknown, names: Set<string>): v
   }
 }
 
+export type StaticLiteralValue = string | number | boolean | null;
+
+type LiteralToStaticValueOptions = {
+  allowCssTaggedTemplates?: boolean;
+  allowStaticArrowFunctions?: boolean;
+};
+
 /**
  * Converts an AST literal node to its static JavaScript value.
  *
@@ -664,13 +671,18 @@ export function collectPatternBindingNames(node: unknown, names: Set<string>): v
  *
  * Returns null for non-literal or dynamic nodes.
  */
-export function literalToStaticValue(node: unknown): string | number | boolean | null {
+export function literalToStaticValue(
+  node: unknown,
+  options: LiteralToStaticValueOptions = {},
+): string | number | boolean | null {
   if (!node || typeof node !== "object") {
     return null;
   }
+  const allowCssTaggedTemplates = options.allowCssTaggedTemplates ?? true;
+  const allowStaticArrowFunctions = options.allowStaticArrowFunctions ?? true;
   const type = (node as { type?: string }).type;
   if (type === "TSAsExpression" || type === "TSSatisfiesExpression") {
-    return literalToStaticValue((node as { expression?: unknown }).expression);
+    return literalToStaticValue((node as { expression?: unknown }).expression, options);
   }
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
@@ -692,38 +704,81 @@ export function literalToStaticValue(node: unknown): string | number | boolean |
   if (type === "UnaryExpression") {
     const n = node as { operator?: string; prefix?: boolean; argument?: unknown };
     if (n.prefix && (n.operator === "-" || n.operator === "+")) {
-      const argVal = literalToStaticValue(n.argument);
+      const argVal = literalToStaticValue(n.argument, options);
       if (typeof argVal === "number") {
         return n.operator === "-" ? -argVal : argVal;
       }
     }
   }
   // Handle TemplateLiteral without expressions (static template string)
+  // Use `cooked` (runtime-interpreted) rather than `raw` (literal source text) so that
+  // escape sequences like `\n` become actual newlines, matching JS runtime behavior.
+  // If `cooked` is null (invalid escape sequence), bail rather than silently mistransform.
   if (type === "TemplateLiteral") {
-    const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    const n = node as {
+      expressions?: unknown[];
+      quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+    };
     if (!n.expressions || n.expressions.length === 0) {
       const quasis = n.quasis ?? [];
-      return quasis.map((q) => q.value?.raw ?? "").join("");
+      const parts: string[] = [];
+      for (const q of quasis) {
+        const cooked = q.value?.cooked;
+        if (cooked == null) {
+          return null;
+        }
+        parts.push(cooked);
+      }
+      return parts.join("");
     }
   }
   // Handle css`` tagged template literal (styled-components css helper)
-  if (type === "TaggedTemplateExpression") {
+  if (type === "TaggedTemplateExpression" && allowCssTaggedTemplates) {
     const n = node as { tag?: { type?: string; name?: string }; quasi?: unknown };
     if (n.tag?.type === "Identifier" && n.tag.name === "css") {
-      return literalToStaticValue(n.quasi);
+      return literalToStaticValue(n.quasi, options);
     }
   }
   // Handle ArrowFunctionExpression with no params and static body
   // e.g., `() => "value"` or `() => \`static template\``
-  if (type === "ArrowFunctionExpression") {
+  if (type === "ArrowFunctionExpression" && allowStaticArrowFunctions) {
     const n = node as { params?: unknown[]; body?: unknown };
     // Only handle zero-param functions (functions with params need runtime evaluation)
     if (!n.params || n.params.length === 0) {
       // Recursively check if the body is a static value
-      return literalToStaticValue(n.body);
+      return literalToStaticValue(n.body, options);
     }
   }
   return null;
+}
+
+/**
+ * Extracts a static literal value from an AST node, distinguishing null literals
+ * from extraction failure. Returns `undefined` when the node is not a recognized
+ * static literal, and the actual value (including `null`) otherwise.
+ *
+ * Function expressions are not coerced by default: a function-valued expression
+ * is runtime data, even if its body is a static literal.
+ */
+export function extractStaticLiteralValue(
+  node: unknown,
+  options: LiteralToStaticValueOptions = {},
+): StaticLiteralValue | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const typed = node as { type?: string; value?: unknown; expression?: unknown };
+  if (typed.type === "TSAsExpression" || typed.type === "TSSatisfiesExpression") {
+    return extractStaticLiteralValue(typed.expression, options);
+  }
+  if (typed.type === "NullLiteral" || (typed.type === "Literal" && typed.value === null)) {
+    return null;
+  }
+  const v = literalToStaticValue(node, {
+    ...options,
+    allowStaticArrowFunctions: options.allowStaticArrowFunctions ?? false,
+  });
+  return v !== null ? v : undefined;
 }
 
 /**

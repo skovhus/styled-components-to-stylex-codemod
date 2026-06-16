@@ -5,7 +5,11 @@
 import type { Expression } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
-import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import {
+  getMemberPathFromIdentifier,
+  getNodeLocStart,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import {
@@ -147,18 +151,18 @@ export function tryHandleInterpolatedBorder(
   //   border: ${thinPixel()} solid ${color("bgBorderFaint")}
   //   → borderWidth: pixelVars.thin, borderStyle: "solid", borderColor: $colors.bgBorderFaint
   {
-    const slotIndices: Array<{ idx: number; slotId: number }> = [];
+    const slotIndices: Array<{ idx: number; slotId: number; unit?: string }> = [];
     for (let i = 0; i < tokens.length; i++) {
-      const m = (tokens[i] as string).match(/^__SC_EXPR_(\d+)__$/);
+      const m = (tokens[i] as string).match(/^__SC_EXPR_(\d+)__(?:([a-zA-Z%]+))?$/);
       if (m?.[1]) {
-        slotIndices.push({ idx: i, slotId: Number(m[1]) });
+        slotIndices.push({ idx: i, slotId: Number(m[1]), ...(m[2] ? { unit: m[2] } : {}) });
       }
     }
 
     if (slotIndices.length === 2 && tokens.length === 3) {
       const [slot0, slot1] = slotIndices as [
-        { idx: number; slotId: number },
-        { idx: number; slotId: number },
+        { idx: number; slotId: number; unit?: string },
+        { idx: number; slotId: number; unit?: string },
       ];
       if (slot0.idx === 0 && slot1.idx === 2) {
         const middleStyle = (tokens[1] as string).trim();
@@ -198,7 +202,10 @@ export function tryHandleInterpolatedBorder(
 
               // Determine if we need to swap: slot0 is color or slot1 is width
               const shouldSwap = slot0Role === "color" || slot1Role === "width";
-              const widthAst = shouldSwap ? slot1Ast : slot0Ast;
+              const widthAst = withBorderWidthUnit(
+                shouldSwap ? slot1Ast : slot0Ast,
+                shouldSwap ? slot1.unit : slot0.unit,
+              );
               const colorAst = shouldSwap ? slot0Ast : slot1Ast;
 
               applyResolvedPropValue(widthProp, widthAst);
@@ -776,6 +783,27 @@ function classifyBorderSlotRole(ast: unknown): "width" | "color" | null {
     return looksLikeLength(node.value) ? "width" : "color";
   }
   return null;
+}
+
+function withBorderWidthUnit(expr: unknown, unit: string | undefined): unknown {
+  if (!unit) {
+    return expr;
+  }
+  const staticValue = literalToStaticValue(expr);
+  if (typeof staticValue === "number") {
+    return `${staticValue}${unit}`;
+  }
+  if (typeof staticValue === "string" && looksLikeLength(staticValue)) {
+    // A resolved length string may be unitless (e.g. the helper returned "8"),
+    // in which case the authored unit must be appended so `${space()}px` stays
+    // "8px" rather than collapsing to "8". Keep strings that already carry their
+    // own unit (or are a unitless zero, which needs none) untouched.
+    const trimmed = staticValue.trim();
+    const carriesUnit = /[a-zA-Z%]$/.test(trimmed);
+    const isZero = Number.parseFloat(trimmed) === 0;
+    return carriesUnit || isZero ? staticValue : `${staticValue}${unit}`;
+  }
+  return expr;
 }
 
 function hasConflictingEarlierVariant(
