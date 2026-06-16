@@ -53,7 +53,10 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     for (const reference of collectInlinableHelperReferences(consumer, declByLocalName)) {
       const helperDecl = reference.helperDecl;
       const propDependent = inlinablePropDependentDeclaration(helperDecl);
-      if (!propDependent || propertyContestedByOtherDeclaration(propDependent, reference)) {
+      if (
+        !propDependent ||
+        propertyContestedByOtherDeclaration(propDependent, reference, consumer)
+      ) {
         retainedHelpers.add(helperDecl.localName);
         continue;
       }
@@ -186,10 +189,15 @@ function inlinablePropDependentDeclaration(helperDecl: StyledDecl): CssDeclarati
  * is its sole contributor, so however it lowers (variant or style function) the result matches
  * styled-components. When it is contested, the relative precedence of the dynamic entry and the
  * static value depends on the lowering path, which splicing cannot guarantee — so bail.
+ *
+ * Every rule of the helper and the consumer is scanned (not just the reference's rule): the
+ * property must appear exactly once across the whole merged block — including any other
+ * top-level `&` rule or nested selector/at-rule the consumer authors — for the inline to be safe.
  */
 function propertyContestedByOtherDeclaration(
   propDependent: CssDeclarationIR,
   reference: HelperReference,
+  consumer: StyledDecl,
 ): boolean {
   const property = propDependent.property;
   const conflictsWith = (declaration: CssDeclarationIR): boolean =>
@@ -198,12 +206,12 @@ function propertyContestedByOtherDeclaration(
     !!declaration.property &&
     propertiesConflict(declaration.property, property);
 
-  for (const rule of reference.helperDecl.rules) {
+  for (const rule of [...reference.helperDecl.rules, ...consumer.rules]) {
     if (rule.declarations.some(conflictsWith)) {
       return true;
     }
   }
-  return reference.rule.declarations.some(conflictsWith);
+  return false;
 }
 
 /** Whether two CSS properties affect a common StyleX property (equal, or shorthand/longhand). */

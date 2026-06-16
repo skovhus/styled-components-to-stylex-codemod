@@ -67,6 +67,23 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(1);
   });
 
+  it("does not inline when a separate later `&` rule contests the prop-dependent property", () => {
+    // Comment #8: the contest check scans every consumer rule, not only the reference's rule.
+    const helper = cssHelperDecl("sizing", [rule("&", [interpolatedDecl("width", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "sizing", [
+      rule("&", [reference]),
+      rule("&", [staticDecl("width", "80px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(1);
+  });
+
   it("does not inline when a shorthand contests the prop-dependent longhand", () => {
     const helper = cssHelperDecl("dynMarginTop", [rule("&", [interpolatedDecl("margin-top", 0)])]);
     const reference = helperReferenceDecl(0);
