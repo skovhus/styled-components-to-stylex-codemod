@@ -483,9 +483,17 @@ function buildInterpolatedTemplate(args: {
           if (!adjacentUnit || !resolved.skipStaticWrap) {
             return null;
           }
-          staticPrefixToConsume = adjacentUnit;
-          if (negateResolvedUnit) {
-            q = q.slice(0, -1);
+          // Only fold away (consume) the adjacent unit suffix when the resolved
+          // value already carries the unit — a token expression or unit-bearing
+          // string built from the requested `cssCalcUnit`. A bare number or
+          // unitless string literal does NOT carry it, so stripping the suffix
+          // would silently drop the unit (e.g. `${space()}px` resolving to `8`
+          // must stay `8px`, not become `8`/`${8}`).
+          if (resolvedValueCarriesUnit(resolved.resolved)) {
+            staticPrefixToConsume = adjacentUnit;
+            if (negateResolvedUnit) {
+              q = q.slice(0, -1);
+            }
           }
         }
         if (
@@ -536,6 +544,31 @@ function buildInterpolatedTemplate(args: {
     property: multiline.property,
     stylisValueRaw: multiline.stylisValueRaw,
   });
+}
+
+// Determines whether a resolved interpolation value already carries a CSS unit,
+// so an adjacent unit suffix in the source (e.g. the `px` in `${helper()}px`)
+// can be safely folded away. Token/calc expressions built from the requested
+// `cssCalcUnit` carry it; bare numbers and unitless strings do not.
+function resolvedValueCarriesUnit(node: any): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const isNumericLiteral =
+    node.type === "NumericLiteral" || (node.type === "Literal" && typeof node.value === "number");
+  if (isNumericLiteral) {
+    return false;
+  }
+  const isStringLiteral =
+    node.type === "StringLiteral" || (node.type === "Literal" && typeof node.value === "string");
+  if (isStringLiteral) {
+    // A unit-bearing string ends with an alphabetic unit or `%` (e.g. "8px");
+    // a purely numeric string (e.g. "8") does not and must keep the suffix.
+    return /[a-zA-Z%]$/.test(String(node.value));
+  }
+  // Any other expression (token member access, calc template, etc.) was built
+  // with the requested unit and already incorporates it.
+  return true;
 }
 
 function getAdjacentUnitAfterParts(parts: any[], slotIndex: number): string | null {

@@ -6838,6 +6838,58 @@ export const Box = styled.div\`
     expect(result.code ?? "").not.toContain("}px");
   });
 
+  it("should preserve adjacent units when a resolved helper yields a unitless literal", () => {
+    const source = `
+import styled from "styled-components";
+import { space } from "./helpers";
+
+export const Box = styled.div\`
+  mask: radial-gradient(circle, #000 8px, #fff \${space()}px);
+  width: calc(100% - \${space()}rem);
+\`;
+`;
+
+    // The helper resolves to a bare unitless literal (not a unit-bearing token),
+    // so the adjacent unit suffix must be preserved rather than folded away.
+    const adapterWithLiteralResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "space") {
+          return { usage: "create" as const, expr: "'8'", imports: [] };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedUnitlessLiteralAdjacentUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLiteralResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("radial-gradient(circle, #000 8px, #fff 8px)");
+    expect(code).toContain("calc(100% - 8rem)");
+    // The unit must not be dropped, leaving a bare value next to the closing paren.
+    expect(code).not.toContain("#fff 8)");
+    expect(code).not.toContain("100% - 8)");
+  });
+
   it.each([
     {
       name: "static direct helper arg",
