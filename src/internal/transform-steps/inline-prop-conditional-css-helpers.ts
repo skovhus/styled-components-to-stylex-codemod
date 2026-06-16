@@ -193,6 +193,10 @@ function inlinablePropDependentDeclaration(helperDecl: StyledDecl): CssDeclarati
  * Every rule of the helper and the consumer is scanned (not just the reference's rule): the
  * property must appear exactly once across the whole merged block — including any other
  * top-level `&` rule or nested selector/at-rule the consumer authors — for the inline to be safe.
+ *
+ * Any *other* property-less declaration is treated as contention: it is a sibling mixin
+ * reference (`${reset}`) or a dynamic block whose emitted properties are not known here and
+ * could overlap the prop-dependent property, so bail rather than guess.
  */
 function propertyContestedByOtherDeclaration(
   propDependent: CssDeclarationIR,
@@ -200,11 +204,12 @@ function propertyContestedByOtherDeclaration(
   consumer: StyledDecl,
 ): boolean {
   const property = propDependent.property;
-  const conflictsWith = (declaration: CssDeclarationIR): boolean =>
-    declaration !== propDependent &&
-    declaration !== reference.referenceDecl &&
-    !!declaration.property &&
-    propertiesConflict(declaration.property, property);
+  const conflictsWith = (declaration: CssDeclarationIR): boolean => {
+    if (declaration === propDependent || declaration === reference.referenceDecl) {
+      return false;
+    }
+    return declaration.property ? propertiesConflict(declaration.property, property) : true;
+  };
 
   for (const rule of [...reference.helperDecl.rules, ...consumer.rules]) {
     if (rule.declarations.some(conflictsWith)) {

@@ -98,6 +98,26 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline when the consumer composes another sibling mixin", () => {
+    // Comment #9: a sibling `${reset}` appears as a property-less declaration whose emitted
+    // properties are unknown here and could overlap, so bail rather than guess.
+    const helper = cssHelperDecl("dynColor", [rule("&", [interpolatedDecl("color", 0)])]);
+    helper.templateExpressions = [parseExpr("(p) => p.$color")];
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynColor", [
+      rule("&", [reference, helperReferenceDecl(1)]),
+    ]);
+    // Slot 1 is a second mixin reference (e.g. `${reset}`).
+    consumer.templateExpressions = [parseExpr("dynColor"), parseExpr("reset")];
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(2);
+  });
+
   it("does not inline a helper that carries a nested selector block", () => {
     const helper = cssHelperDecl("interactive", [
       rule("&", [interpolatedDecl("opacity", 0)]),
