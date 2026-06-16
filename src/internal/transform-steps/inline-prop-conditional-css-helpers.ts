@@ -139,17 +139,21 @@ function referencedHelperName(d: CssDeclarationIR, consumer: StyledDecl): string
  * without disturbing the CSS cascade:
  *
  *  - private (not exported / preserved for cross-file use),
- *  - every rule is the top-level `&` block (no nested selectors, no at-rules), and
+ *  - every rule is the top-level `&` block (no nested selectors, no at-rules),
  *  - no chained mixin references (a property-less `${otherMixin}` / `${parts.reset}` slot)
- *    — those compose as separate style keys whose ordering we cannot preserve by splicing.
+ *    — those compose as separate style keys whose ordering we cannot preserve by splicing, and
+ *  - exactly one prop-dependent declaration. That single dynamic entry is the case the mixin
+ *    path bails on, and it has no intra-helper ordering ambiguity. Zero means a plain mixin
+ *    (handled by the shared-style-key path); two or more dynamic entries are emitted as
+ *    styleFns/variants whose precedence depends on per-declaration source order, which the
+ *    splice (which stamps the single reference order on every inlined declaration) cannot
+ *    preserve — so bail.
  */
 function isInlinableHelper(helperDecl: StyledDecl): boolean {
   if (helperDecl.isExported || helperDecl.preserveCssHelperDeclaration) {
     return false;
   }
-  if (!helperUsesProps(helperDecl)) {
-    return false;
-  }
+  let propDependentDeclarations = 0;
   for (const rule of helperDecl.rules) {
     if (rule.selector.trim() !== "&" || rule.atRuleStack.length > 0) {
       return false;
@@ -158,27 +162,42 @@ function isInlinableHelper(helperDecl: StyledDecl): boolean {
       if (!declaration.property) {
         return false;
       }
+      if (declarationReadsProps(declaration, helperDecl.templateExpressions)) {
+        propDependentDeclarations += 1;
+      }
     }
   }
-  return true;
+  return propDependentDeclarations === 1;
 }
 
-/** Mirrors the mixin-bail detection: a helper interpolation that reads non-theme props. */
-function helperUsesProps(helperDecl: StyledDecl): boolean {
-  for (const expr of helperDecl.templateExpressions as Array<{ type?: string }>) {
-    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
-      continue;
-    }
-    const propsUsed = new Set([
-      ...collectPropsFromArrowFn(expr as never),
-      ...collectPropsFromArrowFnDestructured(expr as never),
-    ]);
-    propsUsed.delete("theme");
-    if (propsUsed.size > 0) {
+/** True when a declaration's interpolated value reads a non-theme component prop. */
+function declarationReadsProps(
+  declaration: CssDeclarationIR,
+  templateExpressions: readonly unknown[],
+): boolean {
+  if (declaration.value.kind !== "interpolated") {
+    return false;
+  }
+  for (const part of declaration.value.parts) {
+    if (part.kind === "slot" && expressionReadsNonThemeProps(templateExpressions[part.slotId])) {
       return true;
     }
   }
   return false;
+}
+
+/** Mirrors the mixin-bail detection: an arrow/function interpolation that reads non-theme props. */
+function expressionReadsNonThemeProps(expr: unknown): boolean {
+  const node = expr as { type?: string } | undefined;
+  if (!node || (node.type !== "ArrowFunctionExpression" && node.type !== "FunctionExpression")) {
+    return false;
+  }
+  const propsUsed = new Set([
+    ...collectPropsFromArrowFn(node as never),
+    ...collectPropsFromArrowFnDestructured(node as never),
+  ]);
+  propsUsed.delete("theme");
+  return propsUsed.size > 0;
 }
 
 /**

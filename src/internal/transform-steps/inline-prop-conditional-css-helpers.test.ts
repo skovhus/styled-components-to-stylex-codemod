@@ -55,6 +55,24 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(1);
   });
 
+  it("does not inline a helper with more than one prop-dependent declaration", () => {
+    // Comment #5: two dynamic declarations would each carry the reference's source order,
+    // losing their intra-helper precedence, so bail rather than reorder the cascade.
+    const helper = cssHelperDecl("twoDynamic", [
+      rule("&", [interpolatedDecl("color", 0), interpolatedDecl("background-color", 1)]),
+    ]);
+    helper.templateExpressions = [propArrow(), propArrow()];
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "twoDynamic", [rule("&", [reference])]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(1);
+  });
+
   it("does not inline a helper that chains another mixin reference", () => {
     // `${parts.reset}` composes as a separate (member) css helper — represented as a
     // property-less declaration. Comment #4: inlining would reorder the cascade, so bail.
