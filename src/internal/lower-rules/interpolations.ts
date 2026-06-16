@@ -372,9 +372,26 @@ function tryHandleTwoValueShorthandLeadingExpression(args: {
   }
   const placeholder = `__SC_EXPR_${slotId}__`;
   for (const entry of entries) {
+    if (!entry.value.includes(placeholder)) {
+      setValue(entry.prop, normalizeWhitespace(entry.value));
+      continue;
+    }
+    // A unit-bearing expression (token/calc) already incorporates the authored
+    // unit, so emit the resolved node directly (the suffix kept in entry.value
+    // is intentionally dropped). A bare unitless literal does NOT carry it, so
+    // inline its value in place of the placeholder to preserve the unit suffix
+    // (e.g. `padding: ${space()}rem 12px` resolving to `8` must stay `8rem`).
+    if (resolvedValueCarriesUnit(resolved.resolved)) {
+      setValue(entry.prop, resolved.resolved);
+      continue;
+    }
+    const literalValue = literalToStaticValue(resolved.resolved);
+    if (literalValue === null || typeof literalValue === "boolean") {
+      return false;
+    }
     setValue(
       entry.prop,
-      entry.value.includes(placeholder) ? resolved.resolved : normalizeWhitespace(entry.value),
+      normalizeWhitespace(entry.value.replace(placeholder, String(literalValue))),
     );
   }
   return true;

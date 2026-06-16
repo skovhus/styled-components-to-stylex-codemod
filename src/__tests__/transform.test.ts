@@ -6846,6 +6846,8 @@ import { space } from "./helpers";
 export const Box = styled.div\`
   mask: radial-gradient(circle, #000 8px, #fff \${space()}px);
   width: calc(100% - \${space()}rem);
+  padding: \${space()}rem 12px;
+  margin: \${space()}px 4px;
 \`;
 `;
 
@@ -6888,6 +6890,12 @@ export const Box = styled.div\`
     // The unit must not be dropped, leaving a bare value next to the closing paren.
     expect(code).not.toContain("#fff 8)");
     expect(code).not.toContain("100% - 8)");
+    // Directional shorthand expansion must keep the authored unit on the slot
+    // entry (a bare numeric would silently default to px in StyleX, losing rem).
+    expect(code).toContain('paddingBlock: "8rem"');
+    expect(code).toContain("paddingInline: 12");
+    expect(code).toContain("marginBlock: 8");
+    expect(code).toContain("marginInline: 4");
   });
 
   it.each([
