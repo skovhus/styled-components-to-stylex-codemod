@@ -195,6 +195,20 @@ export function createLowerRulesState(ctx: TransformContext) {
   // Track static property values: Map<ownerName, Map<propertyName, value>>
   // This allows us to resolve member expressions like Divider.HEIGHT to their literal values.
   const staticPropertyValues = new Map<string, Map<string, string | number | boolean>>();
+  const staticIdentifierValues = new Map<string, string | number | boolean>();
+  root.find(j.VariableDeclarator).forEach((p) => {
+    if (!isTopLevelConstDeclarator(p)) {
+      return;
+    }
+    const node = p.node as { id?: { type?: string; name?: string }; init?: unknown };
+    if (node.id?.type !== "Identifier" || !node.id.name) {
+      return;
+    }
+    const staticValue = literalToStaticValue(node.init);
+    if (staticValue !== null) {
+      staticIdentifierValues.set(node.id.name, staticValue);
+    }
+  });
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -334,6 +348,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,
+    staticIdentifierValues,
     usedCssHelperFunctions: new Set<string>(),
     warnPropInlineStyle,
     applyCssHelperMixin,
@@ -442,6 +457,33 @@ function clonePropUsageByComponent(
     });
   }
   return cloned;
+}
+
+function isTopLevelConstDeclarator(path: { parentPath?: unknown }): boolean {
+  const declarationPath = path.parentPath as
+    | { node?: { type?: string; kind?: string }; parentPath?: unknown }
+    | undefined;
+  if (!declarationPath) {
+    return false;
+  }
+  const declaration = declarationPath?.node;
+  if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {
+    return false;
+  }
+  let current = declarationPath.parentPath as
+    | { node?: { type?: string }; parentPath?: unknown }
+    | undefined;
+  while (current?.node) {
+    const type = current.node.type;
+    if (type === "Program") {
+      return true;
+    }
+    if (type !== "VariableDeclaration" && type !== "ExportNamedDeclaration") {
+      return false;
+    }
+    current = current.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  }
+  return false;
 }
 
 function collectOpeningPropUsage(attributes: unknown[] | undefined): ComponentPropUsageCandidate {

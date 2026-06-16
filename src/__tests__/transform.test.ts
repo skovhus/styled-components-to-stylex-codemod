@@ -6283,6 +6283,103 @@ export const Box = styled.div\`
     expect(code).not.toContain(")px");
   });
 
+  it("should preserve CSS length token semantics for resolved helper arithmetic patterns", () => {
+    const source = `
+import styled from "styled-components";
+import { color, runtimeValue } from "./helpers";
+
+const LOCAL_NUMERIC_CONSTANT = 20;
+
+export const Box = styled.div\`
+  margin-right: \${1 + runtimeValue()}px;
+  margin-left: \${LOCAL_NUMERIC_CONSTANT - runtimeValue()}px;
+  margin-top: -\${6 + runtimeValue()}px;
+  padding: \${8 - runtimeValue()}px 12px;
+  width: \${runtimeValue() * 2}px;
+  height: \${runtimeValue()}px;
+  top: -\${runtimeValue()}px;
+  border: \${runtimeValue()}px solid \${color("bgBorderThin")};
+  background-size: calc(100% + \${runtimeValue() * 2}px) calc(100% + \${runtimeValue() * 2}px);
+  mask: radial-gradient(circle, #000 8px, #fff \${runtimeValue() + 8}px);
+\`;
+`;
+
+    const adapterWithLengthTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$size.thinPixel",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$size" }],
+              },
+            ],
+          };
+        }
+        if (ctx.calleeImportedName === "color") {
+          return {
+            usage: "create" as const,
+            expr: "$colors.bgBorderThin",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedLengthTokenArithmetic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLengthTokenResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('import { $size, $colors } from "./tokens.stylex";');
+    expect(code).toContain("marginRight: `calc(1px + ${$size.thinPixel})`");
+    expect(code).toContain("marginLeft: `calc(20px - ${$size.thinPixel})`");
+    expect(code).toContain("marginTop: `calc(-6px - ${$size.thinPixel})`");
+    expect(code).toContain("paddingBlock: `calc(8px - ${$size.thinPixel})`");
+    expect(code).toContain("paddingInline: 12");
+    expect(code).toContain("width: `calc(${$size.thinPixel} * 2)`");
+    expect(code).toContain("height: $size.thinPixel");
+    expect(code).toContain("top: `calc(-1 * ${$size.thinPixel})`");
+    expect(code).toContain("borderWidth: $size.thinPixel");
+    expect(code).toContain('borderStyle: "solid"');
+    expect(code).toContain("borderColor: $colors.bgBorderThin");
+    expect(code).toContain(
+      "backgroundSize: `calc(100% + calc(${$size.thinPixel} * 2)) calc(100% + calc(${$size.thinPixel} * 2))`",
+    );
+    expect(code).toContain(
+      "mask: `radial-gradient(circle, #000 8px, #fff calc(${$size.thinPixel} + 8px))`",
+    );
+    expect(code).not.toContain("${$size.thinPixel}px");
+    expect(code).not.toContain("1 + $size.thinPixel");
+    expect(code).not.toContain("LOCAL_NUMERIC_CONSTANT - $size.thinPixel");
+  });
+
   it("should bail instead of emitting calc for resolved helper arithmetic with string operands", () => {
     const source = `
 import styled from "styled-components";
@@ -6543,7 +6640,7 @@ export const Box = styled.div\`
     },
   );
 
-  it("should bail when resolved helper arithmetic has surrounding static text", () => {
+  it("should preserve resolved helper arithmetic inside CSS functions", () => {
     const source = `
 import styled from "styled-components";
 import { runtimeValue } from "./helpers";
@@ -6592,16 +6689,16 @@ export const Box = styled.div\`
       { adapter: adapterWithTokenResolution },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toContain(
-      "Unsupported interpolation: call expression",
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain(
+      "transform: `translateX(calc(8px - ${$spacing.runtimeValue}))`",
     );
   });
 
   it.each([
     {
-      name: "unresolved arithmetic operand",
-      declarations: "const base = 8;",
+      name: "mutable arithmetic operand",
+      declarations: "let base = 8;",
       css: "padding-top: ${base - runtimeValue()}px;",
     },
     {
@@ -6687,7 +6784,7 @@ export const Box = styled.div\`
     );
   });
 
-  it("should bail for resolved helper slots with adjacent units in multi-slot backgrounds", () => {
+  it("should preserve resolved helper slots with adjacent units in multi-slot backgrounds", () => {
     const source = `
 import styled from "styled-components";
 import { other, runtimeValue } from "./helpers";
@@ -6734,10 +6831,11 @@ export const Box = styled.div\`
       { adapter: adapterWithTokenResolution },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toContain(
-      "Unsupported interpolation: call expression",
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain(
+      "backgroundImage: `linear-gradient(${$spacing.runtimeValue}, ${$spacing.other})`",
     );
+    expect(result.code ?? "").not.toContain("}px");
   });
 
   it.each([

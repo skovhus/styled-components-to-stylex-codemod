@@ -83,6 +83,10 @@ export function extractStaticParts(
   return { prefix, suffix };
 }
 
+export type ResolveImportedValueOptions =
+  | boolean
+  | { allowCssCalc?: boolean; cssCalcUnit?: string; negate?: boolean };
+
 export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: string): string {
   if (!prefix && !suffix) {
     return expr;
@@ -114,6 +118,7 @@ export function tryHandleInterpolatedStringValue(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
+    options?: ResolveImportedValueOptions,
   ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
@@ -260,6 +265,18 @@ export function tryHandleInterpolatedStringValue(args: {
     return true;
   }
 
+  if (
+    tryHandleTwoValueShorthandLeadingExpression({
+      decl,
+      d,
+      resolveImportedValueExpr,
+      addImport,
+      setValue,
+    })
+  ) {
+    return true;
+  }
+
   const tl = buildInterpolatedTemplate({
     j,
     decl,
@@ -299,6 +316,70 @@ export function tryHandleInterpolatedStringValue(args: {
   return true;
 }
 
+function tryHandleTwoValueShorthandLeadingExpression(args: {
+  decl: StyledDecl;
+  d: any;
+  resolveImportedValueExpr?: (
+    expr: any,
+    options?: ResolveImportedValueOptions,
+  ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
+  addImport?: (imp: any) => void;
+  setValue: (prop: string, value: unknown) => void;
+}): boolean {
+  const { decl, d, resolveImportedValueExpr, addImport, setValue } = args;
+  const prop = (d.property ?? "").trim();
+  if (prop !== "padding" && prop !== "margin") {
+    return false;
+  }
+  if (!resolveImportedValueExpr || d.value?.kind !== "interpolated") {
+    return false;
+  }
+  const parts = d.value.parts ?? [];
+  if (parts.length !== 2 || parts[0]?.kind !== "slot" || parts[1]?.kind !== "static") {
+    return false;
+  }
+  const slotId = parts[0].slotId;
+  if (slotId === undefined) {
+    return false;
+  }
+  const suffix = parts[1].value ?? "";
+  const suffixMatch = suffix.match(/^([a-zA-Z%]+)\s+(.+)$/);
+  if (!suffixMatch) {
+    return false;
+  }
+  const expr = (decl as any).templateExpressions[slotId] as any;
+  if (!expr || expr.type === "ArrowFunctionExpression") {
+    return false;
+  }
+  const resolved = resolveImportedValueExpr(expr, {
+    allowCssCalc: true,
+    cssCalcUnit: suffixMatch[1],
+  });
+  if (!resolved || "bail" in resolved || !resolved.skipStaticWrap) {
+    return false;
+  }
+  const entries = splitDirectionalProperty({
+    prop,
+    rawValue: (d.valueRaw ?? "").trim(),
+    important: d.important,
+    useLogical: getUseLogicalProperties(),
+  });
+  if (!entries.length) {
+    return false;
+  }
+  for (const imp of resolved.imports ?? []) {
+    addImport?.(imp);
+  }
+  const placeholder = `__SC_EXPR_${slotId}__`;
+  for (const entry of entries) {
+    setValue(
+      entry.prop,
+      entry.value.includes(placeholder) ? resolved.resolved : normalizeWhitespace(entry.value),
+    );
+  }
+  return true;
+}
+
 function buildInterpolatedTemplate(args: {
   j: any;
   decl: StyledDecl;
@@ -306,6 +387,7 @@ function buildInterpolatedTemplate(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
+    options?: ResolveImportedValueOptions,
   ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
   multiline?: { property: string; stylisValueRaw: string };
@@ -323,11 +405,18 @@ function buildInterpolatedTemplate(args: {
   let allStatic = true;
   const quasis: any[] = [];
   let q = "";
+  let staticPrefixToConsume = "";
   for (let partIndex = 0; partIndex < parts.length; partIndex++) {
     const part = parts[partIndex];
     if (part.kind === "static") {
-      q += part.value;
-      fullStaticValue += part.value;
+      const rawValue = part.value ?? "";
+      const value =
+        staticPrefixToConsume && rawValue.startsWith(staticPrefixToConsume)
+          ? rawValue.slice(staticPrefixToConsume.length)
+          : rawValue;
+      staticPrefixToConsume = "";
+      q += value;
+      fullStaticValue += value;
       continue;
     }
     if (part.kind === "slot") {
@@ -336,8 +425,10 @@ function buildInterpolatedTemplate(args: {
       if (!expr || expr.type === "ArrowFunctionExpression") {
         return null;
       }
+      const adjacentUnit = getAdjacentUnitAfterParts(parts, partIndex);
+      const negateResolvedUnit = Boolean(adjacentUnit && q.endsWith("-"));
       // Try to resolve CallExpressions through the adapter (e.g., helper function lookups)
-      if (expr.type === "CallExpression" && resolveCallExpr) {
+      if (expr.type === "CallExpression" && resolveCallExpr && !adjacentUnit) {
         const resolved = resolveCallExpr(expr);
         if (resolved) {
           if (hasAdjacentUnitInParts(parts, partIndex)) {
@@ -358,17 +449,20 @@ function buildInterpolatedTemplate(args: {
             continue;
           }
           // Otherwise, use the resolved expression AST
-          quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-          q = "";
           allStatic = false;
           for (const imp of resolved.imports ?? []) {
             addImport?.(imp);
           }
-          exprs.push(resolved.resolved);
+          q = appendExpressionToTemplate(j, quasis, exprs, q, resolved.resolved);
           continue;
         }
       }
-      const importedResolved = resolveImportedValueExpr?.(expr);
+      const importedResolved = resolveImportedValueExpr?.(
+        expr,
+        adjacentUnit
+          ? { allowCssCalc: true, cssCalcUnit: adjacentUnit, negate: negateResolvedUnit }
+          : undefined,
+      );
       if (importedResolved) {
         // Check if the resolver signaled a bail
         if ("bail" in importedResolved) {
@@ -386,7 +480,13 @@ function buildInterpolatedTemplate(args: {
           return resolved.resolved;
         }
         if (hasAdjacentUnitInParts(parts, partIndex) && !hasSingleSlotUnitSuffix(cssValue)) {
-          return null;
+          if (!adjacentUnit || !resolved.skipStaticWrap) {
+            return null;
+          }
+          staticPrefixToConsume = adjacentUnit;
+          if (negateResolvedUnit) {
+            q = q.slice(0, -1);
+          }
         }
         if (
           resolved.resolved?.type === "StringLiteral" ||
@@ -400,13 +500,11 @@ function buildInterpolatedTemplate(args: {
           }
           continue;
         }
-        quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-        q = "";
         allStatic = false;
         for (const imp of resolved.imports ?? []) {
           addImport?.(imp);
         }
-        exprs.push(resolved.resolved);
+        q = appendExpressionToTemplate(j, quasis, exprs, q, resolved.resolved);
         continue;
       }
       // Handle literals (string/number) by inlining them as static text
@@ -438,6 +536,36 @@ function buildInterpolatedTemplate(args: {
     property: multiline.property,
     stylisValueRaw: multiline.stylisValueRaw,
   });
+}
+
+function getAdjacentUnitAfterParts(parts: any[], slotIndex: number): string | null {
+  const after = parts[slotIndex + 1]?.kind === "static" ? (parts[slotIndex + 1]?.value ?? "") : "";
+  return after.match(/^([a-zA-Z%]+)/)?.[1] ?? null;
+}
+
+function appendExpressionToTemplate(
+  j: any,
+  quasis: any[],
+  expressions: any[],
+  currentQuasi: string,
+  expression: any,
+): string {
+  if (expression?.type !== "TemplateLiteral") {
+    quasis.push(j.templateElement({ raw: currentQuasi, cooked: currentQuasi }, false));
+    expressions.push(expression);
+    return "";
+  }
+
+  const nestedQuasis = expression.quasis ?? [];
+  const nestedExpressions = expression.expressions ?? [];
+  currentQuasi += nestedQuasis[0]?.value?.raw ?? nestedQuasis[0]?.value?.cooked ?? "";
+  for (let index = 0; index < nestedExpressions.length; index++) {
+    quasis.push(j.templateElement({ raw: currentQuasi, cooked: currentQuasi }, false));
+    expressions.push(nestedExpressions[index]);
+    currentQuasi =
+      nestedQuasis[index + 1]?.value?.raw ?? nestedQuasis[index + 1]?.value?.cooked ?? "";
+  }
+  return currentQuasi;
 }
 
 function hasAdjacentUnitInParts(parts: any[], slotIndex: number): boolean {
