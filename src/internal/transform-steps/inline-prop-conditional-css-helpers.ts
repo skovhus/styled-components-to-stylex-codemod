@@ -22,7 +22,7 @@ import {
   collectPropsFromArrowFnDestructured,
 } from "../lower-rules/inline-styles.js";
 import { cssPropertyToStylexProp } from "../css-prop-mapping.js";
-import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
+import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
 
 /**
  * Inlines prop-conditional css`` helpers into consumers so their prop-dependent
@@ -219,30 +219,146 @@ function propertyContestedByOtherDeclaration(
   return false;
 }
 
-/** Whether two CSS properties affect a common StyleX property (equal, or shorthand/longhand). */
+/**
+ * Whether two CSS properties can set a common atomic StyleX longhand — i.e. they are equal, or
+ * one is a shorthand whose expansion overlaps the other. Each property is expanded to its set of
+ * atomic leaf longhands (a shorthand to its leaves, a longhand to itself) and the sets are
+ * intersected. This correctly distinguishes overlapping families (`borderColor` vs
+ * `borderTopColor`) from disjoint ones (`borderRadius` vs `border`, `width` vs `padding`).
+ */
 function propertiesConflict(a: string, b: string): boolean {
-  const stylexA = cssPropertyToStylexProp(a);
-  const stylexB = cssPropertyToStylexProp(b);
-  return (
-    stylexA === stylexB || shorthandCovers(stylexA, stylexB) || shorthandCovers(stylexB, stylexA)
-  );
+  const leavesA = leafLonghands(cssPropertyToStylexProp(a));
+  const leavesB = leafLonghands(cssPropertyToStylexProp(b));
+  for (const leaf of leavesA) {
+    if (leavesB.has(leaf)) {
+      return true;
+    }
+  }
+  return false;
 }
 
-/** Whether StyleX shorthand `shorthand` expands to (or structurally contains) longhand `longhand`. */
-function shorthandCovers(shorthand: string, longhand: string): boolean {
-  const expansion = SHORTHAND_LONGHANDS[shorthand];
-  if (expansion?.physical.includes(longhand) || expansion?.logical.includes(longhand)) {
-    return true;
-  }
-  // camelCase prefix heuristic: `margin` covers `marginTop`, `border` covers `borderColor`,
-  // `background` covers `backgroundColor`, `font` covers `fontSize`, etc. The next character
-  // after the shorthand must start a new word (uppercase) so `width` does not match `widows`.
-  if (longhand.length <= shorthand.length || !longhand.startsWith(shorthand)) {
-    return false;
-  }
-  const nextChar = longhand[shorthand.length] ?? "";
-  return nextChar !== nextChar.toLowerCase();
+/** The atomic StyleX longhands a property can set: its expansion if a shorthand, else itself. */
+function leafLonghands(stylexProp: string): Set<string> {
+  const leaves = SHORTHAND_LEAVES[stylexProp] ?? LOGICAL_TO_PHYSICAL[stylexProp];
+  return new Set(leaves ?? [stylexProp]);
 }
+
+/**
+ * StyleX shorthand → the atomic leaf longhands it can set. Used to decide whether two declarations
+ * contend for the same property. Mid-level shorthands (`borderTop`, `borderColor`) are included so
+ * intersection captures partial overlap (e.g. `border` vs `borderTopColor`).
+ */
+const BORDER_SIDES = ["Top", "Right", "Bottom", "Left"] as const;
+const BORDER_KINDS = ["Width", "Style", "Color"] as const;
+const SHORTHAND_LEAVES: Record<string, string[]> = {
+  margin: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+  marginBlock: ["marginTop", "marginBottom"],
+  marginInline: ["marginLeft", "marginRight"],
+  padding: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+  paddingBlock: ["paddingTop", "paddingBottom"],
+  paddingInline: ["paddingLeft", "paddingRight"],
+  scrollMargin: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
+  scrollPadding: [
+    "scrollPaddingTop",
+    "scrollPaddingRight",
+    "scrollPaddingBottom",
+    "scrollPaddingLeft",
+  ],
+  inset: ["top", "right", "bottom", "left"],
+  insetBlock: ["top", "bottom"],
+  insetInline: ["left", "right"],
+  gap: ["rowGap", "columnGap"],
+  overflow: ["overflowX", "overflowY"],
+  border: BORDER_SIDES.flatMap((side) => BORDER_KINDS.map((kind) => `border${side}${kind}`)),
+  borderWidth: BORDER_SIDES.map((side) => `border${side}Width`),
+  borderStyle: BORDER_SIDES.map((side) => `border${side}Style`),
+  borderColor: BORDER_SIDES.map((side) => `border${side}Color`),
+  borderBlock: ["Top", "Bottom"].flatMap((side) =>
+    BORDER_KINDS.map((kind) => `border${side}${kind}`),
+  ),
+  borderInline: ["Left", "Right"].flatMap((side) =>
+    BORDER_KINDS.map((kind) => `border${side}${kind}`),
+  ),
+  borderTop: BORDER_KINDS.map((kind) => `borderTop${kind}`),
+  borderRight: BORDER_KINDS.map((kind) => `borderRight${kind}`),
+  borderBottom: BORDER_KINDS.map((kind) => `borderBottom${kind}`),
+  borderLeft: BORDER_KINDS.map((kind) => `borderLeft${kind}`),
+  borderRadius: [
+    "borderTopLeftRadius",
+    "borderTopRightRadius",
+    "borderBottomRightRadius",
+    "borderBottomLeftRadius",
+  ],
+  borderImage: [
+    "borderImageSource",
+    "borderImageSlice",
+    "borderImageWidth",
+    "borderImageOutset",
+    "borderImageRepeat",
+  ],
+  outline: ["outlineWidth", "outlineStyle", "outlineColor"],
+  font: [
+    "fontStyle",
+    "fontVariant",
+    "fontWeight",
+    "fontStretch",
+    "fontSize",
+    "lineHeight",
+    "fontFamily",
+  ],
+  background: [
+    "backgroundColor",
+    "backgroundImage",
+    "backgroundPosition",
+    "backgroundSize",
+    "backgroundRepeat",
+    "backgroundOrigin",
+    "backgroundClip",
+    "backgroundAttachment",
+  ],
+  flex: ["flexGrow", "flexShrink", "flexBasis"],
+  flexFlow: ["flexDirection", "flexWrap"],
+  placeItems: ["alignItems", "justifyItems"],
+  placeContent: ["alignContent", "justifyContent"],
+  placeSelf: ["alignSelf", "justifySelf"],
+  gridArea: ["gridRowStart", "gridColumnStart", "gridRowEnd", "gridColumnEnd"],
+  gridColumn: ["gridColumnStart", "gridColumnEnd"],
+  gridRow: ["gridRowStart", "gridRowEnd"],
+  gridTemplate: ["gridTemplateRows", "gridTemplateColumns", "gridTemplateAreas"],
+  grid: [
+    "gridTemplateRows",
+    "gridTemplateColumns",
+    "gridTemplateAreas",
+    "gridAutoRows",
+    "gridAutoColumns",
+    "gridAutoFlow",
+  ],
+  columns: ["columnWidth", "columnCount"],
+  columnRule: ["columnRuleWidth", "columnRuleStyle", "columnRuleColor"],
+  transition: [
+    "transitionProperty",
+    "transitionDuration",
+    "transitionTimingFunction",
+    "transitionDelay",
+  ],
+  animation: [
+    "animationName",
+    "animationDuration",
+    "animationTimingFunction",
+    "animationDelay",
+    "animationIterationCount",
+    "animationDirection",
+    "animationFillMode",
+    "animationPlayState",
+  ],
+  textDecoration: [
+    "textDecorationLine",
+    "textDecorationStyle",
+    "textDecorationColor",
+    "textDecorationThickness",
+  ],
+  listStyle: ["listStyleType", "listStylePosition", "listStyleImage"],
+};
 
 /** True when a declaration's interpolated value reads a non-theme component prop. */
 function declarationReadsProps(

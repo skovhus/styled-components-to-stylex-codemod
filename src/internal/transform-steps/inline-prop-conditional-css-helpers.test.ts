@@ -98,6 +98,43 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline when a sub-shorthand family contests the prop-dependent longhand", () => {
+    // Comment #10: `border-color` (shorthand) expands to the four side colors, overlapping the
+    // dynamic `border-top-color`, even though neither name is a prefix of the other.
+    const helper = cssHelperDecl("dynBorderTop", [
+      rule("&", [interpolatedDecl("border-top-color", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynBorderTop", [
+      rule("&", [reference, staticDecl("border-color", "green")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
+  it("inlines when a different sub-shorthand family does not contest", () => {
+    // `border-radius` does not overlap `border-top-color`, so the inline is still safe.
+    const helper = cssHelperDecl("dynBorderTop", [
+      rule("&", [interpolatedDecl("border-top-color", 0)]),
+    ]);
+    const consumer = consumerDecl("Box", "dynBorderTop", [
+      rule("&", [helperReferenceDecl(0), staticDecl("border-radius", "4px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toEqual([]);
+    expect(consumer.rules[0]!.declarations.map((d) => d.property)).toEqual([
+      "border-top-color",
+      "border-radius",
+    ]);
+  });
+
   it("does not inline when the consumer composes another sibling mixin", () => {
     // Comment #9: a sibling `${reset}` appears as a property-less declaration whose emitted
     // properties are unknown here and could overlap, so bail rather than guess.
