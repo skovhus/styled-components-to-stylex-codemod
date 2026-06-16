@@ -643,6 +643,12 @@ export const App = () => (
     <span sx={styles.callbackScopeStyleText}>Callback scope style</span>
     <StyledIcon title="Attrs icon size" />
     <AttrsSxButton>Attrs sx</AttrsSxButton>
+    <div title="Line1\nLine2" sx={styles.escapedTemplateTitle}>
+      Escaped template title (hover to see)
+    </div>
+    <div title="Plain template" sx={styles.plainTemplateTitle}>
+      Plain template title (hover to see)
+    </div>
   </>
 );
 
@@ -859,5 +865,16 @@ const styles = stylex.create({
   },
   attrsSxButton: {
     color: "#2563eb",
+  },
+  // Pattern 16: static attrs with template literal containing escape sequences
+  // The cooked value (with actual newline) must be used, not the raw source text
+  escapedTemplateTitle: {
+    padding: 8,
+    backgroundColor: "#fdf4ff",
+  },
+  // Pattern 16b: static attrs with regular template literal (no escapes)
+  plainTemplateTitle: {
+    padding: 8,
+    backgroundColor: "#fff1f2",
   },
 });

@@ -711,11 +711,25 @@ export function literalToStaticValue(
     }
   }
   // Handle TemplateLiteral without expressions (static template string)
+  // Use `cooked` (runtime-interpreted) rather than `raw` (literal source text) so that
+  // escape sequences like `\n` become actual newlines, matching JS runtime behavior.
+  // If `cooked` is null (invalid escape sequence), bail rather than silently mistransform.
   if (type === "TemplateLiteral") {
-    const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    const n = node as {
+      expressions?: unknown[];
+      quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+    };
     if (!n.expressions || n.expressions.length === 0) {
       const quasis = n.quasis ?? [];
-      return quasis.map((q) => q.value?.raw ?? "").join("");
+      const parts: string[] = [];
+      for (const q of quasis) {
+        const cooked = q.value?.cooked;
+        if (cooked == null) {
+          return null;
+        }
+        parts.push(cooked);
+      }
+      return parts.join("");
     }
   }
   // Handle css`` tagged template literal (styled-components css helper)
