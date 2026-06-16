@@ -204,7 +204,10 @@ export function createLowerRulesState(ctx: TransformContext) {
     if (node.id?.type !== "Identifier" || !node.id.name) {
       return;
     }
-    const staticValue = literalToStaticValue(node.init);
+    // Reject function-valued constants (e.g. `const BASE = () => 8`): coercing
+    // their body would let arithmetic/value resolution treat a function object
+    // as a static literal, silently mistransforming the runtime semantics.
+    const staticValue = literalToStaticValue(node.init, { allowStaticArrowFunctions: false });
     if (staticValue !== null) {
       staticIdentifierValues.set(node.id.name, staticValue);
     }
@@ -229,7 +232,7 @@ export function createLowerRulesState(ctx: TransformContext) {
       const ownerName = expr.left?.object?.name;
       const propName = expr.left?.property?.name;
       if (ownerName && propName) {
-        const staticValue = literalToStaticValue(expr.right);
+        const staticValue = literalToStaticValue(expr.right, { allowStaticArrowFunctions: false });
         let ownerMap = staticPropertyValues.get(ownerName);
         if (!ownerMap) {
           ownerMap = new Map();

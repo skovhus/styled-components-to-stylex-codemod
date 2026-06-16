@@ -6702,6 +6702,11 @@ export const Box = styled.div\`
       css: "padding-top: ${base - runtimeValue()}px;",
     },
     {
+      name: "function-valued constant operand",
+      declarations: "const base = () => 8;",
+      css: "padding-top: ${base - runtimeValue()}px;",
+    },
+    {
       name: "nested template literal unit adjacency",
       declarations: "",
       css: "padding-top: ${`calc(${runtimeValue()}px + 1px)`};",
@@ -6841,13 +6846,14 @@ export const Box = styled.div\`
   it("should preserve adjacent units when a resolved helper yields a unitless literal", () => {
     const source = `
 import styled from "styled-components";
-import { space } from "./helpers";
+import { space, color } from "./helpers";
 
 export const Box = styled.div\`
   mask: radial-gradient(circle, #000 8px, #fff \${space()}px);
   width: calc(100% - \${space()}rem);
   padding: \${space()}rem 12px;
   margin: \${space()}px 4px;
+  border: \${space()}px solid \${color()};
 \`;
 `;
 
@@ -6863,6 +6869,9 @@ export const Box = styled.div\`
       resolveCall(ctx: CallResolveContext) {
         if (ctx.calleeImportedName === "space") {
           return { usage: "create" as const, expr: "'8'", imports: [] };
+        }
+        if (ctx.calleeImportedName === "color") {
+          return { usage: "create" as const, expr: "'#abc'", imports: [] };
         }
         return undefined;
       },
@@ -6896,6 +6905,12 @@ export const Box = styled.div\`
     expect(code).toContain("paddingInline: 12");
     expect(code).toContain("marginBlock: 8");
     expect(code).toContain("marginInline: 4");
+    // Border width must keep its authored unit: with the unit preserved it
+    // becomes numeric `8` (= 8px in StyleX), never the unitless string "8".
+    expect(code).toContain("borderWidth: 8,");
+    expect(code).not.toContain('borderWidth: "8"');
+    expect(code).toContain('borderStyle: "solid"');
+    expect(code).toContain('borderColor: "#abc"');
   });
 
   it.each([

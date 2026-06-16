@@ -794,7 +794,14 @@ function withBorderWidthUnit(expr: unknown, unit: string | undefined): unknown {
     return `${staticValue}${unit}`;
   }
   if (typeof staticValue === "string" && looksLikeLength(staticValue)) {
-    return staticValue;
+    // A resolved length string may be unitless (e.g. the helper returned "8"),
+    // in which case the authored unit must be appended so `${space()}px` stays
+    // "8px" rather than collapsing to "8". Keep strings that already carry their
+    // own unit (or are a unitless zero, which needs none) untouched.
+    const trimmed = staticValue.trim();
+    const carriesUnit = /[a-zA-Z%]$/.test(trimmed);
+    const isZero = Number.parseFloat(trimmed) === 0;
+    return carriesUnit || isZero ? staticValue : `${staticValue}${unit}`;
   }
   return expr;
 }
