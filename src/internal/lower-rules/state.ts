@@ -226,6 +226,18 @@ export function createLowerRulesState(ctx: TransformContext) {
     const shadowingNames = new Set<string>();
     root.find(j.Function).forEach((fnPath) => {
       collectPatternBindingNames((fnPath.node as { params?: unknown }).params, shadowingNames);
+      // A named function declaration/expression binds its own name in a scope
+      // that can shadow a top-level const (e.g. a nested `function gap() {}`).
+      const fnId = (fnPath.node as { id?: { name?: string } }).id;
+      if (fnId?.name) {
+        shadowingNames.add(fnId.name);
+      }
+    });
+    root.find(j.ClassDeclaration).forEach((classPath) => {
+      const classId = (classPath.node as { id?: { name?: string } }).id;
+      if (classId?.name) {
+        shadowingNames.add(classId.name);
+      }
     });
     root.find(j.VariableDeclarator).forEach((declPath) => {
       if (!isTopLevelConstDeclarator(declPath)) {

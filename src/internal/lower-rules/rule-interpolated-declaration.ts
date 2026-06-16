@@ -1428,6 +1428,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           if (!cssCalcUnit) {
             return resolvedCall;
           }
+          // A bare unitless literal (e.g. a helper resolving to `8`/`"8"`) does
+          // not carry the authored unit. Fold the unit into the literal so it is
+          // preserved (e.g. `${space()}px` -> "8px") rather than emitting a
+          // unitless value or `calc(-1 * 8)`. Any leading negation is applied by
+          // the static-prefix handling downstream, so emit the positive value.
+          const literalValue = literalToStaticValue(resolvedCall.resolved);
+          const numericLiteral =
+            typeof literalValue === "number"
+              ? literalValue
+              : typeof literalValue === "string" &&
+                  literalValue.trim() !== "" &&
+                  Number.isFinite(Number(literalValue))
+                ? Number(literalValue)
+                : null;
+          if (numericLiteral !== null) {
+            return {
+              resolved: j.literal(`${numericLiteral}${cssCalcUnit}`) as ExpressionKind,
+              imports: resolvedCall.imports,
+              skipStaticWrap: true,
+            };
+          }
           if (forceNegate) {
             return {
               resolved: buildNegatedCssTokenTemplate(j, resolvedCall.resolved),

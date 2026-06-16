@@ -6854,6 +6854,8 @@ export const Box = styled.div\`
   padding: \${space()}rem 12px;
   margin: \${space()}px 4px;
   border: \${space()}px solid \${color()};
+  top: \${space()}px;
+  bottom: -\${space()}px;
 \`;
 `;
 
@@ -6911,6 +6913,10 @@ export const Box = styled.div\`
     expect(code).not.toContain('borderWidth: "8"');
     expect(code).toContain('borderStyle: "solid"');
     expect(code).toContain('borderColor: "#abc"');
+    // Single-slot values must keep the authored unit, including when negated.
+    expect(code).toContain("top: 8,");
+    expect(code).toContain("bottom: -8,");
+    expect(code).not.toContain("calc(-1");
   });
 
   it("should not treat non-unit trailing text after a resolved helper as a CSS unit", () => {
@@ -6970,7 +6976,18 @@ export const Box = styled.div\`
     expect(code).not.toContain("$assets.base}/logo.svg");
   });
 
-  it("should not fold a top-level const shadowed by a function parameter", () => {
+  it.each([
+    {
+      name: "function parameter",
+      signature: "export function App({ gap }: { gap: number })",
+      localBinding: "",
+    },
+    {
+      name: "nested function declaration",
+      signature: "export function App()",
+      localBinding: "  function gap() {}\n",
+    },
+  ])("should not fold a top-level const shadowed by a $name", ({ signature, localBinding }) => {
     const source = `
 import * as React from "react";
 import styled from "styled-components";
@@ -6978,11 +6995,11 @@ import { runtimeValue } from "./helpers";
 
 const gap = 8;
 
-export function App({ gap }: { gap: number }) {
-  const Box = styled.div\`
+${signature} {
+${localBinding}  const Box = styled.div\`
     margin-left: \${gap - runtimeValue()}px;
   \`;
-  return <Box>{gap}</Box>;
+  return <Box />;
 }
 `;
 
