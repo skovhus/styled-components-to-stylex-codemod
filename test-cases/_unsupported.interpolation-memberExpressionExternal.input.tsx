@@ -1,5 +1,7 @@
 // @expected-warning: Unsupported interpolation: member expression
-// CSS helper object members used outside styled templates should bail
+// CSS helper object members used outside styled templates should bail, as does
+// a prop-rooted member access that splices an opaque `css` result into the
+// template (props => props.$styles ?? "") — not a theme lookup.
 import styled, { css } from "styled-components";
 
 const buttonStyles = {
@@ -24,5 +26,19 @@ const Button = styled.button`
 // because removing the CSS properties would break this code
 const exportedStyles = [buttonStyles.sizeCss];
 
-export const App = () => <Button>Click me</Button>;
+// Injecting an opaque `css` result via a prop also bails: `$styles` carries a
+// `ReturnType<typeof css>` whose contents are unknown at build time, so StyleX
+// cannot statically resolve it. This must NOT be misreported as a theme lookup.
+const Container = styled.div<{ $styles?: ReturnType<typeof css> }>`
+  ${(props) => props.$styles ?? ""}
+  background-color: #f0f0f0;
+  padding: 12px;
+`;
+
+export const App = () => (
+  <>
+    <Button>Click me</Button>
+    <Container>Injected</Container>
+  </>
+);
 export { exportedStyles };
