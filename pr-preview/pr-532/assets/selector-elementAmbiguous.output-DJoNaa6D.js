@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{className:`x1tamke2`,children:[(0,t.jsx)(`svg`,{viewBox:`0 0 16 16`,className:`x1kky2od x1prsl8m`,children:(0,t.jsx)(`circle`,{cx:`8`,cy:`8`,r:`6`})}),(0,t.jsx)(`svg`,{viewBox:`0 0 32 32`,className:`x1td3qas x1prsl8m`,children:(0,t.jsx)(`circle`,{cx:`16`,cy:`16`,r:`12`})})]});export{n as App};

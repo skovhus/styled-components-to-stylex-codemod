@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{padding:16},children:(0,t.jsx)(`input`,{type:`file`,className:`x1s85apg xlshs6z x1gfyf1i x1in0adg`})});export{n as App};
