@@ -55,6 +55,22 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(1);
   });
 
+  it("does not inline a helper whose prop value is an unconditional style function", () => {
+    // Comment #6: `color: ${(p) => p.$color}` lowers to a style function that does not subtract
+    // a later static override, so it must bail rather than change styles vs the previous bail.
+    const helper = cssHelperDecl("dynColor", [rule("&", [interpolatedDecl("color", 0)])]);
+    helper.templateExpressions = [parseExpr("(p) => p.$color")];
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynColor", [rule("&", [reference])]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(1);
+  });
+
   it("does not inline a helper with more than one prop-dependent declaration", () => {
     // Comment #5: two dynamic declarations would each carry the reference's source order,
     // losing their intra-helper precedence, so bail rather than reorder the cascade.

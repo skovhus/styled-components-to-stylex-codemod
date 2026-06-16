@@ -16,7 +16,11 @@ import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { StyledDecl } from "../transform-types.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import {
+  cloneAstNode,
+  getFunctionBodyExpr,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import {
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
@@ -141,19 +145,25 @@ function referencedHelperName(d: CssDeclarationIR, consumer: StyledDecl): string
  *  - private (not exported / preserved for cross-file use),
  *  - every rule is the top-level `&` block (no nested selectors, no at-rules),
  *  - no chained mixin references (a property-less `${otherMixin}` / `${parts.reset}` slot)
- *    — those compose as separate style keys whose ordering we cannot preserve by splicing, and
+ *    — those compose as separate style keys whose ordering we cannot preserve by splicing,
  *  - exactly one prop-dependent declaration. That single dynamic entry is the case the mixin
  *    path bails on, and it has no intra-helper ordering ambiguity. Zero means a plain mixin
  *    (handled by the shared-style-key path); two or more dynamic entries are emitted as
  *    styleFns/variants whose precedence depends on per-declaration source order, which the
  *    splice (which stamps the single reference order on every inlined declaration) cannot
- *    preserve — so bail.
+ *    preserve — so bail, and
+ *  - that prop-dependent declaration must lower to a static base+variant pair (a ternary with
+ *    static branches). That path subtracts later same-property static overrides, so the
+ *    consumer's `color: red;` after `${mixin}` still wins. An unconditional dynamic value
+ *    lowers to a style function that does not subtract a later static override, so it is
+ *    excluded (it would change styles where the helper previously bailed).
  */
 function isInlinableHelper(helperDecl: StyledDecl): boolean {
   if (helperDecl.isExported || helperDecl.preserveCssHelperDeclaration) {
     return false;
   }
-  let propDependentDeclarations = 0;
+  let propDependentDeclaration: CssDeclarationIR | null = null;
+  let propDependentCount = 0;
   for (const rule of helperDecl.rules) {
     if (rule.selector.trim() !== "&" || rule.atRuleStack.length > 0) {
       return false;
@@ -163,11 +173,49 @@ function isInlinableHelper(helperDecl: StyledDecl): boolean {
         return false;
       }
       if (declarationReadsProps(declaration, helperDecl.templateExpressions)) {
-        propDependentDeclarations += 1;
+        propDependentCount += 1;
+        propDependentDeclaration = declaration;
       }
     }
   }
-  return propDependentDeclarations === 1;
+  return (
+    propDependentCount === 1 &&
+    propDependentDeclaration !== null &&
+    lowersToOverrideSafeVariant(propDependentDeclaration, helperDecl.templateExpressions)
+  );
+}
+
+/**
+ * True when a prop-dependent declaration is a single-slot ternary with static literal branches
+ * (e.g. `${(p) => (p.$big ? "100px" : "50px")}`). This is the shape that lowers to a static
+ * base+variant pair whose later same-property static overrides are subtracted by the existing
+ * rule lowering — so splicing it preserves the cascade. Unconditional dynamic values
+ * (`${(p) => p.$color}`) lower to a style function that does not subtract later overrides.
+ */
+function lowersToOverrideSafeVariant(
+  declaration: CssDeclarationIR,
+  templateExpressions: readonly unknown[],
+): boolean {
+  if (declaration.value.kind !== "interpolated" || declaration.value.parts.length !== 1) {
+    return false;
+  }
+  const part = declaration.value.parts[0];
+  if (part?.kind !== "slot") {
+    return false;
+  }
+  const expr = templateExpressions[part.slotId] as { type?: string } | undefined;
+  if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+    return false;
+  }
+  const body = getFunctionBodyExpr(expr as { body?: unknown });
+  if (!body || (body as { type?: string }).type !== "ConditionalExpression") {
+    return false;
+  }
+  const conditional = body as { consequent?: unknown; alternate?: unknown };
+  return (
+    literalToStaticValue(conditional.consequent) !== null &&
+    literalToStaticValue(conditional.alternate) !== null
+  );
 }
 
 /** True when a declaration's interpolated value reads a non-theme component prop. */
