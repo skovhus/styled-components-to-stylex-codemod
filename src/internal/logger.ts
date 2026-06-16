@@ -130,6 +130,7 @@ export type WarningType =
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
+  | "Partial migration left styled-components declarations unconverted"
   | "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts"
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
   | "Conditional StyleX default would override an unproven earlier style for the same property"
@@ -145,6 +146,9 @@ export type WarningType =
 
 export const CASCADE_CONFLICT_WARNING =
   "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts" satisfies WarningType;
+
+export const PARTIAL_MIGRATION_INCOMPLETE_WARNING =
+  "Partial migration left styled-components declarations unconverted" satisfies WarningType;
 
 export const UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING =
   "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)" satisfies WarningType;
@@ -239,9 +243,14 @@ export class Logger {
    * Per-file output is shown when fileCount is unknown or <= threshold.
    * When fileCount > threshold, warnings are only collected for the summary.
    */
-  public static logWarnings(warnings: WarningLog[], filePath: string): void {
+  public static logWarnings(
+    warnings: WarningLog[],
+    filePath: string,
+    options: { silent?: boolean } = {},
+  ): void {
     const printInline =
-      Logger.fileCount === null || Logger.fileCount <= FILE_COUNT_INLINE_THRESHOLD;
+      !options.silent &&
+      (Logger.fileCount === null || Logger.fileCount <= FILE_COUNT_INLINE_THRESHOLD);
     for (const warning of warnings) {
       Logger.collected.push({ ...warning, filePath });
       if (printInline) {

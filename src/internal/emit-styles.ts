@@ -27,6 +27,7 @@ import {
   buildStyleKeySequence,
   type StyleSequenceEntry,
 } from "./utilities/style-composition-plan.js";
+import { pruneUnusedInlineKeyframes } from "./utilities/inline-keyframes-liveness.js";
 
 /**
  * CSS shorthands that must NEVER appear as property names in stylex.create() output.
@@ -613,6 +614,12 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     (stylesDecl as any).leadingComments = deduped;
     (stylesDecl as any).comments = deduped;
   }
+
+  pruneUnusedInlineKeyframes({
+    state: ctx,
+    emittedStyleValues: nonEmptyStyleEntries.map(([, value]) => value),
+    styledDecls,
+  });
 
   // Emit inline @keyframes as `const <name> = stylex.keyframes({...})` before stylex.create.
   const inlineKeyframeDecls: any[] = [];

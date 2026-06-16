@@ -260,6 +260,16 @@ describe("Logger", () => {
       expect(report.toString()).toContain("Warning Summary");
     });
 
+    it("still collects warnings when silent suppresses inline output", () => {
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+        { silent: true },
+      );
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(Logger.createReport().getWarnings()).toHaveLength(1);
+    });
+
     it("skips summary when fileCount <= 10", () => {
       Logger.setFileCount(5);
       Logger.logWarnings(

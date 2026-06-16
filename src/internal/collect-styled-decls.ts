@@ -10,6 +10,7 @@ import {
 } from "./css-ir.js";
 import {
   cloneAstNode,
+  extractStaticLiteralValue,
   getFunctionBodyExpr,
   getNodeLocStart,
 } from "./utilities/jscodeshift-utils.js";
@@ -126,12 +127,9 @@ function collectStyledDeclsImpl(args: {
         }
 
         const v = prop.value as any;
-        if (
-          v.type === "StringLiteral" ||
-          v.type === "NumericLiteral" ||
-          v.type === "BooleanLiteral"
-        ) {
-          out.staticAttrs[key] = v.value;
+        const literalValue = literalStaticValueFromNode(v);
+        if (literalValue !== undefined) {
+          out.staticAttrs[key] = literalValue;
           continue;
         }
 
@@ -1736,31 +1734,8 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
 }
 
-function literalStaticValueFromNode(node: unknown): string | number | boolean | undefined {
-  if (!node || typeof node !== "object") {
-    return undefined;
-  }
-  const typed = node as { type?: string; value?: unknown; expression?: unknown };
-  if (typed.type === "StringLiteral" || typed.type === "NumericLiteral") {
-    return typeof typed.value === "string" || typeof typed.value === "number"
-      ? typed.value
-      : undefined;
-  }
-  if (typed.type === "BooleanLiteral") {
-    return typeof typed.value === "boolean" ? typed.value : undefined;
-  }
-  if (
-    typed.type === "Literal" &&
-    (typeof typed.value === "string" ||
-      typeof typed.value === "number" ||
-      typeof typed.value === "boolean")
-  ) {
-    return typed.value;
-  }
-  if (typed.type === "TSAsExpression" || typed.type === "TSSatisfiesExpression") {
-    return literalStaticValueFromNode(typed.expression);
-  }
-  return undefined;
+function literalStaticValueFromNode(node: unknown): string | number | boolean | null | undefined {
+  return extractStaticLiteralValue(node, { allowCssTaggedTemplates: false });
 }
 
 function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {

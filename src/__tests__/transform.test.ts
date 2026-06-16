@@ -575,6 +575,8 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
 
 const CASCADE_CONFLICT_WARNING =
   "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+const PARTIAL_MIGRATION_INCOMPLETE_WARNING =
+  "Partial migration left styled-components declarations unconverted";
 
 describe("cascade conflict detection", () => {
   const WARNING_TYPE = CASCADE_CONFLICT_WARNING;
@@ -1112,6 +1114,15 @@ export const App = () => (
 
     expect(result.code).not.toBeNull();
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["CustomGroupHeader"],
+          convertedDeclarations: ["Notice"],
+        }),
+      }),
+    );
     // Local component migrated to StyleX.
     expect(result.code).toMatch(/sx=\{styles\.notice\}/);
     // Imported root left as styled-components.
@@ -1262,6 +1273,17 @@ export const App = () => (
     expect(result.code).toContain('import styled from "styled-components"');
     // Warning emitted for the skipped decl
     expect(result.warnings.some((w) => w.type.startsWith("Unsupported selector"))).toBe(true);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarationCount: 1,
+          skippedDeclarations: ["Complex"],
+          convertedDeclarationCount: 1,
+          convertedDeclarations: ["Container"],
+        }),
+      }),
+    );
   });
 
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift, { type Expression } from "jscodeshift";
 import {
+  extractStaticLiteralValue,
   extractRootAndPath,
   getJsxElementName,
   getRootJsxIdentifierName,
@@ -212,5 +213,24 @@ describe("literalToStaticValue", () => {
   it("unwraps TypeScript assertion wrappers around static values", () => {
     expect(literalToStaticValue(parseExpr('"primary" as const'))).toBe("primary");
     expect(literalToStaticValue(parseExpr("42 satisfies number"))).toBe(42);
+  });
+
+  it("can reject static arrow coercion for call sites that need literal expressions", () => {
+    expect(literalToStaticValue(parseExpr('() => "fallback"'))).toBe("fallback");
+    expect(
+      literalToStaticValue(parseExpr('() => "fallback"'), {
+        allowStaticArrowFunctions: false,
+      }),
+    ).toBeNull();
+    expect(extractStaticLiteralValue(parseExpr('(() => "fallback") as const'))).toBeUndefined();
+  });
+
+  it("can reject css tagged template coercion for non-css expression contexts", () => {
+    expect(literalToStaticValue(parseExpr("css`color: red;`"))).toBe("color: red;");
+    expect(
+      extractStaticLiteralValue(parseExpr("css`color: red;`"), {
+        allowCssTaggedTemplates: false,
+      }),
+    ).toBeUndefined();
   });
 });

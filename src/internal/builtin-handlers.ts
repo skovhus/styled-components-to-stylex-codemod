@@ -4,6 +4,7 @@
  */
 import { type CallResolveContext, type ImportSpec, isDirectionalResult } from "../adapter.js";
 import {
+  extractStaticLiteralValue,
   extractRootAndPath,
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -17,6 +18,7 @@ import {
   isLogicalExpressionNode,
   literalToStaticValue,
   resolveIdentifierToPropName,
+  type StaticLiteralValue,
   unwrapLogicalFallback,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
@@ -535,36 +537,6 @@ function tryResolveArrowFnCallWithConditionalArgs(
   return consIsCss
     ? { type: "splitVariantsResolvedValue", variants }
     : { type: "splitVariantsResolvedStyles", variants };
-}
-
-type StaticLiteralValue = string | number | boolean | null;
-
-/**
- * Extracts a static literal value from an AST node, distinguishing null literals
- * from extraction failure. Returns `undefined` when the node is not a recognized
- * static literal, and the actual value (including `null`) otherwise.
- */
-function extractStaticLiteralValue(node: unknown): StaticLiteralValue | undefined {
-  if (!node || typeof node !== "object") {
-    return undefined;
-  }
-  const type = (node as { type?: string }).type;
-  // Reject function-like nodes — literalToStaticValue coerces zero-arg arrows
-  // to their body's value, but helper call arguments should not undergo that
-  // transformation (the original code passes a function, not a primitive).
-  if (type === "ArrowFunctionExpression" || type === "FunctionExpression") {
-    return undefined;
-  }
-  // Handle NullLiteral and Literal-with-null-value explicitly since
-  // literalToStaticValue uses null as its failure sentinel.
-  if (type === "NullLiteral") {
-    return null;
-  }
-  if (type === "Literal" && (node as { value?: unknown }).value === null) {
-    return null;
-  }
-  const v = literalToStaticValue(node);
-  return v !== null ? v : undefined;
 }
 
 /**
