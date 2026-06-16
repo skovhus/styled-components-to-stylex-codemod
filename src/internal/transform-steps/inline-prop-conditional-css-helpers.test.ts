@@ -9,7 +9,7 @@ import { inlinePropConditionalCssHelpersStep } from "./inline-prop-conditional-c
 const j = jscodeshift.withParser("tsx");
 
 describe("inlinePropConditionalCssHelpersStep", () => {
-  it("inlines a top-level prop-conditional helper and empties (but keeps) the helper decl", () => {
+  it("inlines a prop-conditional helper and empties (but keeps) the helper decl", () => {
     const helper = cssHelperDecl("sizing", [rule("&", [interpolatedDecl("width", 0)])]);
     const consumer = consumerDecl("Tile", "sizing", [
       rule("&", [helperReferenceDecl(0), staticDecl("color", "red")]),
@@ -24,7 +24,7 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(helper.rules).toEqual([]);
 
     // The `${sizing}` reference is replaced by the helper's declaration, remapped onto a
-    // freshly appended consumer template expression (slot 1).
+    // freshly appended consumer template expression (slot 1). The uncontested `width` is safe.
     const declarations = consumer.rules[0]!.declarations;
     expect(declarations.map((d) => d.property)).toEqual(["width", "color"]);
     expect(declarations[0]!.value).toEqual({
@@ -33,6 +33,52 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     });
     expect(declarations[0]!.valueRaw).toBe("__SC_EXPR_1__");
     expect(consumer.templateExpressions).toHaveLength(2);
+  });
+
+  it("inlines an unconditional dynamic value when its property is uncontested", () => {
+    const helper = cssHelperDecl("dynColor", [rule("&", [interpolatedDecl("color", 0)])]);
+    helper.templateExpressions = [parseExpr("(p) => p.$color")];
+    const consumer = consumerDecl("Box", "dynColor", [
+      rule("&", [helperReferenceDecl(0), staticDecl("padding", "4px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toEqual([]);
+    expect(consumer.rules[0]!.declarations.map((d) => d.property)).toEqual(["color", "padding"]);
+  });
+
+  it("does not inline when a later consumer declaration contests the prop-dependent property", () => {
+    // Comments #6 / #7: a later `color: red;` (or `width: 80px;`) must win, but the inlined
+    // dynamic value could override it depending on the lowering path — so bail.
+    const helper = cssHelperDecl("dynColor", [rule("&", [interpolatedDecl("color", 0)])]);
+    helper.templateExpressions = [parseExpr("(p) => p.$color")];
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynColor", [
+      rule("&", [reference, staticDecl("color", "red")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+    expect(consumer.templateExpressions).toHaveLength(1);
+  });
+
+  it("does not inline when a shorthand contests the prop-dependent longhand", () => {
+    const helper = cssHelperDecl("dynMarginTop", [rule("&", [interpolatedDecl("margin-top", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynMarginTop", [
+      rule("&", [reference, staticDecl("margin", "0")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
   it("does not inline a helper that carries a nested selector block", () => {
@@ -51,22 +97,6 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     // Comment #3: a helper's nested rule (e.g. `&:hover`) cannot be spliced into the
     // consumer's `&` block while preserving cascade order, so the reference is left intact.
     expect(helper.rules).toHaveLength(2);
-    expect(consumer.rules[0]!.declarations).toContain(reference);
-    expect(consumer.templateExpressions).toHaveLength(1);
-  });
-
-  it("does not inline a helper whose prop value is an unconditional style function", () => {
-    // Comment #6: `color: ${(p) => p.$color}` lowers to a style function that does not subtract
-    // a later static override, so it must bail rather than change styles vs the previous bail.
-    const helper = cssHelperDecl("dynColor", [rule("&", [interpolatedDecl("color", 0)])]);
-    helper.templateExpressions = [parseExpr("(p) => p.$color")];
-    const reference = helperReferenceDecl(0);
-    const consumer = consumerDecl("Box", "dynColor", [rule("&", [reference])]);
-    const ctx = createContext([consumer, helper]);
-
-    inlinePropConditionalCssHelpersStep(ctx);
-
-    expect(helper.rules).toHaveLength(1);
     expect(consumer.rules[0]!.declarations).toContain(reference);
     expect(consumer.templateExpressions).toHaveLength(1);
   });

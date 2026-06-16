@@ -16,15 +16,13 @@ import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { StyledDecl } from "../transform-types.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import {
-  cloneAstNode,
-  getFunctionBodyExpr,
-  literalToStaticValue,
-} from "../utilities/jscodeshift-utils.js";
+import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
 import {
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
 } from "../lower-rules/inline-styles.js";
+import { cssPropertyToStylexProp } from "../css-prop-mapping.js";
+import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 
 /**
  * Inlines prop-conditional css`` helpers into consumers so their prop-dependent
@@ -54,7 +52,8 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     }
     for (const reference of collectInlinableHelperReferences(consumer, declByLocalName)) {
       const helperDecl = reference.helperDecl;
-      if (!isInlinableHelper(helperDecl)) {
+      const propDependent = inlinablePropDependentDeclaration(helperDecl);
+      if (!propDependent || propertyContestedByOtherDeclaration(propDependent, reference)) {
         retainedHelpers.add(helperDecl.localName);
         continue;
       }
@@ -138,39 +137,38 @@ function referencedHelperName(d: CssDeclarationIR, consumer: StyledDecl): string
 }
 
 /**
- * A helper is inlinable when it carries a prop-based interpolation (the case the mixin path
- * bails on) and is shaped so its declarations can be spliced into the consumer's `&` block
- * without disturbing the CSS cascade:
+ * Returns the helper's single prop-dependent declaration when the helper is structurally
+ * inlinable — otherwise null. Inlinable means it carries a prop-based interpolation (the case
+ * the mixin path bails on) and is shaped so its declarations can be spliced into the consumer's
+ * `&` block:
  *
  *  - private (not exported / preserved for cross-file use),
  *  - every rule is the top-level `&` block (no nested selectors, no at-rules),
  *  - no chained mixin references (a property-less `${otherMixin}` / `${parts.reset}` slot)
- *    — those compose as separate style keys whose ordering we cannot preserve by splicing,
+ *    — those compose as separate style keys whose ordering we cannot preserve by splicing, and
  *  - exactly one prop-dependent declaration. That single dynamic entry is the case the mixin
  *    path bails on, and it has no intra-helper ordering ambiguity. Zero means a plain mixin
  *    (handled by the shared-style-key path); two or more dynamic entries are emitted as
  *    styleFns/variants whose precedence depends on per-declaration source order, which the
  *    splice (which stamps the single reference order on every inlined declaration) cannot
- *    preserve — so bail, and
- *  - that prop-dependent declaration must lower to a static base+variant pair (a ternary with
- *    static branches). That path subtracts later same-property static overrides, so the
- *    consumer's `color: red;` after `${mixin}` still wins. An unconditional dynamic value
- *    lowers to a style function that does not subtract a later static override, so it is
- *    excluded (it would change styles where the helper previously bailed).
+ *    preserve.
+ *
+ * Whether the single dynamic declaration is *override-safe* is decided per reference by
+ * `propertyContestedByOtherDeclaration`, which is independent of how the value lowers.
  */
-function isInlinableHelper(helperDecl: StyledDecl): boolean {
+function inlinablePropDependentDeclaration(helperDecl: StyledDecl): CssDeclarationIR | null {
   if (helperDecl.isExported || helperDecl.preserveCssHelperDeclaration) {
-    return false;
+    return null;
   }
   let propDependentDeclaration: CssDeclarationIR | null = null;
   let propDependentCount = 0;
   for (const rule of helperDecl.rules) {
     if (rule.selector.trim() !== "&" || rule.atRuleStack.length > 0) {
-      return false;
+      return null;
     }
     for (const declaration of rule.declarations) {
       if (!declaration.property) {
-        return false;
+        return null;
       }
       if (declarationReadsProps(declaration, helperDecl.templateExpressions)) {
         propDependentCount += 1;
@@ -178,44 +176,59 @@ function isInlinableHelper(helperDecl: StyledDecl): boolean {
       }
     }
   }
-  return (
-    propDependentCount === 1 &&
-    propDependentDeclaration !== null &&
-    lowersToOverrideSafeVariant(propDependentDeclaration, helperDecl.templateExpressions)
-  );
+  return propDependentCount === 1 ? propDependentDeclaration : null;
 }
 
 /**
- * True when a prop-dependent declaration is a single-slot ternary with static literal branches
- * (e.g. `${(p) => (p.$big ? "100px" : "50px")}`). This is the shape that lowers to a static
- * base+variant pair whose later same-property static overrides are subtracted by the existing
- * rule lowering — so splicing it preserves the cascade. Unconditional dynamic values
- * (`${(p) => p.$color}`) lower to a style function that does not subtract later overrides.
+ * The single dynamic declaration is only override-safe when no *other* declaration in the merged
+ * `&` block — the helper's own static declarations or the consumer's — sets the same (or an
+ * overlapping shorthand/longhand) property. When the property is uncontested, the dynamic value
+ * is its sole contributor, so however it lowers (variant or style function) the result matches
+ * styled-components. When it is contested, the relative precedence of the dynamic entry and the
+ * static value depends on the lowering path, which splicing cannot guarantee — so bail.
  */
-function lowersToOverrideSafeVariant(
-  declaration: CssDeclarationIR,
-  templateExpressions: readonly unknown[],
+function propertyContestedByOtherDeclaration(
+  propDependent: CssDeclarationIR,
+  reference: HelperReference,
 ): boolean {
-  if (declaration.value.kind !== "interpolated" || declaration.value.parts.length !== 1) {
-    return false;
+  const property = propDependent.property;
+  const conflictsWith = (declaration: CssDeclarationIR): boolean =>
+    declaration !== propDependent &&
+    declaration !== reference.referenceDecl &&
+    !!declaration.property &&
+    propertiesConflict(declaration.property, property);
+
+  for (const rule of reference.helperDecl.rules) {
+    if (rule.declarations.some(conflictsWith)) {
+      return true;
+    }
   }
-  const part = declaration.value.parts[0];
-  if (part?.kind !== "slot") {
-    return false;
-  }
-  const expr = templateExpressions[part.slotId] as { type?: string } | undefined;
-  if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
-    return false;
-  }
-  const body = getFunctionBodyExpr(expr as { body?: unknown });
-  if (!body || (body as { type?: string }).type !== "ConditionalExpression") {
-    return false;
-  }
-  const conditional = body as { consequent?: unknown; alternate?: unknown };
+  return reference.rule.declarations.some(conflictsWith);
+}
+
+/** Whether two CSS properties affect a common StyleX property (equal, or shorthand/longhand). */
+function propertiesConflict(a: string, b: string): boolean {
+  const stylexA = cssPropertyToStylexProp(a);
+  const stylexB = cssPropertyToStylexProp(b);
   return (
-    literalToStaticValue(conditional.consequent) !== null &&
-    literalToStaticValue(conditional.alternate) !== null
+    stylexA === stylexB || shorthandCovers(stylexA, stylexB) || shorthandCovers(stylexB, stylexA)
   );
+}
+
+/** Whether StyleX shorthand `shorthand` expands to (or structurally contains) longhand `longhand`. */
+function shorthandCovers(shorthand: string, longhand: string): boolean {
+  const expansion = SHORTHAND_LONGHANDS[shorthand];
+  if (expansion?.physical.includes(longhand) || expansion?.logical.includes(longhand)) {
+    return true;
+  }
+  // camelCase prefix heuristic: `margin` covers `marginTop`, `border` covers `borderColor`,
+  // `background` covers `backgroundColor`, `font` covers `fontSize`, etc. The next character
+  // after the shorthand must start a new word (uppercase) so `width` does not match `widows`.
+  if (longhand.length <= shorthand.length || !longhand.startsWith(shorthand)) {
+    return false;
+  }
+  const nextChar = longhand[shorthand.length] ?? "";
+  return nextChar !== nextChar.toLowerCase();
 }
 
 /** True when a declaration's interpolated value reads a non-theme component prop. */
