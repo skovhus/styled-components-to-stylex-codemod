@@ -116,6 +116,24 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline when a logical shorthand contests the prop-dependent logical longhand", () => {
+    // Comment #11: `border-block-color` expands to the block start/end colors (normalized to
+    // physical top/bottom), overlapping the dynamic `border-block-start-color`.
+    const helper = cssHelperDecl("dynBlock", [
+      rule("&", [interpolatedDecl("border-block-start-color", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynBlock", [
+      rule("&", [reference, staticDecl("border-block-color", "green")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("inlines when a different sub-shorthand family does not contest", () => {
     // `border-radius` does not overlap `border-top-color`, so the inline is still safe.
     const helper = cssHelperDecl("dynBorderTop", [

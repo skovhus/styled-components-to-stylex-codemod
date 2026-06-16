@@ -237,52 +237,63 @@ function propertiesConflict(a: string, b: string): boolean {
   return false;
 }
 
-/** The atomic StyleX longhands a property can set: its expansion if a shorthand, else itself. */
+/**
+ * The atomic physical StyleX longhands a property can set. A shorthand expands to its leaves; a
+ * longhand resolves to itself. Logical properties are normalized to their physical equivalents
+ * (default LTR / horizontal-tb writing mode) so a logical declaration conservatively contends with
+ * the physical region it can affect (e.g. `borderBlockColor` vs `borderTopColor`).
+ */
 function leafLonghands(stylexProp: string): Set<string> {
   const leaves = SHORTHAND_LEAVES[stylexProp] ?? LOGICAL_TO_PHYSICAL[stylexProp];
-  return new Set(leaves ?? [stylexProp]);
+  if (leaves) {
+    return new Set(leaves.map(toPhysicalLeaf));
+  }
+  return new Set([toPhysicalLeaf(stylexProp)]);
+}
+
+/** Maps a logical atomic longhand to its physical equivalent (default LTR / horizontal-tb). */
+function toPhysicalLeaf(stylexProp: string): string {
+  return LOGICAL_LEAF_TO_PHYSICAL[stylexProp] ?? stylexProp;
+}
+
+const PHYSICAL_SIDES = ["Top", "Right", "Bottom", "Left"] as const;
+const BORDER_KINDS = ["Width", "Style", "Color"] as const;
+const LOGICAL_SIDE_TO_PHYSICAL = {
+  BlockStart: "Top",
+  BlockEnd: "Bottom",
+  InlineStart: "Left",
+  InlineEnd: "Right",
+} as const;
+
+/** Logical atomic longhand → physical atomic longhand (default LTR / horizontal-tb). */
+const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string> = {
+  insetBlockStart: "top",
+  insetBlockEnd: "bottom",
+  insetInlineStart: "left",
+  insetInlineEnd: "right",
+  borderStartStartRadius: "borderTopLeftRadius",
+  borderStartEndRadius: "borderTopRightRadius",
+  borderEndStartRadius: "borderBottomLeftRadius",
+  borderEndEndRadius: "borderBottomRightRadius",
+};
+for (const [logicalSide, physicalSide] of Object.entries(LOGICAL_SIDE_TO_PHYSICAL)) {
+  LOGICAL_LEAF_TO_PHYSICAL[`margin${logicalSide}`] = `margin${physicalSide}`;
+  LOGICAL_LEAF_TO_PHYSICAL[`padding${logicalSide}`] = `padding${physicalSide}`;
+  for (const kind of BORDER_KINDS) {
+    LOGICAL_LEAF_TO_PHYSICAL[`border${logicalSide}${kind}`] = `border${physicalSide}${kind}`;
+  }
 }
 
 /**
- * StyleX shorthand → the atomic leaf longhands it can set. Used to decide whether two declarations
- * contend for the same property. Mid-level shorthands (`borderTop`, `borderColor`) are included so
- * intersection captures partial overlap (e.g. `border` vs `borderTopColor`).
+ * StyleX shorthand → its atomic leaf longhands (in physical form). Used to decide whether two
+ * declarations contend for the same property. Mid-level shorthands (`borderTop`, `borderColor`,
+ * `borderBlock`) are included so intersection captures partial overlap (e.g. `border` vs
+ * `borderTopColor`). Directional families (margin/padding/inset/border) are generated for both
+ * their physical and logical names; logical leaves are normalized to physical via `toPhysicalLeaf`.
  */
-const BORDER_SIDES = ["Top", "Right", "Bottom", "Left"] as const;
-const BORDER_KINDS = ["Width", "Style", "Color"] as const;
 const SHORTHAND_LEAVES: Record<string, string[]> = {
-  margin: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
-  marginBlock: ["marginTop", "marginBottom"],
-  marginInline: ["marginLeft", "marginRight"],
-  padding: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
-  paddingBlock: ["paddingTop", "paddingBottom"],
-  paddingInline: ["paddingLeft", "paddingRight"],
-  scrollMargin: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
-  scrollPadding: [
-    "scrollPaddingTop",
-    "scrollPaddingRight",
-    "scrollPaddingBottom",
-    "scrollPaddingLeft",
-  ],
-  inset: ["top", "right", "bottom", "left"],
-  insetBlock: ["top", "bottom"],
-  insetInline: ["left", "right"],
   gap: ["rowGap", "columnGap"],
   overflow: ["overflowX", "overflowY"],
-  border: BORDER_SIDES.flatMap((side) => BORDER_KINDS.map((kind) => `border${side}${kind}`)),
-  borderWidth: BORDER_SIDES.map((side) => `border${side}Width`),
-  borderStyle: BORDER_SIDES.map((side) => `border${side}Style`),
-  borderColor: BORDER_SIDES.map((side) => `border${side}Color`),
-  borderBlock: ["Top", "Bottom"].flatMap((side) =>
-    BORDER_KINDS.map((kind) => `border${side}${kind}`),
-  ),
-  borderInline: ["Left", "Right"].flatMap((side) =>
-    BORDER_KINDS.map((kind) => `border${side}${kind}`),
-  ),
-  borderTop: BORDER_KINDS.map((kind) => `borderTop${kind}`),
-  borderRight: BORDER_KINDS.map((kind) => `borderRight${kind}`),
-  borderBottom: BORDER_KINDS.map((kind) => `borderBottom${kind}`),
-  borderLeft: BORDER_KINDS.map((kind) => `borderLeft${kind}`),
   borderRadius: [
     "borderTopLeftRadius",
     "borderTopRightRadius",
@@ -359,6 +370,39 @@ const SHORTHAND_LEAVES: Record<string, string[]> = {
   ],
   listStyle: ["listStyleType", "listStylePosition", "listStyleImage"],
 };
+
+// Generate the directional families (physical + logical shorthand names → physical leaves).
+for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
+  SHORTHAND_LEAVES[base] = PHYSICAL_SIDES.map((side) => `${base}${side}`);
+  SHORTHAND_LEAVES[`${base}Block`] = [`${base}Top`, `${base}Bottom`];
+  SHORTHAND_LEAVES[`${base}Inline`] = [`${base}Left`, `${base}Right`];
+}
+SHORTHAND_LEAVES.inset = ["top", "right", "bottom", "left"];
+SHORTHAND_LEAVES.insetBlock = ["top", "bottom"];
+SHORTHAND_LEAVES.insetInline = ["left", "right"];
+const borderLeaf = (side: string, kind: string): string => `border${side}${kind}`;
+SHORTHAND_LEAVES.border = PHYSICAL_SIDES.flatMap((side) =>
+  BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
+);
+for (const kind of BORDER_KINDS) {
+  SHORTHAND_LEAVES[`border${kind}`] = PHYSICAL_SIDES.map((side) => borderLeaf(side, kind));
+  SHORTHAND_LEAVES[`borderBlock${kind}`] = [borderLeaf("Top", kind), borderLeaf("Bottom", kind)];
+  SHORTHAND_LEAVES[`borderInline${kind}`] = [borderLeaf("Left", kind), borderLeaf("Right", kind)];
+}
+for (const side of PHYSICAL_SIDES) {
+  SHORTHAND_LEAVES[`border${side}`] = BORDER_KINDS.map((kind) => borderLeaf(side, kind));
+}
+SHORTHAND_LEAVES.borderBlock = ["Top", "Bottom"].flatMap((side) =>
+  BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
+);
+SHORTHAND_LEAVES.borderInline = ["Left", "Right"].flatMap((side) =>
+  BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
+);
+for (const [logicalSide, physicalSide] of Object.entries(LOGICAL_SIDE_TO_PHYSICAL)) {
+  SHORTHAND_LEAVES[`border${logicalSide}`] = BORDER_KINDS.map((kind) =>
+    borderLeaf(physicalSide, kind),
+  );
+}
 
 /** True when a declaration's interpolated value reads a non-theme component prop. */
 function declarationReadsProps(
