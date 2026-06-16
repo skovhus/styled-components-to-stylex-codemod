@@ -34,22 +34,29 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     declByLocalName.set(decl.localName, decl);
   }
 
-  // Helpers that were fully inlined into every consumer and can be removed.
+  // Helpers whose every reference was inlined: their declarations can be emptied.
   const fullyInlinedHelpers = new Set<string>();
-  // Helpers that have at least one reference we could not inline (must keep them).
+  // Helpers that have at least one reference we could not inline (must keep them intact).
   const retainedHelpers = new Set<string>();
 
   for (const consumer of styledDecls) {
     if (consumer.isCssHelper) {
       continue;
     }
-    for (const reference of collectInlinableHelperReferences(consumer, declByLocalName)) {
+    const references = collectInlinableHelperReferences(consumer, declByLocalName);
+    if (references.length === 0) {
+      continue;
+    }
+    // Snapshot the consumer's own (authored) rules before any inlining so nested helper
+    // rules can detect — and bail on — merges into a consumer-authored selector.
+    const authoredRules = new Set(consumer.rules);
+    for (const reference of references) {
       const helperDecl = reference.helperDecl;
       if (!isInlinableHelper(helperDecl, cssHelperNames)) {
         retainedHelpers.add(helperDecl.localName);
         continue;
       }
-      if (inlineHelperReference(consumer, reference)) {
+      if (inlineHelperReference(consumer, reference, authoredRules)) {
         fullyInlinedHelpers.add(helperDecl.localName);
         ctx.markChanged();
       } else {
@@ -58,13 +65,18 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     }
   }
 
-  const removableHelpers = new Set(
-    [...fullyInlinedHelpers].filter((name) => !retainedHelpers.has(name)),
-  );
-  if (removableHelpers.size > 0) {
-    ctx.styledDecls = styledDecls.filter(
-      (decl) => !(decl.isCssHelper && removableHelpers.has(decl.localName)),
-    );
+  // Empty the rules of fully-inlined helpers so they lower to nothing (no dead style keys).
+  // The decls are deliberately kept in `styledDecls`: lowerRulesStep's skipped-decl safety
+  // check relies on them remaining in `removedHelperLocalNames` to bail when a preserved
+  // consumer (partial migration / leaves-only) still references the extracted helper source.
+  for (const decl of styledDecls) {
+    if (
+      decl.isCssHelper &&
+      fullyInlinedHelpers.has(decl.localName) &&
+      !retainedHelpers.has(decl.localName)
+    ) {
+      decl.rules = [];
+    }
   }
 
   return CONTINUE;
@@ -171,8 +183,17 @@ function helperUsesProps(helperDecl: StyledDecl): boolean {
  * Splices the helper's declarations into the consumer at the reference site, remapping
  * the helper's interpolation slots onto freshly-appended consumer template expressions.
  * Returns false (without mutating) when the helper shape is not safe to inline.
+ *
+ * `authoredRules` is the set of the consumer's own rules captured before any inlining; a
+ * helper nested rule (e.g. `&:hover`) that would merge into a consumer-authored rule bails,
+ * because appending its declarations cannot preserve the `${helper}` reference's cascade
+ * position relative to the consumer's own rule for that selector.
  */
-function inlineHelperReference(consumer: StyledDecl, reference: HelperReference): boolean {
+function inlineHelperReference(
+  consumer: StyledDecl,
+  reference: HelperReference,
+  authoredRules: ReadonlySet<CssRuleIR>,
+): boolean {
   const { rule, referenceDecl, helperDecl } = reference;
   const declIndex = rule.declarations.indexOf(referenceDecl);
   if (declIndex === -1) {
@@ -199,6 +220,14 @@ function inlineHelperReference(consumer: StyledDecl, reference: HelperReference)
     if (helperRule.selector.trim() === "&" && helperRule.atRuleStack.length === 0) {
       baseDecls.push(...remapped);
     } else {
+      const existing = findMatchingRule(
+        consumer.rules,
+        helperRule.selector,
+        helperRule.atRuleStack,
+      );
+      if (existing && authoredRules.has(existing)) {
+        return false;
+      }
       nestedRuleDecls.push({
         selector: helperRule.selector,
         atRuleStack: helperRule.atRuleStack,
@@ -254,10 +283,16 @@ function offsetPlaceholders(valueRaw: string, slotOffset: number): string {
   );
 }
 
+function findMatchingRule(
+  rules: readonly CssRuleIR[],
+  selector: string,
+  atRuleStack: readonly string[],
+): CssRuleIR | undefined {
+  return rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, atRuleStack));
+}
+
 function findOrCreateRule(rules: CssRuleIR[], selector: string, atRuleStack: string[]): CssRuleIR {
-  const existing = rules.find(
-    (r) => r.selector === selector && sameArray(r.atRuleStack, atRuleStack),
-  );
+  const existing = findMatchingRule(rules, selector, atRuleStack);
   if (existing) {
     return existing;
   }
