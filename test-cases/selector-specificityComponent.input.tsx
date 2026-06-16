@@ -1,4 +1,3 @@
-// @expected-warning: Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX
 import * as React from "react";
 import styled, { css } from "styled-components";
 

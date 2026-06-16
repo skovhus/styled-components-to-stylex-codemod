@@ -272,27 +272,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      // Normalize specificity hacks (&&) before any selector analysis.
-      // Only double-ampersand is collapsed; triple-or-more (&&&) bails.
+      // Normalize specificity hacks (&&/&&&) before any selector analysis.
+      // Repeated ampersands are collapsed and annotated for validation.
       const specificityResult = normalizeSpecificityHacks(rule.selector);
-      if (specificityResult.hasHigherTier) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
-      }
-      if (specificityResult.wasStripped && decl.base.kind === "component") {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
-      }
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
@@ -302,7 +284,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isHasComponentSelector = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo && !isHasComponentSelector) {
-        annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0]);
+        annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0], {
+          assumesConsumerSxLast: decl.base.kind === "component",
+        });
 
         // Handle interpolated pseudo selectors like `&:${highlight}`.
         // Also supports prefix pseudo-classes before the interpolation,
@@ -1057,7 +1041,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // When a specificity hack is stripped, annotate the first declaration so the
     // output includes a comment explaining the change.
     if (specificityStripped && rule.declarations.length > 0) {
-      annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0]);
+      annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0], {
+        assumesConsumerSxLast: decl.base.kind === "component",
+      });
     }
 
     if (!media && isSupportedAtRule(selector.trim())) {
@@ -3611,11 +3597,12 @@ function isDirectAttrsPropValue(entry: AttrsDynamicStyleEntry): boolean {
 function annotateSpecificityStrippedDeclaration(
   selector: string,
   firstDecl: CssDeclarationIR | undefined,
+  options?: { assumesConsumerSxLast?: boolean },
 ): void {
   if (!firstDecl || !selector.includes("&&")) {
     return;
   }
-  const note = buildSpecificityStrippedComment(selector, firstDecl.property ?? "");
+  const note = buildSpecificityStrippedComment(selector, firstDecl.property ?? "", options);
   firstDecl.leadingLineComment = firstDecl.leadingLineComment
     ? `${note}\n${firstDecl.leadingLineComment}`
     : note;

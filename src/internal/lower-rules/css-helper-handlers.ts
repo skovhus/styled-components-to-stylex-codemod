@@ -74,7 +74,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     markBail,
   } = ctx;
   const cssHelperTemplateOptions = {
-    rejectStrippedSpecificity: decl.base.kind === "component",
+    assumesConsumerSxLast: decl.base.kind === "component",
   };
 
   const tplCtx: TemplateLiteralContext = {
