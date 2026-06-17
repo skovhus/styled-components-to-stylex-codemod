@@ -2192,11 +2192,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
 
       // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
-      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle)) {
+      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle, res.trueCssValueText)) {
         bail = true;
         continue;
       }
-      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle)) {
+      if (
+        !applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle, res.falseCssValueText)
+      ) {
         bail = true;
         continue;
       }
@@ -5482,6 +5484,7 @@ function applyThemeBooleanValue(
   cssProp: string,
   value: unknown,
   target: Record<string, unknown>,
+  cssValueText?: string,
 ): boolean {
   // Try to extract string value from AST node (shared across border/background paths)
   const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
@@ -5521,7 +5524,7 @@ function applyThemeBooleanValue(
   // Background shorthand → backgroundColor or backgroundImage
   // Use the actual branch value (not valueRaw which contains placeholders)
   if (cssProp === "background") {
-    target[resolveBackgroundStylexProp(strValue ?? "")] = value;
+    target[resolveBackgroundStylexProp(strValue ?? cssValueText ?? "")] = value;
     return true;
   }
 

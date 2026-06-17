@@ -380,6 +380,10 @@ export type HandlerResult =
       trueImports: ImportSpec[];
       /** Imports required for false branch value */
       falseImports: ImportSpec[];
+      /** Original/resolved CSS value text for true branch classification */
+      trueCssValueText?: string;
+      /** Original/resolved CSS value text for false branch classification */
+      falseCssValueText?: string;
     }
   | {
       /**
