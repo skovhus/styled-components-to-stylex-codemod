@@ -7192,6 +7192,13 @@ export const Box = styled.div<{ $dark: string; $light: string }>\`
   background-color: \${(props) =>
     props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
 \`;
+
+export const GradientBox = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? \`linear-gradient(\${color(props.$dark)(props)}, transparent)\`
+      : \`linear-gradient(transparent, \${color(props.$light)(props)})\`};
+\`;
 `;
 
     const result = transformWithWarnings(
@@ -7208,7 +7215,9 @@ export const Box = styled.div<{ $dark: string; $light: string }>\`
     expect(code).toContain("theme.isDark");
     expect(code).toContain("color(props.dark)");
     expect(code).toContain("color(props.light)");
+    expect(code).toContain("linear-gradient");
     expect(code).not.toContain("backgroundColor: $colors");
+    expect(code).not.toContain("linear-gradient(${$colors");
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
