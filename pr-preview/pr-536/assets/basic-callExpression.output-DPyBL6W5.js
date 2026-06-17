@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-C38btllt.js";import{j as n}from"./helpers-C4g71_MJ.js";t();var r=e(),i=n(e=>(0,r.jsx)(`div`,{...e})),a=()=>(0,r.jsx)(i,{className:`x1e2nbdu`,children:`Hello`});export{a as App};
