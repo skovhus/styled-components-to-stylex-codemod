@@ -139,9 +139,11 @@ const styles = stylex.create({
   },
   helperGradientBoxDark: {
     backgroundImage: `linear-gradient(to bottom, ${$colors.bgSub} 0%, transparent 100%)`,
+    backgroundColor: "transparent",
   },
   helperGradientBoxLight: {
     backgroundImage: `linear-gradient(to bottom, transparent 0%, ${$colors.bgBaseHover} 100%)`,
+    backgroundColor: "transparent",
   },
   runtimeColorBox: {
     color: $colors.labelMuted,

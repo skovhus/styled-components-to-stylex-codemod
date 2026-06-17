@@ -7554,6 +7554,49 @@ export const Box = styled.div\`
     expect(code).not.toContain("boxIsDark");
   });
 
+  it("should bail when helper-backed theme branches target an unsupported shorthand", () => {
+    const source = `
+import styled from "styled-components";
+import { thinPixel } from "./lib/helpers";
+
+export const Box = styled.div\`
+  padding: \${(props) => (props.theme.isDark ? thinPixel() : "4px")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanUnsupportedShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when literal theme branches target an unsupported shorthand", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  margin: \${(props) => (props.theme.isDark ? "8px 16px" : "4px")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLiteralShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should clear theme background images when a later background shorthand wins", () => {
     const source = `
 import styled from "styled-components";
@@ -7580,6 +7623,34 @@ export const Box = styled.div\`
     expect(code).not.toContain("backgroundImage");
     expect(code).not.toContain("theme.isDark");
     expect(code).not.toContain("useTheme");
+  });
+
+  it("should reset earlier background images from helper-backed theme color shorthands", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: url(/old.png);
+  background: \${(props) =>
+    props.theme.isDark ? color("bgBase")(props) : color("bgSub")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanBackgroundColorReset.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundColor: $colors.bgBase");
+    expect(code).toContain("backgroundColor: $colors.bgSub");
+    expect(code).toContain('backgroundImage: "none"');
   });
 
   it("should clear theme background images when a later resolved background helper wins", () => {
