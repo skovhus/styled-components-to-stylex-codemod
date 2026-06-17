@@ -2136,7 +2136,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
-      const outs = cssDeclarationToStylexDeclarations(d);
+      const outs =
+        d.property === "background" && res.cssValueText
+          ? [{ prop: resolveBackgroundStylexProp(res.cssValueText) }]
+          : cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
         const commentSource =
@@ -2154,6 +2157,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolveCallResult: res.resolveCallResult,
         originalExpr: expr,
         loc,
+        cssValueText: res.cssValueText,
       });
       if (runtimeOverride === "failed") {
         break;
