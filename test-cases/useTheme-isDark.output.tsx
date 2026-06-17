@@ -2,6 +2,8 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $colors, pixelVars } from "./tokens.stylex";
+import { color, runtimeColor } from "./lib/helpers";
+import type { ColorToken } from "./tokens.stylex";
 
 function Text({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
@@ -10,16 +12,63 @@ function Text({ children }: { children?: React.ReactNode }) {
   );
 }
 
-// theme.isDark choosing between curried color helper calls
-function HelperColorBox({ children }: { children?: React.ReactNode }) {
+type HelperColorBoxProps = {
+  dark: ColorToken;
+  light: ColorToken;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
+
+// theme.isDark choosing between curried color helper calls with dynamic keys
+function HelperColorBox(props: HelperColorBoxProps) {
+  const { children, dark, light } = props;
+  const theme = useTheme();
+
+  return (
+    <div
+      sx={styles.helperColorBox(
+        theme.isDark
+          ? color(props.dark)({
+              ...props,
+              theme,
+            })
+          : color(props.light)({
+              ...props,
+              theme,
+            }),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// theme.isDark choosing between helper-backed template background values
+function HelperGradientBox({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
     <div
       sx={[
-        styles.helperColorBox,
-        theme.isDark ? styles.helperColorBoxDark : styles.helperColorBoxLight,
+        styles.helperGradientBox,
+        theme.isDark ? styles.helperGradientBoxDark : styles.helperGradientBoxLight,
       ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+// theme.isDark with one unresolved helper branch that falls back to inline style
+function RuntimeColorBox({ children }: { children?: React.ReactNode }) {
+  const theme = useTheme();
+  const sx = stylex.props(styles.runtimeColorBox);
+
+  return (
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        color: theme.isDark ? runtimeColor() : undefined,
+      }}
     >
       {children}
     </div>
@@ -57,7 +106,11 @@ function DayPicker({ children }: { children?: React.ReactNode }) {
 export const App = () => (
   <div>
     <Text>Label</Text>
-    <HelperColorBox>Helper color box</HelperColorBox>
+    <HelperColorBox dark="bgBorderSolid" light="bgBaseHover">
+      Helper color box
+    </HelperColorBox>
+    <HelperGradientBox>Helper gradient box</HelperGradientBox>
+    <RuntimeColorBox>Runtime color box</RuntimeColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
@@ -75,15 +128,24 @@ const styles = stylex.create({
     color: $colors.labelMuted,
     borderColor: $colors.bgBorderFaint,
   },
-  helperColorBox: {
+  helperColorBox: (backgroundColor: string) => ({
+    color: $colors.labelBase,
+    padding: 12,
+    backgroundColor,
+  }),
+  helperGradientBox: {
     color: $colors.labelBase,
     padding: 12,
   },
-  helperColorBoxDark: {
-    backgroundColor: $colors.bgBorderSolid,
+  helperGradientBoxDark: {
+    backgroundImage: `linear-gradient(to bottom, ${$colors.bgSub} 0%, transparent 100%)`,
   },
-  helperColorBoxLight: {
-    backgroundColor: $colors.bgBaseHover,
+  helperGradientBoxLight: {
+    backgroundImage: `linear-gradient(to bottom, transparent 0%, ${$colors.bgBaseHover} 100%)`,
+  },
+  runtimeColorBox: {
+    color: $colors.labelMuted,
+    padding: 8,
   },
   boxLight: {
     padding: pixelVars.thin,

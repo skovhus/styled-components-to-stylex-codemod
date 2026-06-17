@@ -7183,6 +7183,34 @@ export const Box = styled.div<{ tone: string }>\`
     expect(code).not.toContain("backgroundColor: $colors");
   });
 
+  it("should not split dynamic helper theme branches into static theme variants", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background-color: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanDynamicArg.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("color(props.dark)");
+    expect(code).toContain("color(props.light)");
+    expect(code).not.toContain("backgroundColor: $colors");
+  });
+
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
     const source = `
 import styled from "styled-components";

@@ -19,6 +19,8 @@ export const color =
   (props: ThemedStyledProps): string =>
     props.theme.color[colorName];
 
+export const runtimeColor = (): string => "#2d3748";
+
 export const paletteColor = (colorName: ThemeColor): string => {
   const colors: Record<ThemeColor, string> = {
     accent: "#8B5CF6",
