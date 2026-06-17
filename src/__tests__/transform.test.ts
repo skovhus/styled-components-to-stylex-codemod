@@ -7394,25 +7394,60 @@ export const Box = styled.div<{ $dark: string; $light: string }>\`
   });
 
   it("should bail instead of emitting an unconditional class for omitted theme branches", () => {
+    for (const [caseName, emptyBranch] of [
+      ["undefined", "undefined"],
+      ["emptyString", '""'],
+      ["emptyTemplate", "``"],
+    ]) {
+      const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? color("labelBase")(props) : ${emptyBranch})};
+\`;
+`;
+
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, `helper-themeBooleanOmittedBranch-${caseName}.input.tsx`),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: fixtureAdapter },
+      );
+
+      expect(result.code, caseName).toBeNull();
+    }
+  });
+
+  it("should let later base declarations override helper-backed theme branches", () => {
     const source = `
 import styled from "styled-components";
 import { color } from "./lib/helpers";
 
 export const Box = styled.div\`
-  color: \${(props) => (props.theme.isDark ? color("labelBase")(props) : undefined)};
+  background: \${(props) =>
+    props.theme.isDark ? color("bgSub")(props) : color("bgBase")(props)};
+  background: white;
 \`;
 `;
 
     const result = transformWithWarnings(
       {
         source,
-        path: join(testCasesDir, "helper-themeBooleanOmittedBranch.input.tsx"),
+        path: join(testCasesDir, "helper-themeBooleanLaterBaseOverride.input.tsx"),
       },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).toBeNull();
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+    expect(code).not.toContain("boxIsDark");
   });
 
   it("should bail instead of hoisting helper-backed theme branches out of nested selectors", () => {

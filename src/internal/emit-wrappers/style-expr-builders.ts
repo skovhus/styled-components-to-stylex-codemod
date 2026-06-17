@@ -734,11 +734,15 @@ export function buildVariantDimensionLookups(
 export type OrderedStyleEntry = { order: number; expr: ExpressionKind };
 
 export function hasStyleSourceOrder(
-  d: Pick<StyledDecl, "variantSourceOrder" | "styleFnFromProps" | "pseudoAliasSelectors">,
+  d: Pick<
+    StyledDecl,
+    "variantSourceOrder" | "styleFnFromProps" | "pseudoAliasSelectors" | "needsUseThemeHook"
+  >,
 ): boolean {
   return (
     !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0) ||
-    (d.pseudoAliasSelectors ?? []).some((entry) => entry.sourceOrder !== undefined)
+    (d.pseudoAliasSelectors ?? []).some((entry) => entry.sourceOrder !== undefined) ||
+    (d.needsUseThemeHook ?? []).some((entry) => entry.sourceOrder !== undefined)
   );
 }
 
@@ -1161,6 +1165,7 @@ export function appendThemeBooleanStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
   markNeedsUseThemeImport: () => void,
+  orderedEntries?: OrderedStyleEntry[],
 ): boolean {
   if (!hooks || hooks.length === 0) {
     return false;
@@ -1181,7 +1186,12 @@ export function appendThemeBooleanStyleArgs(
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
       : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
-    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+    const finalExpr = j.conditionalExpression(condition, trueExpr, falseExpr);
+    if (orderedEntries && entry.sourceOrder !== undefined) {
+      orderedEntries.push({ order: entry.sourceOrder, expr: finalExpr });
+    } else {
+      styleArgs.push(finalExpr);
+    }
   }
   return true;
 }
