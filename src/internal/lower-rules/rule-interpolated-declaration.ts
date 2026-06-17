@@ -970,6 +970,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       jsxProp: "__props" as const,
       condition: "always" as const,
       callArg: cloneAstNode(runtimeCallArg) as ExpressionKind,
+      sourceOrder: ctx.allocateSourceOrder(),
     };
     if (existingIdx >= 0) {
       styleFnFromProps[existingIdx] = newEntry;
@@ -2212,6 +2213,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Initialize the style objects
         extraStyleObjects.set(trueStyleKey, {});
         extraStyleObjects.set(falseStyleKey, {});
+      } else {
+        entry.sourceOrder = ctx.allocateSourceOrder();
       }
 
       // Add the property to the true/false style objects
