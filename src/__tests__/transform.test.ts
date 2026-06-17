@@ -7672,6 +7672,42 @@ export const App = () => <Box active />;
     }
   });
 
+  it("should preserve theme hook styles in polymorphic intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+\`;
+
+export const App = () => <Box as="section">Themed</Box>;
+`;
+
+    const adapterWithAsSupport = {
+      ...fixtureAdapter,
+      externalInterface() {
+        return { styles: false, as: true, ref: false };
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanPolymorphicIntrinsic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAsSupport },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("const theme = useTheme();");
+    expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).toContain("as?: C");
+  });
+
   it("should keep repeated same-theme declarations at their latest source order", () => {
     const source = `
 import styled from "styled-components";
