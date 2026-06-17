@@ -7303,6 +7303,96 @@ export const Box = styled.div\`
     expect(code).toContain("styles.boxColor(");
   });
 
+  it("should bail on mixed background branches with adapter runtime overrides", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+\`;
+`;
+
+    const adapterWithRuntimeGradientFallback = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme" && ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`linear-gradient(red, transparent)`",
+            imports: [],
+            preserveRuntimeCall: true,
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanMixedBackgroundRuntime.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeGradientFallback },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail on mixed dynamic background template and helper branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? \`linear-gradient(\${color(props.$dark)(props)}, transparent)\`
+      : color(props.$light)(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanMixedDynamicBackground.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should bail instead of emitting an unconditional class for omitted theme branches", () => {
     const source = `
 import styled from "styled-components";
