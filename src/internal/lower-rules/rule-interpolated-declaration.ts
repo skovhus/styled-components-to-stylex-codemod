@@ -2201,6 +2201,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           themeProp: res.themeProp,
           trueStyleKey,
           falseStyleKey,
+          sourceOrder: ctx.allocateSourceOrder(),
         };
         decl.needsUseThemeHook.push(entry);
 

@@ -86,6 +86,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropMedia,
     nestedSelectors,
     variantBuckets,
+    extraStyleObjects,
     styleFnDecls,
     attrBuckets,
     localVarValues,
@@ -1357,6 +1358,48 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     };
 
+    const clearEarlierThemeBaseValues = (prop: string, laterBaseValue: unknown): void => {
+      const hooks = decl.needsUseThemeHook;
+      if (!hooks?.length) {
+        return;
+      }
+      const laterBaseIsImportant = cssValueIsImportant(laterBaseValue);
+      const clearHookStyleKey = (
+        hook: NonNullable<StyledDecl["needsUseThemeHook"]>[number],
+        side: "trueStyleKey" | "falseStyleKey",
+      ): boolean => {
+        const styleKey = hook[side];
+        if (!styleKey) {
+          return false;
+        }
+        const bucket = extraStyleObjects.get(styleKey);
+        if (!bucket || !Object.hasOwn(bucket, prop)) {
+          return false;
+        }
+        const bucketValue = bucket[prop];
+        if (!laterBaseIsImportant && cssValueIsImportant(bucketValue)) {
+          return false;
+        }
+        delete bucket[prop];
+        if (Object.keys(bucket).length === 0) {
+          extraStyleObjects.delete(styleKey);
+          hook[side] = null;
+        }
+        return true;
+      };
+
+      for (let i = hooks.length - 1; i >= 0; i--) {
+        const hook = hooks[i]!;
+        const hadStyleKeys = Boolean(hook.trueStyleKey || hook.falseStyleKey);
+        const clearedTrue = clearHookStyleKey(hook, "trueStyleKey");
+        const clearedFalse = clearHookStyleKey(hook, "falseStyleKey");
+        const changed = clearedTrue || clearedFalse;
+        if (changed && hadStyleKeys && !hook.trueStyleKey && !hook.falseStyleKey) {
+          hooks.splice(i, 1);
+        }
+      }
+    };
+
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
@@ -1657,6 +1700,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
       clearEarlierVariantBaseValues(prop, value);
+      clearEarlierThemeBaseValues(prop, value);
       const target = ctx.getBaseStyleTarget();
       setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);

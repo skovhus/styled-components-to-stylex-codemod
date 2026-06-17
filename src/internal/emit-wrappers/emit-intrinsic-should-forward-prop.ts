@@ -381,15 +381,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       extraStyleArgsAfterBase,
     );
 
-    // Handle theme boolean conditionals - add conditional true/false style args
-    const needsUseTheme = appendThemeBooleanStyleArgs(
-      d.needsUseThemeHook,
-      styleArgs,
-      j,
-      stylesIdentifier,
-      () => ctx.markNeedsUseThemeImport(),
-    );
-
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
     const booleanProps = collectBooleanPropNames(d);
     const knownProps = collectKnownConditionPropNames(emitter, d);
@@ -398,6 +389,16 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // When source order is available, entries are sorted to preserve CSS cascade order.
     const hasSourceOrder = hasStyleSourceOrder(d);
     const orderedEntries: OrderedStyleEntry[] = [];
+
+    // Handle theme boolean conditionals - add conditional true/false style args
+    const needsUseTheme = appendThemeBooleanStyleArgs(
+      d.needsUseThemeHook,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      () => ctx.markNeedsUseThemeImport(),
+      hasSourceOrder ? orderedEntries : undefined,
+    );
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(
       d,

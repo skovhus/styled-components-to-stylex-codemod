@@ -498,6 +498,8 @@ export type StyledDecl = {
     trueStyleKey: string | null;
     /** Style key for when condition is false. null → emit `undefined` (empty branch). */
     falseStyleKey: string | null;
+    /** Source order index for CSS cascade ordering against variant/styleFn entries. */
+    sourceOrder?: number;
   }>;
   /**
    * Whether this component should support external className/style extension.
