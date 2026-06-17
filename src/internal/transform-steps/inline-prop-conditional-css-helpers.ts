@@ -464,6 +464,10 @@ const SHORTHAND_LEAVES: Record<string, string[]> = {
     "textDecorationColor",
     "textDecorationThickness",
   ],
+  // `white-space` is a CSS Text L4 shorthand for `white-space-collapse` and `text-wrap-mode`;
+  // `text-wrap` is a shorthand for `text-wrap-mode` and `text-wrap-style`.
+  whiteSpace: ["whiteSpaceCollapse", "textWrapMode"],
+  textWrap: ["textWrapMode", "textWrapStyle"],
   listStyle: ["listStyleType", "listStylePosition", "listStyleImage"],
 };
 

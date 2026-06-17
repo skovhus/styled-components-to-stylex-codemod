@@ -201,6 +201,23 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline a text-wrap-mode longhand contested by the white-space shorthand", () => {
+    // Comment #24: `white-space` is a CSS Text L4 shorthand for `white-space-collapse` and
+    // `text-wrap-mode`, so it contends with a dynamic `text-wrap-mode` helper even though neither
+    // name is a prefix of the other.
+    const helper = cssHelperDecl("dynWrap", [rule("&", [interpolatedDecl("text-wrap-mode", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynWrap", [
+      rule("&", [reference, staticDecl("white-space", "nowrap")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a border-image longhand contested by the border shorthand", () => {
     // Comment #21: `border` resets `border-image` to its initial value, so it contends with a
     // dynamic `border-image-source` even though `border` only sets width/style/color.
