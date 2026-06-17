@@ -520,6 +520,26 @@ export function tryResolveConditionalValue(
     return branchToExpr(value, "optional");
   };
 
+  const isEmptyCssInterpolationBranch = (value: unknown): boolean => {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const node = value as { type?: string; name?: string; value?: unknown };
+    if (node.type === "Identifier" && node.name === "undefined") {
+      return true;
+    }
+    if (node.type === "NullLiteral") {
+      return true;
+    }
+    if (node.type === "BooleanLiteral" && node.value === false) {
+      return true;
+    }
+    if (node.type === "Literal" && (node.value === null || node.value === false)) {
+      return true;
+    }
+    return false;
+  };
+
   const resolveThemeBooleanStyleValue = (
     branch: unknown,
   ): { value: unknown; imports: ImportSpec[]; cssValueText?: string } | null => {
@@ -604,6 +624,13 @@ export function tryResolveConditionalValue(
           ? { runtimeCssValueText: runtimeCallInfo.cssValueText }
           : {}),
       };
+    }
+
+    if (
+      (trueValue === null) !== (falseValue === null) &&
+      isEmptyCssInterpolationBranch(trueValue === null ? trueBranch : falseBranch)
+    ) {
+      return null;
     }
 
     // Fallback: one branch resolved but the other is an unresolvable call expression.

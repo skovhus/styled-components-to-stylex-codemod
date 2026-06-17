@@ -2163,6 +2163,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
     if (res && res.type === "splitThemeBooleanVariants") {
+      if (pseudos?.length || media || pseudoElement) {
+        bail = true;
+        continue;
+      }
       // Add imports if present
       addResolverImports(res.trueImports);
       addResolverImports(res.falseImports);

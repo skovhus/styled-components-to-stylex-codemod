@@ -7303,6 +7303,100 @@ export const Box = styled.div\`
     expect(code).toContain("styles.boxColor(");
   });
 
+  it("should bail instead of emitting an unconditional class for omitted theme branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? color("labelBase")(props) : undefined)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanOmittedBranch.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail instead of hoisting helper-backed theme branches out of nested selectors", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  &:hover {
+    color: \${(props) =>
+      props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanNestedSelector.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should preserve stylex imported values in optional theme branch probing", () => {
+    const source = `
+import styled from "styled-components";
+import { $colors } from "./tokens.stylex";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? $colors.bgSub : $colors.bgBase)};
+\`;
+`;
+
+    const adapterWithoutImportedValueResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "importedValue") {
+          throw new Error("Imported values should use .stylex passthrough");
+        }
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanStylexImport.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutImportedValueResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("$colors.bgSub");
+    expect(code).toContain("$colors.bgBase");
+    expect(code).toContain("theme.isDark");
+  });
+
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
     const source = `
 import styled from "styled-components";
