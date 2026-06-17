@@ -2027,6 +2027,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
+      if (hasSourceOrderedThemeStyleOverlap(decl, extraStyleObjects, res.cssText)) {
+        bail = true;
+        continue;
+      }
       addResolverImports(res.imports);
       const exprAst = parseExpr(res.expr);
       if (!exprAst) {
@@ -7086,6 +7090,78 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
 
 function hasRuntimeImport(imports: readonly ImportSpec[] | undefined): boolean {
   return (imports ?? []).some((imp) => !isStylexImportSource(imp.from.value));
+}
+
+function hasSourceOrderedThemeStyleOverlap(
+  decl: StyledDecl,
+  extraStyleObjects: ReadonlyMap<string, Record<string, unknown>>,
+  cssText: string | undefined,
+): boolean {
+  const themeProps = new Set<string>();
+  for (const entry of decl.needsUseThemeHook ?? []) {
+    if (entry.sourceOrder === undefined) {
+      continue;
+    }
+    collectStyleObjectProps(extraStyleObjects.get(entry.trueStyleKey ?? ""), themeProps);
+    collectStyleObjectProps(extraStyleObjects.get(entry.falseStyleKey ?? ""), themeProps);
+  }
+  return cssTextMayOverlapStylexProps(cssText, themeProps);
+}
+
+function collectStyleObjectProps(
+  style: Record<string, unknown> | undefined,
+  props: Set<string>,
+): void {
+  if (!style) {
+    return;
+  }
+  for (const prop of Object.keys(style)) {
+    props.add(prop);
+  }
+}
+
+function cssTextMayOverlapStylexProps(
+  cssText: string | undefined,
+  props: ReadonlySet<string>,
+): boolean {
+  if (props.size === 0) {
+    return false;
+  }
+  if (!cssText) {
+    return true;
+  }
+
+  const chunks = cssText
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) {
+    return true;
+  }
+
+  for (const chunk of chunks) {
+    const match = chunk.match(/^([^:]+):([\s\S]+)$/);
+    if (!match?.[1] || !match[2]) {
+      return true;
+    }
+    const property = match[1].trim();
+    const valueRaw = match[2].trim();
+    if (laterDeclarationMayResetStylexProps(property, props)) {
+      return true;
+    }
+    for (const out of cssDeclarationToStylexDeclarations({
+      property,
+      value: { kind: "static", value: valueRaw },
+      important: false,
+      valueRaw,
+    })) {
+      if (hasOverlappingStylexProp(props, out.prop)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function hasLaterDeclarationForStylexProps(

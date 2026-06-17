@@ -7653,6 +7653,50 @@ export const Box = styled.div\`
     expect(code).toContain('backgroundImage: "none"');
   });
 
+  it("should bail when a later resolved style helper can override source-ordered theme buckets", () => {
+    const source = `
+import styled from "styled-components";
+import { color, colorMixin } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  \${colorMixin()};
+\`;
+`;
+
+    const adapterWithColorMixin = {
+      ...fixtureAdapter,
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "colorMixin") {
+          return {
+            usage: "props" as const,
+            expr: "mixins.color",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./mixins.stylex" },
+                names: [{ imported: "mixins" }],
+              },
+            ],
+            cssText: "color: green;",
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanResolvedMixinOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithColorMixin },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should clear theme background images when a later resolved background helper wins", () => {
     const source = `
 import styled from "styled-components";
