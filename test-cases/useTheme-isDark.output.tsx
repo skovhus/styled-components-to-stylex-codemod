@@ -132,6 +132,7 @@ const styles = stylex.create({
     color: $colors.labelBase,
     padding: 12,
     backgroundColor,
+    backgroundImage: "none",
   }),
   helperGradientBox: {
     color: $colors.labelBase,

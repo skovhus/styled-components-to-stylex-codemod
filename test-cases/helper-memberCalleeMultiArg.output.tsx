@@ -224,6 +224,7 @@ const styles = stylex.create({
   tintedPanel: (backgroundColor: string) => ({
     padding: 4,
     backgroundColor,
+    backgroundImage: "none",
   }),
   plainSwatch: (backgroundColor: string) => ({
     padding: 4,

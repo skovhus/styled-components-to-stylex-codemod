@@ -954,7 +954,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const out = outs[0]!;
-    const runtimeStyle = { [out.prop]: runtimeCallArg } as Record<string, unknown>;
+    const runtimeProp = out.prop;
+    const runtimeStyle = { [runtimeProp]: runtimeCallArg } as Record<string, unknown>;
+    if (runtimeBackgroundProp) {
+      applyBackgroundShorthandLayerReset(j, runtimeStyle, runtimeBackgroundProp, d.important);
+    }
     if (
       !subtractLaterStaticOverrides({
         rule,
@@ -976,32 +980,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (runtimeProps.length === 0) {
       return "suppressed";
     }
-    if (runtimeProps.length > 1) {
-      warnings.push({
-        severity: "error",
-        type: "Arrow function: helper call body is not supported",
-        loc,
-      });
-      bail = true;
-      return "failed";
-    }
-    const [runtimeProp] = runtimeProps;
-    if (!runtimeProp) {
-      return "suppressed";
-    }
 
     const fnKey = styleKeyWithSuffix(decl.styleKey, runtimeProp);
-    if (!styleFnDecls.has(fnKey)) {
-      const outParamName = cssPropertyToIdentifier(runtimeProp, avoidNames);
-      const param = j.identifier(outParamName);
-      if (/\.(ts|tsx)$/.test(filePath)) {
-        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          j.tsStringKeyword(),
-        );
-      }
-      const body = j.objectExpression([makeCssProperty(j, runtimeProp, outParamName)]);
-      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    const outParamName = cssPropertyToIdentifier(runtimeProp, avoidNames);
+    const param = j.identifier(outParamName);
+    if (/\.(ts|tsx)$/.test(filePath)) {
+      (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+        j.tsStringKeyword(),
+      );
     }
+    const body = j.objectExpression(
+      Object.entries(runtimeStyle).map(([prop, value]) =>
+        prop === runtimeProp
+          ? makeCssProperty(j, runtimeProp, outParamName)
+          : j.property(
+              "init",
+              makeCssPropKey(j, prop),
+              cloneAstNode(value as ExpressionKind) as ExpressionKind,
+            ),
+      ),
+    );
+    styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
 
     // P2 fix: Later declarations should override earlier ones (CSS source order).
     // Find and replace existing entry instead of skipping, or add new if not found.
@@ -5760,11 +5759,7 @@ function applyThemeBooleanValue(
     }
     const backgroundProp = resolveBackgroundStylexProp(backgroundText);
     target[backgroundProp] = appendImportantToStyleValue(j, value, important);
-    if (backgroundProp === "backgroundColor") {
-      target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
-    } else {
-      target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
-    }
+    applyBackgroundShorthandLayerReset(j, target, backgroundProp, important);
     return true;
   }
 
@@ -5812,12 +5807,25 @@ function appendSourceOrders(
   }
 }
 
-type RuntimeBackgroundStylexProp = "backgroundImage" | "backgroundColor";
+type BackgroundLayerStylexProp = "backgroundImage" | "backgroundColor";
+
+function applyBackgroundShorthandLayerReset(
+  j: JSCodeshift,
+  target: Record<string, unknown>,
+  backgroundProp: BackgroundLayerStylexProp,
+  important: boolean,
+): void {
+  if (backgroundProp === "backgroundColor") {
+    target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
+    return;
+  }
+  target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
+}
 
 function resolveRuntimeBackgroundStylexProp(
   value: unknown,
   cssValueText?: string,
-): RuntimeBackgroundStylexProp | "unsupported" | null {
+): BackgroundLayerStylexProp | "unsupported" | null {
   const node = unwrapExpressionNode(value);
   if (node?.type !== "ConditionalExpression") {
     const staticText = getRuntimeBackgroundStaticText(node);
@@ -5850,7 +5858,7 @@ function resolveRuntimeBackgroundStylexProp(
   return "backgroundColor";
 }
 
-function classifyRuntimeBackgroundBranch(value: unknown): RuntimeBackgroundStylexProp | null {
+function classifyRuntimeBackgroundBranch(value: unknown): BackgroundLayerStylexProp | null {
   const staticText = getRuntimeBackgroundStaticText(unwrapExpressionNode(value));
   return staticText === null ? null : resolveBackgroundStylexProp(staticText);
 }

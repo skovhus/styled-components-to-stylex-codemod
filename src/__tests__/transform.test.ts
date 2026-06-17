@@ -7228,6 +7228,37 @@ export const CalcBox = styled.div<{ $dark: string }>\`
     expect(code).not.toContain("calc($colors");
   });
 
+  it("should reset earlier background images for runtime background shorthand helper branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: url(/old.png);
+  background: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeBackgroundReset.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).not.toContain('backgroundImage: "url(/old.png)"');
+    expect(code).toContain("backgroundColor,");
+    expect(code).toContain('backgroundImage: "none"');
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("color(props.dark)");
+    expect(code).toContain("color(props.light)");
+  });
+
   it("should not statically resolve curried helper branches with non-current outer args", () => {
     const source = `
 import styled from "styled-components";
@@ -8566,7 +8597,7 @@ export const App = () => <Box>Box</Box>;
     const code = result.code ?? "";
     expect(code).toContain("backgroundImage");
     expect(code).toContain('stylex.props(styles.box(imageHelper("hero")))');
-    expect(code).not.toContain("backgroundColor");
+    expect(code).toContain('backgroundColor: "transparent"');
   });
 
   it("should preserve static suffix in runtime call override (P1 fix)", () => {
