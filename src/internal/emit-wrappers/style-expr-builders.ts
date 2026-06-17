@@ -1372,13 +1372,14 @@ export function buildAllVariantAndStyleExprs(opts: {
   compoundVariantKeys: ReadonlySet<string>;
   afterVariantStyleArgs?: ExpressionKind[];
   enableComplementaryMerging?: boolean;
+  markNeedsUseThemeImport?: () => void;
   /** Custom compound variant builder from ctx.helpers */
   buildCompoundVariantExpressions: (
     compoundVariants: NonNullable<StyledDecl["compoundVariants"]>,
     styleArgs: ExpressionKind[],
     destructureProps: string[],
   ) => void;
-}): void {
+}): boolean {
   const {
     d,
     emitter,
@@ -1390,6 +1391,7 @@ export function buildAllVariantAndStyleExprs(opts: {
     compoundVariantKeys,
     afterVariantStyleArgs,
     enableComplementaryMerging,
+    markNeedsUseThemeImport,
     buildCompoundVariantExpressions,
   } = opts;
 
@@ -1397,6 +1399,16 @@ export function buildAllVariantAndStyleExprs(opts: {
   const knownProps = collectKnownConditionPropNames(emitter, d);
   const hasSourceOrder = hasStyleSourceOrder(d);
   const orderedEntries: OrderedStyleEntry[] = [];
+  const needsUseTheme = markNeedsUseThemeImport
+    ? appendThemeBooleanStyleArgs(
+        d.needsUseThemeHook,
+        styleArgs,
+        j,
+        stylesIdentifier,
+        markNeedsUseThemeImport,
+        hasSourceOrder ? orderedEntries : undefined,
+      )
+    : false;
 
   buildVariantStyleExprs({
     d,
@@ -1459,6 +1471,8 @@ export function buildAllVariantAndStyleExprs(opts: {
   if (afterVariantStyleArgs && afterVariantStyleArgs.length > 0) {
     styleArgs.push(...afterVariantStyleArgs);
   }
+
+  return needsUseTheme;
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */

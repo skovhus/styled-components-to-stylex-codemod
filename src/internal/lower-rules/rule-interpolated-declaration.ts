@@ -2116,6 +2116,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Preserve !important by appending it to the suffix
       const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
       const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
+      const cssValueTextForClassification =
+        prefix || effectiveSuffix ? wrappedExpr : res.cssValueText;
 
       const exprAst = parseExpr(wrappedExpr);
       if (!exprAst) {
@@ -2138,8 +2140,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         break;
       }
       const outs =
-        d.property === "background" && res.cssValueText
-          ? [{ prop: resolveBackgroundStylexProp(res.cssValueText) }]
+        d.property === "background" && cssValueTextForClassification
+          ? [{ prop: resolveBackgroundStylexProp(cssValueTextForClassification) }]
           : cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
@@ -2158,7 +2160,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolveCallResult: res.resolveCallResult,
         originalExpr: expr,
         loc,
-        cssValueText: res.cssValueText,
+        cssValueText: cssValueTextForClassification,
       });
       if (runtimeOverride === "failed") {
         break;
