@@ -7301,6 +7301,10 @@ export const Box = styled.div\`
     expect(code).toContain("ColorConverter.cssWithAlpha");
     expect(code).toContain("theme.isDark");
     expect(code).toContain("styles.boxColor(");
+    const themeStyleIndex = code.indexOf("theme.isDark ? styles.boxDark : styles.boxLight");
+    const runtimeStyleIndex = code.indexOf("styles.boxColor(");
+    expect(themeStyleIndex).toBeGreaterThanOrEqual(0);
+    expect(runtimeStyleIndex).toBeGreaterThan(themeStyleIndex);
   });
 
   it("should bail on mixed background branches with adapter runtime overrides", () => {
@@ -7448,6 +7452,42 @@ export const Box = styled.div\`
     expect(code).not.toContain("theme.isDark");
     expect(code).not.toContain("useTheme");
     expect(code).not.toContain("boxIsDark");
+  });
+
+  it("should keep repeated same-theme declarations at their latest source order", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ active: boolean }>\`
+  color: \${(props) => (props.theme.isDark ? "red" : "blue")};
+  color: \${(props) => (props.active ? "green" : "yellow")};
+  color: \${(props) => (props.theme.isDark ? "black" : "white")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRepeatedSourceOrder.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    const variantStyleMatch = code.match(
+      /active\s*\?\s*styles\.box[A-Za-z0-9_]*(?:\s*:\s*styles\.box[A-Za-z0-9_]*)?|styles\.box[A-Za-z0-9_]*\(active/,
+    );
+    const variantStyleIndex = variantStyleMatch?.index ?? -1;
+    const themeStyleIndex = code.indexOf("theme.isDark ? styles.boxDark : styles.boxLight");
+    if (variantStyleIndex >= 0) {
+      expect(themeStyleIndex).toBeGreaterThan(variantStyleIndex);
+    }
+    expect(code).toContain('color: "black"');
+    expect(code).toContain('color: "white"');
+    expect(code).not.toContain('color: "red"');
+    expect(code).not.toContain('color: "blue"');
   });
 
   it("should bail instead of hoisting helper-backed theme branches out of nested selectors", () => {
