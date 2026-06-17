@@ -5631,8 +5631,24 @@ function applyThemeBooleanValue(
   // Background shorthand → backgroundColor or backgroundImage
   // Use the actual branch value (not valueRaw which contains placeholders)
   if (cssProp === "background") {
-    target[resolveBackgroundStylexProp(strValue ?? cssValueText ?? "")] = value;
+    const backgroundText = strValue ?? cssValueText ?? "";
+    if (backgroundText.trim() === "none") {
+      target.backgroundImage = j.literal("none");
+      target.backgroundColor = j.literal("transparent");
+      return true;
+    }
+    const backgroundProp = resolveBackgroundStylexProp(backgroundText);
+    target[backgroundProp] = value;
+    if (backgroundProp === "backgroundColor") {
+      target.backgroundImage = j.literal("none");
+    } else {
+      target.backgroundColor = j.literal("transparent");
+    }
     return true;
+  }
+
+  if (isCssShorthandProperty(cssProp)) {
+    return false;
   }
 
   // Default: camelCase the property name
