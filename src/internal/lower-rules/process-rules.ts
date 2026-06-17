@@ -1358,11 +1358,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     };
 
-    const clearEarlierThemeBaseValues = (prop: string, laterBaseValue: unknown): void => {
+    const clearEarlierThemeBaseValues = (
+      prop: string,
+      laterBaseValue: unknown,
+      sourceCssProperty?: string,
+    ): void => {
       const hooks = decl.needsUseThemeHook;
       if (!hooks?.length) {
         return;
       }
+      const propsToClear =
+        sourceCssProperty === "background" ? ["backgroundColor", "backgroundImage"] : [prop];
       const laterBaseIsImportant = cssValueIsImportant(laterBaseValue);
       const clearHookStyleKey = (
         hook: NonNullable<StyledDecl["needsUseThemeHook"]>[number],
@@ -1373,14 +1379,24 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           return false;
         }
         const bucket = extraStyleObjects.get(styleKey);
-        if (!bucket || !Object.hasOwn(bucket, prop)) {
+        if (!bucket) {
           return false;
         }
-        const bucketValue = bucket[prop];
-        if (!laterBaseIsImportant && cssValueIsImportant(bucketValue)) {
+        let changed = false;
+        for (const propToClear of propsToClear) {
+          if (!Object.hasOwn(bucket, propToClear)) {
+            continue;
+          }
+          const bucketValue = bucket[propToClear];
+          if (!laterBaseIsImportant && cssValueIsImportant(bucketValue)) {
+            continue;
+          }
+          delete bucket[propToClear];
+          changed = true;
+        }
+        if (!changed) {
           return false;
         }
-        delete bucket[prop];
         if (Object.keys(bucket).length === 0) {
           extraStyleObjects.delete(styleKey);
           hook[side] = null;
@@ -1700,7 +1716,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
       clearEarlierVariantBaseValues(prop, value);
-      clearEarlierThemeBaseValues(prop, value);
+      clearEarlierThemeBaseValues(prop, value, sourceCssProperty);
       const target = ctx.getBaseStyleTarget();
       setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);

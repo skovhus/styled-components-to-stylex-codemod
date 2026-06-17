@@ -7454,6 +7454,95 @@ export const Box = styled.div\`
     expect(code).not.toContain("boxIsDark");
   });
 
+  it("should clear theme background images when a later background shorthand wins", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? "linear-gradient(red, blue)" : "url(/light.png)"};
+  background: white;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLaterBackgroundShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("backgroundImage");
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+  });
+
+  it("should classify full background values wrapped around resolved helpers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: linear-gradient(\${(props) => color("bgSub")(props)}, transparent);
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-backgroundWrappedResolvedValue.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundImage");
+    expect(code).toContain("linear-gradient");
+    expect(code).not.toContain("backgroundColor");
+  });
+
+  it("should preserve theme hook ordering in intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const Box = styled.div<{ active: boolean }>\`
+  color: \${(props) => (props.active ? "green" : "yellow")};
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+\`;
+
+export const App = () => <Box active />;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanIntrinsicOrder.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    const activeStyleMatch = code.match(
+      /active\s*\?\s*styles\.box[A-Za-z0-9_]*(?:\s*:\s*styles\.box[A-Za-z0-9_]*)?|styles\.box[A-Za-z0-9_]*\(active/,
+    );
+    const activeStyleIndex = activeStyleMatch?.index ?? -1;
+    const themeStyleIndex = code.indexOf("theme.isDark ? styles.boxDark : styles.boxLight");
+    if (activeStyleIndex >= 0) {
+      expect(themeStyleIndex).toBeGreaterThan(activeStyleIndex);
+    }
+  });
+
   it("should keep repeated same-theme declarations at their latest source order", () => {
     const source = `
 import styled from "styled-components";
