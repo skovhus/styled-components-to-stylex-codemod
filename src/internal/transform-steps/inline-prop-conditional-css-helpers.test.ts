@@ -208,6 +208,42 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline when a helper static property contests a consumer declaration", () => {
+    // Comment #14: the helper's static `color: red` should override the consumer's earlier dynamic
+    // `color`, but splicing could let the dynamic win — the property overlap must bail.
+    const helper = cssHelperDecl("sizing", [
+      rule("&", [staticDecl("color", "red"), interpolatedDecl("width", 0)]),
+    ]);
+    const reference = helperReferenceDecl(1);
+    const consumer = consumerDecl("Box", "sizing", [
+      rule("&", [interpolatedDecl("color", 0), reference]),
+    ]);
+    consumer.templateExpressions = [parseExpr("(p) => p.$color"), parseExpr("sizing")];
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
+  it("does not inline a logical corner radius contested by any physical corner", () => {
+    // Comment #15: a logical corner can map to any physical corner under some writing mode.
+    const helper = cssHelperDecl("dynCorner", [
+      rule("&", [interpolatedDecl("border-start-start-radius", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynCorner", [
+      rule("&", [reference, staticDecl("border-bottom-right-radius", "4px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a helper that carries a nested selector block", () => {
     const helper = cssHelperDecl("interactive", [
       rule("&", [interpolatedDecl("opacity", 0)]),

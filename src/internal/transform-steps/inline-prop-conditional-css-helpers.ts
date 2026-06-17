@@ -52,10 +52,9 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     }
     for (const reference of collectInlinableHelperReferences(consumer, declByLocalName)) {
       const helperDecl = reference.helperDecl;
-      const propDependent = inlinablePropDependentDeclaration(helperDecl);
       if (
-        !propDependent ||
-        propertyContestedByOtherDeclaration(propDependent, reference, consumer)
+        !inlinablePropDependentDeclaration(helperDecl) ||
+        inlineWouldContend(reference, consumer)
       ) {
         retainedHelpers.add(helperDecl.localName);
         continue;
@@ -156,8 +155,8 @@ function referencedHelperName(d: CssDeclarationIR, consumer: StyledDecl): string
  *    splice (which stamps the single reference order on every inlined declaration) cannot
  *    preserve.
  *
- * Whether the single dynamic declaration is *override-safe* is decided per reference by
- * `propertyContestedByOtherDeclaration`, which is independent of how the value lowers.
+ * Whether the inline is *override-safe* is decided per reference by `inlineWouldContend`, which
+ * is independent of how the value lowers.
  */
 function inlinablePropDependentDeclaration(helperDecl: StyledDecl): CssDeclarationIR | null {
   if (helperDecl.isExported || helperDecl.preserveCssHelperDeclaration) {
@@ -183,37 +182,42 @@ function inlinablePropDependentDeclaration(helperDecl: StyledDecl): CssDeclarati
 }
 
 /**
- * The single dynamic declaration is only override-safe when no *other* declaration in the merged
- * `&` block — the helper's own static declarations or the consumer's — sets the same (or an
- * overlapping shorthand/longhand) property. When the property is uncontested, the dynamic value
- * is its sole contributor, so however it lowers (variant or style function) the result matches
- * styled-components. When it is contested, the relative precedence of the dynamic entry and the
- * static value depends on the lowering path, which splicing cannot guarantee — so bail.
+ * Splicing is override-safe only when the set of properties the helper sets is disjoint from
+ * every other declaration in the merged block. When a property has a single contributor, however
+ * the inlined value lowers (variant or style function) the result matches styled-components; when
+ * two declarations contend, their relative precedence depends on the lowering path, which the
+ * splice cannot guarantee — so bail. This checks:
  *
- * Every rule of the helper and the consumer is scanned (not just the reference's rule): the
- * property must appear exactly once across the whole merged block — including any other
- * top-level `&` rule or nested selector/at-rule the consumer authors — for the inline to be safe.
+ *  - helper-internal overlap: two helper declarations touching the same leaf (e.g.
+ *    `color: ${dyn}; color: red`) have order-dependent precedence the splice may invert;
+ *  - helper-vs-consumer overlap: any helper property (its prop-dependent one *or* a static, which
+ *    could override an earlier dynamic consumer declaration) overlapping a consumer declaration;
+ *  - any property-less consumer declaration — a sibling mixin (`${reset}`) or dynamic block whose
+ *    emitted properties are unknown here.
  *
- * Any *other* property-less declaration is treated as contention: it is a sibling mixin
- * reference (`${reset}`) or a dynamic block whose emitted properties are not known here and
- * could overlap the prop-dependent property, so bail rather than guess.
+ * Every consumer rule is scanned (not just the reference's), so a later top-level `&` rule or a
+ * nested selector/at-rule the consumer authors is included.
  */
-function propertyContestedByOtherDeclaration(
-  propDependent: CssDeclarationIR,
-  reference: HelperReference,
-  consumer: StyledDecl,
-): boolean {
-  const property = propDependent.property;
-  const conflictsWith = (declaration: CssDeclarationIR): boolean => {
-    if (declaration === propDependent || declaration === reference.referenceDecl) {
-      return false;
+function inlineWouldContend(reference: HelperReference, consumer: StyledDecl): boolean {
+  const helperDeclarations = reference.helperDecl.rules.flatMap((rule) => rule.declarations);
+  for (let i = 0; i < helperDeclarations.length; i += 1) {
+    for (let j = i + 1; j < helperDeclarations.length; j += 1) {
+      if (propertiesConflict(helperDeclarations[i]!.property, helperDeclarations[j]!.property)) {
+        return true;
+      }
     }
-    return declaration.property ? propertiesConflict(declaration.property, property) : true;
-  };
-
-  for (const rule of [...reference.helperDecl.rules, ...consumer.rules]) {
-    if (rule.declarations.some(conflictsWith)) {
-      return true;
+  }
+  for (const rule of consumer.rules) {
+    for (const declaration of rule.declarations) {
+      if (declaration === reference.referenceDecl) {
+        continue;
+      }
+      if (!declaration.property) {
+        return true;
+      }
+      if (helperDeclarations.some((hd) => propertiesConflict(hd.property, declaration.property))) {
+        return true;
+      }
     }
   }
   return false;
@@ -264,16 +268,24 @@ const BORDER_KINDS = ["Width", "Style", "Color"] as const;
 const BLOCK_SIDES = ["Top", "Bottom"] as const;
 const INLINE_SIDES = ["Left", "Right"] as const;
 
+const ALL_RADIUS_CORNERS = [
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomLeftRadius",
+  "borderBottomRightRadius",
+];
 /** Logical atomic longhand → the physical atomic longhands it could map to under any writing mode. */
 const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string[]> = {
   insetBlockStart: ["top", "bottom"],
   insetBlockEnd: ["top", "bottom"],
   insetInlineStart: ["left", "right"],
   insetInlineEnd: ["left", "right"],
-  borderStartStartRadius: ["borderTopLeftRadius", "borderTopRightRadius"],
-  borderStartEndRadius: ["borderTopLeftRadius", "borderTopRightRadius"],
-  borderEndStartRadius: ["borderBottomLeftRadius", "borderBottomRightRadius"],
-  borderEndEndRadius: ["borderBottomLeftRadius", "borderBottomRightRadius"],
+  // A logical corner can map to any physical corner depending on writing-mode and direction
+  // (e.g. `start-start` is a bottom corner in vertical-rl), so it conservatively contends with all.
+  borderStartStartRadius: ALL_RADIUS_CORNERS,
+  borderStartEndRadius: ALL_RADIUS_CORNERS,
+  borderEndStartRadius: ALL_RADIUS_CORNERS,
+  borderEndEndRadius: ALL_RADIUS_CORNERS,
 };
 for (const [axis, sides] of [
   ["Block", BLOCK_SIDES],
