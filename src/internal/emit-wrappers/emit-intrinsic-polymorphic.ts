@@ -13,7 +13,11 @@ import { emitStyleMerging } from "./style-merger.js";
 import { VOID_TAGS } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { buildAllVariantAndStyleExprs, buildInitialStyleArgs } from "./style-expr-builders.js";
+import {
+  buildAllVariantAndStyleExprs,
+  buildInitialStyleArgs,
+  buildUseThemeDeclaration,
+} from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -155,7 +159,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         extraStyleArgsAfterBase,
       );
 
-      buildAllVariantAndStyleExprs({
+      const needsUseTheme = buildAllVariantAndStyleExprs({
         d,
         emitter,
         j,
@@ -165,6 +169,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         propDefaults,
         compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
         afterVariantStyleArgs,
+        markNeedsUseThemeImport: () => ctx.markNeedsUseThemeImport(),
         buildCompoundVariantExpressions,
       });
 
@@ -205,6 +210,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
         staticAttrs: d.attrsInfo?.staticAttrs ?? {},
       });
+      const destructurePropsForPattern = needsUseTheme
+        ? destructureProps.filter((name) => name !== "theme")
+        : destructureProps;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp
@@ -225,7 +233,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
-        destructureProps,
+        destructureProps: destructurePropsForPattern,
         propDefaults,
         includeRest: true,
         restId,
@@ -290,6 +298,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       });
 
       const fnBodyStmts: StatementKind[] = [declStmt];
+      if (needsUseTheme) {
+        fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHookLocalName));
+      }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
       }
