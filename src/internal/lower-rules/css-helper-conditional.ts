@@ -154,7 +154,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
   } = ctx;
   const avoidNames = new Set(importMap.keys());
   const cssHelperTemplateOptions = {
-    assumesConsumerSxLast: decl.base.kind === "component",
+    rejectStrippedSpecificity: decl.base.kind === "component",
   };
 
   /**

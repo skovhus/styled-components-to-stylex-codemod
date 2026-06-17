@@ -65,7 +65,7 @@ export type ConditionalVariant = {
 };
 
 type CssHelperTemplateOptions = {
-  assumesConsumerSxLast?: boolean;
+  rejectStrippedSpecificity?: boolean;
 };
 
 type ValuePart = { kind: string; value?: string; slotId?: number };
@@ -488,6 +488,13 @@ export function createCssHelperResolver(args: {
           "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
         );
       }
+      if (specificityResult.wasStripped && options?.rejectStrippedSpecificity) {
+        return bail(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          undefined,
+          computeSelectorWarningLoc(templateLoc ?? undefined, rawCss, rawSelector) ?? templateLoc,
+        );
+      }
       const selector = specificityResult.normalized.trim();
       const specificityStripped = specificityResult.wasStripped;
       const allowDynamicValues = selector === "&";
@@ -621,7 +628,7 @@ export function createCssHelperResolver(args: {
             }
             if (specificityStripped) {
               addPropComments(target, mapped.prop, {
-                leadingLine: buildSpecificityStrippedComment(rawSelector, mapped.prop, options),
+                leadingLine: buildSpecificityStrippedComment(rawSelector, mapped.prop),
               });
             }
             setStyleObjectValue(
