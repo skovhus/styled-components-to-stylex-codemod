@@ -313,6 +313,20 @@ for (const axis of ["Block", "Inline"] as const) {
 const SHORTHAND_LEAVES: Record<string, string[]> = {
   gap: ["rowGap", "columnGap"],
   overflow: ["overflowX", "overflowY"],
+  overscrollBehavior: ["overscrollBehaviorX", "overscrollBehaviorY"],
+  containIntrinsicSize: ["containIntrinsicWidth", "containIntrinsicHeight"],
+  textEmphasis: ["textEmphasisStyle", "textEmphasisColor"],
+  mask: [
+    "maskImage",
+    "maskMode",
+    "maskRepeat",
+    "maskPosition",
+    "maskClip",
+    "maskOrigin",
+    "maskSize",
+    "maskComposite",
+  ],
+  offset: ["offsetPath", "offsetDistance", "offsetRotate", "offsetAnchor", "offsetPosition"],
   borderRadius: [
     "borderTopLeftRadius",
     "borderTopRightRadius",

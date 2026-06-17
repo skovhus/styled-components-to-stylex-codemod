@@ -209,6 +209,23 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline an overscroll-behavior axis contested by the shorthand", () => {
+    // Comment #17: `overscroll-behavior` sets both axes, overlapping `overscroll-behavior-x`.
+    const helper = cssHelperDecl("dynOverscroll", [
+      rule("&", [interpolatedDecl("overscroll-behavior-x", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynOverscroll", [
+      rule("&", [reference, staticDecl("overscroll-behavior", "contain")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a background-position axis contested by the shorthand", () => {
     // Comment #13: `background-position` sets both axes, overlapping `background-position-x`.
     const helper = cssHelperDecl("dynPosX", [
