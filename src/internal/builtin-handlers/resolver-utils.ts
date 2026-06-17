@@ -67,6 +67,7 @@ export function buildResolvedHandlerResult(
         type: "resolvedValue",
         expr: result.expr,
         imports: result.imports,
+        cssValueText: result.expr,
         ...payload,
       }
     : {

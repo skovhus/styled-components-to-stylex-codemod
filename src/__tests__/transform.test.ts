@@ -7843,6 +7843,58 @@ export const App = () => <Toggle>Toggle</Toggle>;
     expect(code).not.toContain("toggleBackgroundColor");
   });
 
+  it("should classify preserved background runtime overrides from resolved helper text", () => {
+    const source = `
+import styled from "styled-components";
+import { imageHelper } from "./lib/helpers";
+
+const Box = styled.div\`
+  background: \${(props) => imageHelper("hero")};
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const adapterWithRuntimeBackgroundImage = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName !== "imageHelper") {
+          return undefined;
+        }
+        return {
+          usage: "create" as const,
+          expr: '`url("/static/hero.png")`',
+          imports: [],
+          preserveRuntimeCall: true,
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-background-image.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeBackgroundImage },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundImage");
+    expect(code).toContain('stylex.props(styles.box(imageHelper("hero")))');
+    expect(code).not.toContain("backgroundColor");
+  });
+
   it("should preserve static suffix in runtime call override (P1 fix)", () => {
     const source = `
 import styled from "styled-components";

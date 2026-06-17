@@ -62,6 +62,8 @@ export type HandlerResult =
       type: "resolvedValue";
       expr: string;
       imports: ImportSpec[];
+      /** Original/resolved CSS value text for shorthand classification. */
+      cssValueText?: string;
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
     }
