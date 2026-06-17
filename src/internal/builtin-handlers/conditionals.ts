@@ -378,7 +378,10 @@ export function tryResolveConditionalValue(
       if (isCallExpressionNode(call.callee)) {
         const inner = call.callee;
         const outerArgs = call.arguments ?? [];
-        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
+        if (
+          outerArgs.length === 1 &&
+          isCurrentCurriedHelperContextArg(outerArgs[0], propsParamName, themeBindingName)
+        ) {
           const innerRes = resolveImportedHelperCall(
             inner,
             resolverCtx,
@@ -1853,6 +1856,53 @@ function isDestructuredFromParam(arrowFn: unknown, name: string): boolean {
     }
     return p.key?.type === "Identifier" && p.key.name === name;
   });
+}
+
+function isCurrentCurriedHelperContextArg(
+  arg: unknown,
+  propsParamName: string | undefined,
+  themeBindingName: string | undefined,
+): boolean {
+  if (!arg || typeof arg !== "object") {
+    return false;
+  }
+  const node = arg as {
+    type?: string;
+    name?: string;
+    properties?: unknown[];
+  };
+  if (node.type === "Identifier") {
+    return node.name === propsParamName || node.name === themeBindingName;
+  }
+  if (node.type !== "ObjectExpression" || node.properties?.length !== 1) {
+    return false;
+  }
+  const property = node.properties[0] as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string };
+    value?: unknown;
+  };
+  if (
+    (property.type !== "Property" && property.type !== "ObjectProperty") ||
+    property.computed ||
+    property.key?.type !== "Identifier" ||
+    property.key.name !== "theme"
+  ) {
+    return false;
+  }
+  const value = property.value as { type?: string; name?: string } | null | undefined;
+  if (value?.type === "Identifier" && value.name === themeBindingName) {
+    return true;
+  }
+  if (propsParamName) {
+    const valuePath = getMemberPathFromIdentifier(
+      property.value as Parameters<typeof getMemberPathFromIdentifier>[0],
+      propsParamName,
+    );
+    return valuePath?.length === 1 && valuePath[0] === "theme";
+  }
+  return false;
 }
 
 /**
