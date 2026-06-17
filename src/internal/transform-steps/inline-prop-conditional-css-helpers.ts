@@ -306,6 +306,18 @@ const ALL_RADIUS_CORNERS = [
 
 /** Logical atomic longhand → every physical longhand it could map to under any writing mode. */
 const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string[]> = {
+  // Logical sizes map to either physical dimension: `inline-size` is `width` in horizontal-tb but
+  // `height` in vertical writing modes, so each contends with both.
+  inlineSize: ["width", "height"],
+  blockSize: ["width", "height"],
+  minInlineSize: ["minWidth", "minHeight"],
+  minBlockSize: ["minWidth", "minHeight"],
+  maxInlineSize: ["maxWidth", "maxHeight"],
+  maxBlockSize: ["maxWidth", "maxHeight"],
+  containIntrinsicInlineSize: ["containIntrinsicWidth", "containIntrinsicHeight"],
+  containIntrinsicBlockSize: ["containIntrinsicWidth", "containIntrinsicHeight"],
+  overflowBlock: ["overflowX", "overflowY"],
+  overflowInline: ["overflowX", "overflowY"],
   // A logical corner can map to any physical corner depending on writing-mode and direction
   // (e.g. `start-start` is a bottom corner in vertical-rl), so it contends with all.
   borderStartStartRadius: ALL_RADIUS_CORNERS,

@@ -191,6 +191,22 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(2);
   });
 
+  it("does not inline a logical size contested by a physical dimension", () => {
+    // Comment #19: `inline-size` is `width` in horizontal-tb (and `height` in vertical modes), so
+    // it contends with a later physical `width`.
+    const helper = cssHelperDecl("dynSize", [rule("&", [interpolatedDecl("inline-size", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynSize", [
+      rule("&", [reference, staticDecl("width", "80px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a logical inline side contested by either physical side", () => {
     // Comment #12: `margin-inline-start` is the right side in RTL, so it conservatively contends
     // with both `margin-left` and `margin-right`.
