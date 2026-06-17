@@ -35,6 +35,12 @@ const RuntimeColorBox = styled.div`
   padding: 8px;
 `;
 
+// negated theme.isDark with one unresolved helper branch that falls back to inline style
+const NegatedRuntimeColorBox = styled.div`
+  color: ${(props) => (!props.theme.isDark ? runtimeColor() : color("labelMuted")(props))};
+  padding: 8px;
+`;
+
 // theme.isDark controlling an entire CSS block (empty string vs padding)
 const Box = styled.div`
   ${(props) => (props.theme.isDark ? "" : `padding: ${thinPixel()};`)}
@@ -56,6 +62,7 @@ export const App = () => (
     </HelperColorBox>
     <HelperGradientBox>Helper gradient box</HelperGradientBox>
     <RuntimeColorBox>Runtime color box</RuntimeColorBox>
+    <NegatedRuntimeColorBox>Negated runtime color box</NegatedRuntimeColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>

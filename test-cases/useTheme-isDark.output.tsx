@@ -75,6 +75,24 @@ function RuntimeColorBox({ children }: { children?: React.ReactNode }) {
   );
 }
 
+// negated theme.isDark with one unresolved helper branch that falls back to inline style
+function NegatedRuntimeColorBox({ children }: { children?: React.ReactNode }) {
+  const theme = useTheme();
+  const sx = stylex.props(styles.negatedRuntimeColorBox);
+
+  return (
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        color: theme.isDark ? undefined : runtimeColor(),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // theme.isDark controlling an entire CSS block (empty string vs padding)
 function Box({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
@@ -111,6 +129,7 @@ export const App = () => (
     </HelperColorBox>
     <HelperGradientBox>Helper gradient box</HelperGradientBox>
     <RuntimeColorBox>Runtime color box</RuntimeColorBox>
+    <NegatedRuntimeColorBox>Negated runtime color box</NegatedRuntimeColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
@@ -146,6 +165,10 @@ const styles = stylex.create({
     backgroundColor: "transparent",
   },
   runtimeColorBox: {
+    color: $colors.labelMuted,
+    padding: 8,
+  },
+  negatedRuntimeColorBox: {
     color: $colors.labelMuted,
     padding: 8,
   },

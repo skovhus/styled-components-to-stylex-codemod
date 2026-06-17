@@ -2353,9 +2353,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       // Determine when the inline style should apply:
       // The inline style replaces the unresolvable branch.
-      // resolvedBranchIsTrue means: true branch is resolved → inline style is for the false branch.
-      // isNegated flips the mapping between consequent/alternate and true/false.
-      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue !== res.isNegated;
+      // resolvedBranchIsTrue is already normalized to the theme boolean, so a
+      // resolved true branch means the inline fallback applies when the theme
+      // boolean is false.
+      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue;
       const conditionalExpr = inlineAppliesWhenThemeIsTrue
         ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
         : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);

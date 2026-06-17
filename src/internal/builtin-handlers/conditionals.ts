@@ -1975,7 +1975,7 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   falseImports: ImportSpec[];
   trueBranch: unknown;
   falseBranch: unknown;
-  themeBoolInfo: { isNegated: boolean; themeProp: string };
+  themeBoolInfo: { themeProp: string };
   cssProp: string;
   paramName: string | null;
   info: ThemeParamInfo | null;
@@ -2017,7 +2017,6 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
     type: "splitThemeBooleanWithInlineStyleFallback",
     cssProp,
     themeProp: themeBoolInfo.themeProp,
-    isNegated: themeBoolInfo.isNegated,
     resolvedValue: resolvedBranchIsTrue ? trueValue : falseValue,
     resolvedImports: resolvedBranchIsTrue ? trueImports : falseImports,
     resolvedBranchIsTrue,
