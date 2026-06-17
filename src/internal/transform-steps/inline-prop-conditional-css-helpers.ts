@@ -239,48 +239,55 @@ function propertiesConflict(a: string, b: string): boolean {
 
 /**
  * The atomic physical StyleX longhands a property can set. A shorthand expands to its leaves; a
- * longhand resolves to itself. Logical properties are normalized to their physical equivalents
- * (default LTR / horizontal-tb writing mode) so a logical declaration conservatively contends with
- * the physical region it can affect (e.g. `borderBlockColor` vs `borderTopColor`).
+ * longhand resolves to itself. A logical longhand resolves to *both* physical sides on its axis
+ * (e.g. `marginInlineStart` → `marginLeft` and `marginRight`) because the writing direction is
+ * unknown — in RTL `inline-start` is the right side — so a logical declaration conservatively
+ * contends with either physical side it could map to.
  */
 function leafLonghands(stylexProp: string): Set<string> {
-  const leaves = SHORTHAND_LEAVES[stylexProp] ?? LOGICAL_TO_PHYSICAL[stylexProp];
-  if (leaves) {
-    return new Set(leaves.map(toPhysicalLeaf));
+  // A logical atomic longhand maps to both physical sides of its axis; this must take precedence
+  // over the codemod's `LOGICAL_TO_PHYSICAL`, which resolves to a single side (LTR only).
+  if (LOGICAL_LEAF_TO_PHYSICAL[stylexProp]) {
+    return new Set(LOGICAL_LEAF_TO_PHYSICAL[stylexProp]);
   }
-  return new Set([toPhysicalLeaf(stylexProp)]);
+  const leaves = SHORTHAND_LEAVES[stylexProp] ?? LOGICAL_TO_PHYSICAL[stylexProp] ?? [stylexProp];
+  return new Set(leaves.flatMap(physicalLeaves));
 }
 
-/** Maps a logical atomic longhand to its physical equivalent (default LTR / horizontal-tb). */
-function toPhysicalLeaf(stylexProp: string): string {
-  return LOGICAL_LEAF_TO_PHYSICAL[stylexProp] ?? stylexProp;
+/** Maps a logical atomic longhand to both physical sides of its axis (writing-mode-agnostic). */
+function physicalLeaves(stylexProp: string): string[] {
+  return LOGICAL_LEAF_TO_PHYSICAL[stylexProp] ?? [stylexProp];
 }
 
 const PHYSICAL_SIDES = ["Top", "Right", "Bottom", "Left"] as const;
 const BORDER_KINDS = ["Width", "Style", "Color"] as const;
-const LOGICAL_SIDE_TO_PHYSICAL = {
-  BlockStart: "Top",
-  BlockEnd: "Bottom",
-  InlineStart: "Left",
-  InlineEnd: "Right",
-} as const;
+const BLOCK_SIDES = ["Top", "Bottom"] as const;
+const INLINE_SIDES = ["Left", "Right"] as const;
 
-/** Logical atomic longhand → physical atomic longhand (default LTR / horizontal-tb). */
-const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string> = {
-  insetBlockStart: "top",
-  insetBlockEnd: "bottom",
-  insetInlineStart: "left",
-  insetInlineEnd: "right",
-  borderStartStartRadius: "borderTopLeftRadius",
-  borderStartEndRadius: "borderTopRightRadius",
-  borderEndStartRadius: "borderBottomLeftRadius",
-  borderEndEndRadius: "borderBottomRightRadius",
+/** Logical atomic longhand → the physical atomic longhands it could map to under any writing mode. */
+const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string[]> = {
+  insetBlockStart: ["top", "bottom"],
+  insetBlockEnd: ["top", "bottom"],
+  insetInlineStart: ["left", "right"],
+  insetInlineEnd: ["left", "right"],
+  borderStartStartRadius: ["borderTopLeftRadius", "borderTopRightRadius"],
+  borderStartEndRadius: ["borderTopLeftRadius", "borderTopRightRadius"],
+  borderEndStartRadius: ["borderBottomLeftRadius", "borderBottomRightRadius"],
+  borderEndEndRadius: ["borderBottomLeftRadius", "borderBottomRightRadius"],
 };
-for (const [logicalSide, physicalSide] of Object.entries(LOGICAL_SIDE_TO_PHYSICAL)) {
-  LOGICAL_LEAF_TO_PHYSICAL[`margin${logicalSide}`] = `margin${physicalSide}`;
-  LOGICAL_LEAF_TO_PHYSICAL[`padding${logicalSide}`] = `padding${physicalSide}`;
-  for (const kind of BORDER_KINDS) {
-    LOGICAL_LEAF_TO_PHYSICAL[`border${logicalSide}${kind}`] = `border${physicalSide}${kind}`;
+for (const [axis, sides] of [
+  ["Block", BLOCK_SIDES],
+  ["Inline", INLINE_SIDES],
+] as const) {
+  for (const end of ["Start", "End"] as const) {
+    for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
+      LOGICAL_LEAF_TO_PHYSICAL[`${base}${axis}${end}`] = sides.map((side) => `${base}${side}`);
+    }
+    for (const kind of BORDER_KINDS) {
+      LOGICAL_LEAF_TO_PHYSICAL[`border${axis}${end}${kind}`] = sides.map(
+        (side) => `border${side}${kind}`,
+      );
+    }
   }
 }
 
@@ -320,13 +327,15 @@ const SHORTHAND_LEAVES: Record<string, string[]> = {
   background: [
     "backgroundColor",
     "backgroundImage",
-    "backgroundPosition",
+    "backgroundPositionX",
+    "backgroundPositionY",
     "backgroundSize",
     "backgroundRepeat",
     "backgroundOrigin",
     "backgroundClip",
     "backgroundAttachment",
   ],
+  backgroundPosition: ["backgroundPositionX", "backgroundPositionY"],
   flex: ["flexGrow", "flexShrink", "flexBasis"],
   flexFlow: ["flexDirection", "flexWrap"],
   placeItems: ["alignItems", "justifyItems"],
@@ -392,16 +401,23 @@ for (const kind of BORDER_KINDS) {
 for (const side of PHYSICAL_SIDES) {
   SHORTHAND_LEAVES[`border${side}`] = BORDER_KINDS.map((kind) => borderLeaf(side, kind));
 }
-SHORTHAND_LEAVES.borderBlock = ["Top", "Bottom"].flatMap((side) =>
+// Logical border axis/side shorthands map to *both* physical sides of the axis (writing-mode
+// agnostic): e.g. `borderBlockStart` could be the top or bottom border depending on writing mode.
+SHORTHAND_LEAVES.borderBlock = BLOCK_SIDES.flatMap((side) =>
   BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
 );
-SHORTHAND_LEAVES.borderInline = ["Left", "Right"].flatMap((side) =>
+SHORTHAND_LEAVES.borderInline = INLINE_SIDES.flatMap((side) =>
   BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
 );
-for (const [logicalSide, physicalSide] of Object.entries(LOGICAL_SIDE_TO_PHYSICAL)) {
-  SHORTHAND_LEAVES[`border${logicalSide}`] = BORDER_KINDS.map((kind) =>
-    borderLeaf(physicalSide, kind),
-  );
+for (const [axis, sides] of [
+  ["Block", BLOCK_SIDES],
+  ["Inline", INLINE_SIDES],
+] as const) {
+  for (const end of ["Start", "End"] as const) {
+    SHORTHAND_LEAVES[`border${axis}${end}`] = sides.flatMap((side) =>
+      BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
+    );
+  }
 }
 
 /** True when a declaration's interpolated value reads a non-theme component prop. */

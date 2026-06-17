@@ -173,6 +173,41 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.templateExpressions).toHaveLength(2);
   });
 
+  it("does not inline a logical inline side contested by either physical side", () => {
+    // Comment #12: `margin-inline-start` is the right side in RTL, so it conservatively contends
+    // with both `margin-left` and `margin-right`.
+    const helper = cssHelperDecl("dynInline", [
+      rule("&", [interpolatedDecl("margin-inline-start", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynInline", [
+      rule("&", [reference, staticDecl("margin-right", "0")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
+  it("does not inline a background-position axis contested by the shorthand", () => {
+    // Comment #13: `background-position` sets both axes, overlapping `background-position-x`.
+    const helper = cssHelperDecl("dynPosX", [
+      rule("&", [interpolatedDecl("background-position-x", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynPosX", [
+      rule("&", [reference, staticDecl("background-position", "center")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a helper that carries a nested selector block", () => {
     const helper = cssHelperDecl("interactive", [
       rule("&", [interpolatedDecl("opacity", 0)]),
