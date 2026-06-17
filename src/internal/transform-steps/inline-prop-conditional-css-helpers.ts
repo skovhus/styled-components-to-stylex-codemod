@@ -258,45 +258,45 @@ function leafLonghands(stylexProp: string): Set<string> {
   return new Set(leaves.flatMap(physicalLeaves));
 }
 
-/** Maps a logical atomic longhand to both physical sides of its axis (writing-mode-agnostic). */
+/**
+ * Maps a logical atomic longhand to every physical longhand it could map to under any writing
+ * mode and direction. Flow-relative sides are not just RTL-swapped: in vertical writing modes the
+ * block axis is horizontal and the inline axis is vertical, so a logical side can land on *any*
+ * physical side. The mapping is therefore the full physical family, which is conservative but safe.
+ */
 function physicalLeaves(stylexProp: string): string[] {
   return LOGICAL_LEAF_TO_PHYSICAL[stylexProp] ?? [stylexProp];
 }
 
 const PHYSICAL_SIDES = ["Top", "Right", "Bottom", "Left"] as const;
 const BORDER_KINDS = ["Width", "Style", "Color"] as const;
-const BLOCK_SIDES = ["Top", "Bottom"] as const;
-const INLINE_SIDES = ["Left", "Right"] as const;
-
+const ALL_INSET_SIDES = ["top", "right", "bottom", "left"];
 const ALL_RADIUS_CORNERS = [
   "borderTopLeftRadius",
   "borderTopRightRadius",
   "borderBottomLeftRadius",
   "borderBottomRightRadius",
 ];
-/** Logical atomic longhand → the physical atomic longhands it could map to under any writing mode. */
+
+/** Logical atomic longhand → every physical longhand it could map to under any writing mode. */
 const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string[]> = {
-  insetBlockStart: ["top", "bottom"],
-  insetBlockEnd: ["top", "bottom"],
-  insetInlineStart: ["left", "right"],
-  insetInlineEnd: ["left", "right"],
   // A logical corner can map to any physical corner depending on writing-mode and direction
-  // (e.g. `start-start` is a bottom corner in vertical-rl), so it conservatively contends with all.
+  // (e.g. `start-start` is a bottom corner in vertical-rl), so it contends with all.
   borderStartStartRadius: ALL_RADIUS_CORNERS,
   borderStartEndRadius: ALL_RADIUS_CORNERS,
   borderEndStartRadius: ALL_RADIUS_CORNERS,
   borderEndEndRadius: ALL_RADIUS_CORNERS,
 };
-for (const [axis, sides] of [
-  ["Block", BLOCK_SIDES],
-  ["Inline", INLINE_SIDES],
-] as const) {
+for (const axis of ["Block", "Inline"] as const) {
   for (const end of ["Start", "End"] as const) {
     for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
-      LOGICAL_LEAF_TO_PHYSICAL[`${base}${axis}${end}`] = sides.map((side) => `${base}${side}`);
+      LOGICAL_LEAF_TO_PHYSICAL[`${base}${axis}${end}`] = PHYSICAL_SIDES.map(
+        (side) => `${base}${side}`,
+      );
     }
+    LOGICAL_LEAF_TO_PHYSICAL[`inset${axis}${end}`] = ALL_INSET_SIDES;
     for (const kind of BORDER_KINDS) {
-      LOGICAL_LEAF_TO_PHYSICAL[`border${axis}${end}${kind}`] = sides.map(
+      LOGICAL_LEAF_TO_PHYSICAL[`border${axis}${end}${kind}`] = PHYSICAL_SIDES.map(
         (side) => `border${side}${kind}`,
       );
     }
@@ -392,43 +392,37 @@ const SHORTHAND_LEAVES: Record<string, string[]> = {
   listStyle: ["listStyleType", "listStylePosition", "listStyleImage"],
 };
 
-// Generate the directional families (physical + logical shorthand names → physical leaves).
-for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
-  SHORTHAND_LEAVES[base] = PHYSICAL_SIDES.map((side) => `${base}${side}`);
-  SHORTHAND_LEAVES[`${base}Block`] = [`${base}Top`, `${base}Bottom`];
-  SHORTHAND_LEAVES[`${base}Inline`] = [`${base}Left`, `${base}Right`];
-}
-SHORTHAND_LEAVES.inset = ["top", "right", "bottom", "left"];
-SHORTHAND_LEAVES.insetBlock = ["top", "bottom"];
-SHORTHAND_LEAVES.insetInline = ["left", "right"];
+// Generate the directional families. Physical shorthands expand to their physical leaves; logical
+// shorthands (block/inline) expand to the full physical family because the flow-relative axis can
+// map to either physical axis under some writing mode (conservative but safe).
 const borderLeaf = (side: string, kind: string): string => `border${side}${kind}`;
-SHORTHAND_LEAVES.border = PHYSICAL_SIDES.flatMap((side) =>
+const ALL_BORDER_LEAVES = PHYSICAL_SIDES.flatMap((side) =>
   BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
 );
-for (const kind of BORDER_KINDS) {
-  SHORTHAND_LEAVES[`border${kind}`] = PHYSICAL_SIDES.map((side) => borderLeaf(side, kind));
-  SHORTHAND_LEAVES[`borderBlock${kind}`] = [borderLeaf("Top", kind), borderLeaf("Bottom", kind)];
-  SHORTHAND_LEAVES[`borderInline${kind}`] = [borderLeaf("Left", kind), borderLeaf("Right", kind)];
+for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
+  const allSides = PHYSICAL_SIDES.map((side) => `${base}${side}`);
+  SHORTHAND_LEAVES[base] = allSides;
+  SHORTHAND_LEAVES[`${base}Block`] = allSides;
+  SHORTHAND_LEAVES[`${base}Inline`] = allSides;
 }
+SHORTHAND_LEAVES.inset = ALL_INSET_SIDES;
+SHORTHAND_LEAVES.insetBlock = ALL_INSET_SIDES;
+SHORTHAND_LEAVES.insetInline = ALL_INSET_SIDES;
+SHORTHAND_LEAVES.border = ALL_BORDER_LEAVES;
+SHORTHAND_LEAVES.borderBlock = ALL_BORDER_LEAVES;
+SHORTHAND_LEAVES.borderInline = ALL_BORDER_LEAVES;
 for (const side of PHYSICAL_SIDES) {
   SHORTHAND_LEAVES[`border${side}`] = BORDER_KINDS.map((kind) => borderLeaf(side, kind));
 }
-// Logical border axis/side shorthands map to *both* physical sides of the axis (writing-mode
-// agnostic): e.g. `borderBlockStart` could be the top or bottom border depending on writing mode.
-SHORTHAND_LEAVES.borderBlock = BLOCK_SIDES.flatMap((side) =>
-  BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
-);
-SHORTHAND_LEAVES.borderInline = INLINE_SIDES.flatMap((side) =>
-  BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
-);
-for (const [axis, sides] of [
-  ["Block", BLOCK_SIDES],
-  ["Inline", INLINE_SIDES],
-] as const) {
+for (const kind of BORDER_KINDS) {
+  const allOfKind = PHYSICAL_SIDES.map((side) => borderLeaf(side, kind));
+  SHORTHAND_LEAVES[`border${kind}`] = allOfKind;
+  SHORTHAND_LEAVES[`borderBlock${kind}`] = allOfKind;
+  SHORTHAND_LEAVES[`borderInline${kind}`] = allOfKind;
+}
+for (const axis of ["Block", "Inline"] as const) {
   for (const end of ["Start", "End"] as const) {
-    SHORTHAND_LEAVES[`border${axis}${end}`] = sides.flatMap((side) =>
-      BORDER_KINDS.map((kind) => borderLeaf(side, kind)),
-    );
+    SHORTHAND_LEAVES[`border${axis}${end}`] = ALL_BORDER_LEAVES;
   }
 }
 

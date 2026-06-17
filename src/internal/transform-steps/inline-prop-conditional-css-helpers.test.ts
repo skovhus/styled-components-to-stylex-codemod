@@ -191,6 +191,24 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("treats a logical block side as contesting any physical side (vertical writing modes)", () => {
+    // Comment #16: in vertical writing modes `margin-block-start` can target the left/right side,
+    // so it conservatively contends with every physical margin side.
+    const helper = cssHelperDecl("dynBlock", [
+      rule("&", [interpolatedDecl("margin-block-start", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynBlock", [
+      rule("&", [reference, staticDecl("margin-left", "0")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a background-position axis contested by the shorthand", () => {
     // Comment #13: `background-position` sets both axes, overlapping `background-position-x`.
     const helper = cssHelperDecl("dynPosX", [
