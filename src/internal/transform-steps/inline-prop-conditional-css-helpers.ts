@@ -275,14 +275,30 @@ function isWordPrefix(prefix: string, full: string): boolean {
  * contends with either physical side it could map to.
  */
 function leafLonghands(stylexProp: string): Set<string> {
+  // Collapse legacy CSS aliases to their canonical StyleX property first, so an aliased pair
+  // (`word-wrap`/`overflow-wrap`, `grid-gap`/`gap`) shares leaves and is detected as contending.
+  const canonical = CSS_ALIASES[stylexProp] ?? stylexProp;
   // A logical atomic longhand maps to both physical sides of its axis; this must take precedence
   // over the codemod's `LOGICAL_TO_PHYSICAL`, which resolves to a single side (LTR only).
-  if (LOGICAL_LEAF_TO_PHYSICAL[stylexProp]) {
-    return new Set(LOGICAL_LEAF_TO_PHYSICAL[stylexProp]);
+  if (LOGICAL_LEAF_TO_PHYSICAL[canonical]) {
+    return new Set(LOGICAL_LEAF_TO_PHYSICAL[canonical]);
   }
-  const leaves = SHORTHAND_LEAVES[stylexProp] ?? LOGICAL_TO_PHYSICAL[stylexProp] ?? [stylexProp];
+  const leaves = SHORTHAND_LEAVES[canonical] ?? LOGICAL_TO_PHYSICAL[canonical] ?? [canonical];
   return new Set(leaves.flatMap(physicalLeaves));
 }
+
+/**
+ * Legacy CSS property aliases → their canonical StyleX property. `cssPropertyToStylexProp` only
+ * camelCases authored names, so an alias and its modern name read as disjoint leaves unless
+ * collapsed here. `word-wrap` is a legacy alias of `overflow-wrap`; `grid-gap`/`grid-row-gap`/
+ * `grid-column-gap` are legacy aliases of `gap`/`row-gap`/`column-gap`.
+ */
+const CSS_ALIASES: Record<string, string> = {
+  wordWrap: "overflowWrap",
+  gridGap: "gap",
+  gridRowGap: "rowGap",
+  gridColumnGap: "columnGap",
+};
 
 /**
  * Maps a logical atomic longhand to every physical longhand it could map to under any writing

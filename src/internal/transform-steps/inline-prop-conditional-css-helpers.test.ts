@@ -152,6 +152,39 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline a dynamic property contested by its legacy CSS alias", () => {
+    // Comment #22: `word-wrap` is a legacy alias of `overflow-wrap`, so a dynamic `overflow-wrap`
+    // helper contends with a later `word-wrap` consumer declaration even though the camelCased
+    // names differ; the later alias should win, so bail.
+    const helper = cssHelperDecl("dynWrap", [rule("&", [interpolatedDecl("overflow-wrap", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynWrap", [
+      rule("&", [reference, staticDecl("word-wrap", "break-word")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
+  it("does not inline a dynamic gap longhand contested by a legacy grid-gap alias", () => {
+    // Comment #22: `grid-gap` is a legacy alias of `gap`, which expands to `row-gap`/`column-gap`,
+    // so it contends with a dynamic `row-gap` helper.
+    const helper = cssHelperDecl("dynGap", [rule("&", [interpolatedDecl("row-gap", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynGap", [
+      rule("&", [reference, staticDecl("grid-gap", "8px")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a border-image longhand contested by the border shorthand", () => {
     // Comment #21: `border` resets `border-image` to its initial value, so it contends with a
     // dynamic `border-image-source` even though `border` only sets width/style/color.
