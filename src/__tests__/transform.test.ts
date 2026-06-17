@@ -11633,6 +11633,81 @@ export const App = () => <Box>Test</Box>;
     expect(result.code).toBeNull();
   });
 
+  it("should bail when a later declaration would override an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+const Box = styled.div\`
+  color: \${(p) => (p.theme.isDark ? runtimeColor() : p.theme.color.bgBase)};
+  color: green;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when a later dynamic declaration would override an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+const Box = styled.div\`
+  color: \${(p) => (p.theme.isDark ? runtimeColor() : p.theme.color.bgBase)};
+  color: \${(p) => (p.$active ? "green" : "blue")};
+\`;
+
+export const App = () => <Box $active>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-dynamic-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when a later background shorthand would reset an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeImage() {
+  return "url(hero.png)";
+}
+
+const Box = styled.div\`
+  background-image: \${(p) => (p.theme.isDark ? runtimeImage() : "none")};
+  background: white;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-background-reset.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should bail when destructured sibling has aliased binding with default value", () => {
     // ({ theme, enabled: isEnabled = false }) => ... should track `isEnabled`
     // (the actual binding), not `enabled` (the key name).

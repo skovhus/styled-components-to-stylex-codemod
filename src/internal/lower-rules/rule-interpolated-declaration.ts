@@ -2326,6 +2326,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         continue;
       }
+      const stylexDeclarations = cssDeclarationToStylexDeclarations(d);
+      const fallbackProps = new Set(stylexDeclarations.map((out) => out.prop).filter(Boolean));
+      if (hasLaterDeclarationForStylexProps(d, allRules, fallbackProps)) {
+        bail = true;
+        continue;
+      }
 
       // Add imports for the resolved value
       addResolverImports(res.resolvedImports);
@@ -2362,7 +2368,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       // Expand shorthand CSS properties (e.g., padding → paddingTop/Right/Bottom/Left)
       // using the CSS declaration IR, consistent with other handlers.
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
+      for (const out of stylexDeclarations) {
         if (!out.prop) {
           continue;
         }
@@ -7064,6 +7070,99 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
 
 function hasRuntimeImport(imports: readonly ImportSpec[] | undefined): boolean {
   return (imports ?? []).some((imp) => !isStylexImportSource(imp.from.value));
+}
+
+function hasLaterDeclarationForStylexProps(
+  current: CssDeclarationIR,
+  rules: readonly CssRuleIR[],
+  props: ReadonlySet<string>,
+): boolean {
+  if (props.size === 0) {
+    return false;
+  }
+
+  let sawCurrent = false;
+  for (const rule of rules) {
+    for (const candidate of rule.declarations) {
+      if (candidate === current) {
+        sawCurrent = true;
+        continue;
+      }
+      if (!isDeclarationAfter(current, candidate, sawCurrent)) {
+        continue;
+      }
+      if (!candidate.property) {
+        return true;
+      }
+      if (laterDeclarationMayResetStylexProps(candidate.property, props)) {
+        return true;
+      }
+      for (const out of cssDeclarationToStylexDeclarations(candidate)) {
+        if (hasOverlappingStylexProp(props, out.prop)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function isDeclarationAfter(
+  current: CssDeclarationIR,
+  candidate: CssDeclarationIR,
+  sawCurrent: boolean,
+): boolean {
+  if (current.sourceOrder !== undefined && candidate.sourceOrder !== undefined) {
+    return candidate.sourceOrder > current.sourceOrder;
+  }
+  return sawCurrent;
+}
+
+function hasOverlappingStylexProp(props: ReadonlySet<string>, candidate: string): boolean {
+  for (const prop of props) {
+    if (stylexPropsOverlap(prop, candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function laterDeclarationMayResetStylexProps(
+  cssProperty: string,
+  props: ReadonlySet<string>,
+): boolean {
+  const property = cssProperty.trim();
+  if (property === "background") {
+    return hasStylexPropWithPrefix(props, "background");
+  }
+  if (!isBorderShorthandProperty(property)) {
+    return false;
+  }
+  const side = property.match(/^border-(top|right|bottom|left)$/)?.[1];
+  return hasBorderResetOverlap(props, side);
+}
+
+function hasStylexPropWithPrefix(props: ReadonlySet<string>, prefix: string): boolean {
+  for (const prop of props) {
+    if (prop.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasBorderResetOverlap(props: ReadonlySet<string>, side: string | undefined): boolean {
+  const sidePrefix = side ? `border${side.charAt(0).toUpperCase()}${side.slice(1)}` : "border";
+  for (const prop of props) {
+    if (!/^border(?:Top|Right|Bottom|Left)?(?:Width|Style|Color)$/.test(prop)) {
+      continue;
+    }
+    if (!side || prop.startsWith(sidePrefix) || /^border(?:Width|Style|Color)$/.test(prop)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
