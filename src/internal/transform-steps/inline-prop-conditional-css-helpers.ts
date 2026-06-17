@@ -318,6 +318,8 @@ const LOGICAL_LEAF_TO_PHYSICAL: Record<string, string[]> = {
   containIntrinsicBlockSize: ["containIntrinsicWidth", "containIntrinsicHeight"],
   overflowBlock: ["overflowX", "overflowY"],
   overflowInline: ["overflowX", "overflowY"],
+  overscrollBehaviorBlock: ["overscrollBehaviorX", "overscrollBehaviorY"],
+  overscrollBehaviorInline: ["overscrollBehaviorX", "overscrollBehaviorY"],
   // A logical corner can map to any physical corner depending on writing-mode and direction
   // (e.g. `start-start` is a bottom corner in vertical-rl), so it contends with all.
   borderStartStartRadius: ALL_RADIUS_CORNERS,
