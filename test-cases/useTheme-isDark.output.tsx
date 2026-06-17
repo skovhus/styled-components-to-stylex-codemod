@@ -75,6 +75,24 @@ function RuntimeColorBox({ children }: { children?: React.ReactNode }) {
   );
 }
 
+// inline fallback must retain useTheme after later base declarations clear earlier theme buckets
+function ClearedThemeHookRuntimeColorBox({ children }: { children?: React.ReactNode }) {
+  const theme = useTheme();
+  const sx = stylex.props(styles.clearedThemeHookRuntimeColorBox);
+
+  return (
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        backgroundColor: theme.isDark ? runtimeColor() : undefined,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // theme.isDark controlling an entire CSS block (empty string vs padding)
 function Box({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
@@ -111,6 +129,9 @@ export const App = () => (
     </HelperColorBox>
     <HelperGradientBox>Helper gradient box</HelperGradientBox>
     <RuntimeColorBox>Runtime color box</RuntimeColorBox>
+    <ClearedThemeHookRuntimeColorBox>
+      Cleared theme hook runtime color box
+    </ClearedThemeHookRuntimeColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
@@ -148,6 +169,11 @@ const styles = stylex.create({
   },
   runtimeColorBox: {
     color: $colors.labelMuted,
+    padding: 8,
+  },
+  clearedThemeHookRuntimeColorBox: {
+    backgroundColor: $colors.labelMuted,
+    color: "green",
     padding: 8,
   },
   boxLight: {

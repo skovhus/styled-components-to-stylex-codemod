@@ -2407,12 +2407,19 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Add imports for the resolved value
       addResolverImports(res.resolvedImports);
 
-      // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
-      // with both keys null (no style buckets needed — only the import/declaration)
+      // Ensure useTheme() is imported and called by adding a hook-only entry
+      // with both keys null. Keep this separate from style-bucket entries for
+      // the same theme prop so later cascade cleanup can delete emptied style
+      // hooks without dropping inline fallbacks that still reference `theme`.
       if (!decl.needsUseThemeHook) {
         decl.needsUseThemeHook = [];
       }
-      if (!decl.needsUseThemeHook.some((e) => e.themeProp === res.themeProp)) {
+      if (
+        !decl.needsUseThemeHook.some(
+          (e) =>
+            e.themeProp === res.themeProp && e.trueStyleKey === null && e.falseStyleKey === null,
+        )
+      ) {
         decl.needsUseThemeHook.push({
           themeProp: res.themeProp,
           trueStyleKey: null,
