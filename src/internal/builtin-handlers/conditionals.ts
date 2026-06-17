@@ -107,6 +107,43 @@ export function tryResolveConditionalValue(
       resolveCallResult: { preserveRuntimeCall: true },
     };
   };
+  const markFirstRuntimeCallInBranch = (branch: unknown): void => {
+    const pending = [branch];
+    const seen = new Set<unknown>();
+
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || typeof current !== "object" || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+
+      if (isCallExpressionNode(current)) {
+        markAsRuntimeCall(current);
+        return;
+      }
+
+      const node = current as {
+        type?: string;
+        left?: unknown;
+        right?: unknown;
+        expressions?: unknown[];
+        expression?: unknown;
+        test?: unknown;
+        consequent?: unknown;
+        alternate?: unknown;
+      };
+      if (node.type === "BinaryExpression" || node.type === "LogicalExpression") {
+        pending.push(node.left, node.right);
+      } else if (node.type === "TemplateLiteral") {
+        pending.push(...(node.expressions ?? []));
+      } else if (node.type === "ConditionalExpression") {
+        pending.push(node.test, node.consequent, node.alternate);
+      } else if (node.expression) {
+        pending.push(node.expression);
+      }
+    }
+  };
 
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
@@ -257,6 +294,10 @@ export function tryResolveConditionalValue(
           isCssCalcSafeOperand(left) &&
           isCssCalcSafeOperand(right)
         ) {
+          if (left.dynamicArgUsage || right.dynamicArgUsage) {
+            markFirstRuntimeCallInBranch(left.dynamicArgUsage ? binary.left : binary.right);
+            return null;
+          }
           return {
             usage: expectedUsage,
             expr: buildCssCalcExprSource(left, binary.operator!, right),
