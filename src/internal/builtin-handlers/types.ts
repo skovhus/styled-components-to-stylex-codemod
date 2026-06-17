@@ -115,6 +115,8 @@ export type HandlerResult =
       type: "runtimeCallOnly";
       resolveCallContext: CallResolveContext;
       resolveCallResult: CallResolveResult;
+      /** Resolved CSS value text used to classify ambiguous shorthands like background. */
+      cssValueText?: string;
     }
   | {
       /**
@@ -384,6 +386,10 @@ export type HandlerResult =
       trueCssValueText?: string;
       /** Original/resolved CSS value text for false branch classification */
       falseCssValueText?: string;
+      /** Optional runtime override requested by an adapter result used inside a branch. */
+      runtimeResolveCallResult?: CallResolveResult;
+      /** Resolved CSS value text used to classify runtime overrides for ambiguous shorthands. */
+      runtimeCssValueText?: string;
     }
   | {
       /**

@@ -848,8 +848,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     resolveCallResult: CallResolveResult | undefined;
     originalExpr: unknown;
     loc: { line: number; column: number } | null | undefined;
+    cssValueText?: string;
   }): "not-requested" | "emitted" | "failed" => {
-    const { resolveCallResult, originalExpr, loc } = args;
+    const { resolveCallResult, originalExpr, loc, cssValueText } = args;
     if (
       !resolveCallResult ||
       !("preserveRuntimeCall" in resolveCallResult) ||
@@ -917,7 +918,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       markDeclNeedsUseThemeHook(decl);
     }
 
-    const outs = cssDeclarationToStylexDeclarations(d);
+    const outs =
+      d.property === "background" && cssValueText
+        ? [{ prop: resolveBackgroundStylexProp(cssValueText) }]
+        : cssDeclarationToStylexDeclarations(d);
     if (outs.length !== 1 || !outs[0]?.prop) {
       warnings.push({
         severity: "error",
@@ -2149,6 +2153,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolveCallResult: res.resolveCallResult,
         originalExpr: expr,
         loc,
+        cssValueText: res.cssValueText,
       });
       if (runtimeOverride === "failed") {
         break;
@@ -2205,6 +2210,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       extraStyleObjects.set(trueStyleKey, trueStyle);
       extraStyleObjects.set(falseStyleKey, falseStyle);
+
+      const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
+        resolveCallResult: res.runtimeResolveCallResult,
+        originalExpr: expr,
+        loc,
+        cssValueText: res.runtimeCssValueText,
+      });
+      if (runtimeOverride === "failed") {
+        break;
+      }
 
       decl.needsWrapperComponent = true;
       continue;
