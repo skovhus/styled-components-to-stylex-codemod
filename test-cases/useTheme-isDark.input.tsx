@@ -35,6 +35,12 @@ const RuntimeColorBox = styled.div`
   padding: 8px;
 `;
 
+// negated theme.isDark with one unresolved helper branch that falls back to inline style
+const NegatedRuntimeColorBox = styled.div`
+  color: ${(props) => (!props.theme.isDark ? runtimeColor() : color("labelMuted")(props))};
+  padding: 8px;
+`;
+
 // inline fallback must retain useTheme after later base declarations clear earlier theme buckets
 const ClearedThemeHookRuntimeColorBox = styled.div`
   color: ${(props) => (props.theme.isDark ? "red" : "blue")};
@@ -65,6 +71,7 @@ export const App = () => (
     </HelperColorBox>
     <HelperGradientBox>Helper gradient box</HelperGradientBox>
     <RuntimeColorBox>Runtime color box</RuntimeColorBox>
+    <NegatedRuntimeColorBox>Negated runtime color box</NegatedRuntimeColorBox>
     <ClearedThemeHookRuntimeColorBox>
       Cleared theme hook runtime color box
     </ClearedThemeHookRuntimeColorBox>
