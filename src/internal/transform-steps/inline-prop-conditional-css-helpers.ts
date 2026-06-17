@@ -229,16 +229,42 @@ function inlineWouldContend(reference: HelperReference, consumer: StyledDecl): b
  * atomic leaf longhands (a shorthand to its leaves, a longhand to itself) and the sets are
  * intersected. This correctly distinguishes overlapping families (`borderColor` vs
  * `borderTopColor`) from disjoint ones (`borderRadius` vs `border`, `width` vs `padding`).
+ *
+ * Backstop for shorthands the leaf table does not model: most CSS shorthands name their longhands
+ * with their own camelCase prefix (`font` → `fontVariantNumeric`, `overscrollBehavior` →
+ * `overscrollBehaviorX`). When the table cannot vouch for *both* properties (one is neither a known
+ * shorthand nor a known leaf), a word-prefix relationship is treated as contention so an unmodeled
+ * shorthand/longhand pair conservatively bails. Fully-modeled families skip this (so `border` and
+ * `borderRadius`, which share the `border` prefix but are disjoint, still inline).
  */
 function propertiesConflict(a: string, b: string): boolean {
-  const leavesA = leafLonghands(cssPropertyToStylexProp(a));
-  const leavesB = leafLonghands(cssPropertyToStylexProp(b));
+  const stylexA = cssPropertyToStylexProp(a);
+  const stylexB = cssPropertyToStylexProp(b);
+  const leavesA = leafLonghands(stylexA);
+  const leavesB = leafLonghands(stylexB);
   for (const leaf of leavesA) {
     if (leavesB.has(leaf)) {
       return true;
     }
   }
-  return false;
+  if (isModeledProperty(stylexA) && isModeledProperty(stylexB)) {
+    return false;
+  }
+  return isWordPrefix(stylexA, stylexB) || isWordPrefix(stylexB, stylexA);
+}
+
+/** Whether the leaf table reliably classifies a StyleX property (a known shorthand or leaf). */
+function isModeledProperty(stylexProp: string): boolean {
+  return KNOWN_SHORTHANDS.has(stylexProp) || KNOWN_LEAVES.has(stylexProp);
+}
+
+/** Whether `prefix` is `full` truncated at a camelCase word boundary (`font` ⊂ `fontVariant`). */
+function isWordPrefix(prefix: string, full: string): boolean {
+  if (full.length <= prefix.length || !full.startsWith(prefix)) {
+    return false;
+  }
+  const next = full[prefix.length] ?? "";
+  return next !== next.toLowerCase() && next === next.toUpperCase();
 }
 
 /**
@@ -437,6 +463,20 @@ for (const kind of BORDER_KINDS) {
 for (const axis of ["Block", "Inline"] as const) {
   for (const end of ["Start", "End"] as const) {
     SHORTHAND_LEAVES[`border${axis}${end}`] = ALL_BORDER_LEAVES;
+  }
+}
+
+// StyleX properties the leaf table reliably classifies: every shorthand key and every atomic leaf.
+const KNOWN_SHORTHANDS = new Set(Object.keys(SHORTHAND_LEAVES));
+const KNOWN_LEAVES = new Set<string>();
+for (const leaves of Object.values(SHORTHAND_LEAVES)) {
+  for (const leaf of leaves) {
+    KNOWN_LEAVES.add(leaf);
+  }
+}
+for (const leaves of Object.values(LOGICAL_LEAF_TO_PHYSICAL)) {
+  for (const leaf of leaves) {
+    KNOWN_LEAVES.add(leaf);
   }
 }
 

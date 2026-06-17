@@ -134,6 +134,24 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline an unmodeled longhand contested by its prefix shorthand", () => {
+    // Comment #18: `font-variant` is a nested shorthand the leaf table doesn't enumerate; the
+    // word-prefix backstop catches `font-variant-numeric` vs `font-variant`.
+    const helper = cssHelperDecl("dynVariant", [
+      rule("&", [interpolatedDecl("font-variant-numeric", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynVariant", [
+      rule("&", [reference, staticDecl("font-variant", "normal")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("inlines when a different sub-shorthand family does not contest", () => {
     // `border-radius` does not overlap `border-top-color`, so the inline is still safe.
     const helper = cssHelperDecl("dynBorderTop", [
