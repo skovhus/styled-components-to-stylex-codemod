@@ -141,6 +141,7 @@ type InterpolatedDeclarationContext = {
   pseudoElement: string | null;
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
+  hasAncestorAttributeScope: boolean;
   applyResolvedPropValue: (prop: string, value: unknown, commentSource: CommentSource) => void;
 };
 export function handleInterpolatedDeclaration(args: InterpolatedDeclarationContext): void {
@@ -154,6 +155,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     pseudoElement,
     attrTarget,
     resolvedSelectorMedia,
+    hasAncestorAttributeScope,
     applyResolvedPropValue,
   } = args;
   const {
@@ -2183,7 +2185,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
     if (res && res.type === "splitThemeBooleanVariants") {
-      if (pseudos?.length || media || pseudoElement) {
+      if (
+        pseudos?.length ||
+        media ||
+        pseudoElement ||
+        attrTarget ||
+        resolvedSelectorMedia ||
+        hasAncestorAttributeScope
+      ) {
         bail = true;
         continue;
       }
@@ -2191,39 +2200,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       addResolverImports(res.trueImports);
       addResolverImports(res.falseImports);
 
-      const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
-        decl.styleKey,
-        res.themeProp,
-      );
+      const trueStyle: Record<string, unknown> = {};
+      const falseStyle: Record<string, unknown> = {};
 
-      // Initialize the array if needed
-      if (!decl.needsUseThemeHook) {
-        decl.needsUseThemeHook = [];
-      }
-
-      // Check if we already have an entry for this theme prop
-      let entry = decl.needsUseThemeHook.find((e) => e.themeProp === res.themeProp);
-      if (!entry) {
-        entry = {
-          themeProp: res.themeProp,
-          trueStyleKey,
-          falseStyleKey,
-          sourceOrder: ctx.allocateSourceOrder(),
-        };
-        decl.needsUseThemeHook.push(entry);
-
-        // Initialize the style objects
-        extraStyleObjects.set(trueStyleKey, {});
-        extraStyleObjects.set(falseStyleKey, {});
-      } else {
-        entry.sourceOrder = ctx.allocateSourceOrder();
-      }
-
-      // Add the property to the true/false style objects
-      const trueStyle = extraStyleObjects.get(trueStyleKey) ?? {};
-      const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
-
-      // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
+      // Expand CSS shorthands (border -> width/style/color, background -> backgroundColor/Image)
       if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle, res.trueCssValueText)) {
         bail = true;
         continue;
@@ -2235,8 +2215,75 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         continue;
       }
 
-      extraStyleObjects.set(trueStyleKey, trueStyle);
-      extraStyleObjects.set(falseStyleKey, falseStyle);
+      const { trueKey: baseTrueStyleKey, falseKey: baseFalseStyleKey } = buildThemeStyleKeys(
+        decl.styleKey,
+        res.themeProp,
+      );
+
+      if (!decl.needsUseThemeHook) {
+        decl.needsUseThemeHook = [];
+      }
+
+      const latestSourceOrder = getLatestThemeInterleavableSourceOrder({
+        decl,
+        variantSourceOrder,
+        styleFnFromProps,
+      });
+      const matchingThemeEntries = decl.needsUseThemeHook.filter(
+        (entry) => entry.themeProp === res.themeProp && (entry.trueStyleKey || entry.falseStyleKey),
+      );
+      let reusableEntry: (typeof matchingThemeEntries)[number] | null = null;
+      for (let i = matchingThemeEntries.length - 1; i >= 0; i--) {
+        const entry = matchingThemeEntries[i]!;
+        if (entry.sourceOrder !== undefined && entry.sourceOrder === latestSourceOrder) {
+          reusableEntry = entry;
+          break;
+        }
+      }
+      const mergeExtraStyleObject = (styleKey: string, style: Record<string, unknown>): void => {
+        const existing = extraStyleObjects.get(styleKey);
+        extraStyleObjects.set(styleKey, existing ? { ...existing, ...style } : style);
+      };
+
+      if (reusableEntry) {
+        const restoredTrueStyleKey =
+          reusableEntry.trueStyleKey ??
+          restoreThemeStyleKeyFromPairedSide(
+            baseTrueStyleKey,
+            baseFalseStyleKey,
+            reusableEntry.falseStyleKey,
+          );
+        const restoredFalseStyleKey =
+          reusableEntry.falseStyleKey ??
+          restoreThemeStyleKeyFromPairedSide(
+            baseFalseStyleKey,
+            baseTrueStyleKey,
+            reusableEntry.trueStyleKey,
+          );
+        reusableEntry.trueStyleKey = restoredTrueStyleKey;
+        reusableEntry.falseStyleKey = restoredFalseStyleKey;
+        mergeExtraStyleObject(restoredTrueStyleKey, trueStyle);
+        mergeExtraStyleObject(restoredFalseStyleKey, falseStyle);
+      } else {
+        const sourceOrder = ctx.allocateSourceOrder();
+        const hasExistingStyleBucketForThemeProp = matchingThemeEntries.length > 0;
+        const trueStyleKey = hasExistingStyleBucketForThemeProp
+          ? styleKeyWithSuffix(baseTrueStyleKey, `theme${sourceOrder}`)
+          : baseTrueStyleKey;
+        const falseStyleKey = hasExistingStyleBucketForThemeProp
+          ? styleKeyWithSuffix(baseFalseStyleKey, `theme${sourceOrder}`)
+          : baseFalseStyleKey;
+
+        decl.needsUseThemeHook.push({
+          themeProp: res.themeProp,
+          trueStyleKey,
+          falseStyleKey,
+          sourceOrder,
+        });
+
+        extraStyleObjects.set(trueStyleKey, trueStyle);
+        extraStyleObjects.set(falseStyleKey, falseStyle);
+      }
 
       const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
         resolveCallResult: res.runtimeResolveCallResult,
@@ -2257,7 +2304,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // is emitted as a conditional inline style using the useTheme() hook.
     if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
       // Inline style fallback cannot preserve pseudo/media context — bail
-      if (pseudos?.length || media || pseudoElement) {
+      if (
+        pseudos?.length ||
+        media ||
+        pseudoElement ||
+        attrTarget ||
+        resolvedSelectorMedia ||
+        hasAncestorAttributeScope
+      ) {
         bail = true;
         continue;
       }
@@ -5573,6 +5627,41 @@ function applyThemeBooleanValue(
   // Default: camelCase the property name
   target[cssPropertyToStylexProp(cssProp)] = value;
   return true;
+}
+
+function restoreThemeStyleKeyFromPairedSide(
+  targetBaseKey: string,
+  pairedBaseKey: string,
+  pairedStyleKey: string | null,
+): string {
+  if (pairedStyleKey?.startsWith(pairedBaseKey)) {
+    return `${targetBaseKey}${pairedStyleKey.slice(pairedBaseKey.length)}`;
+  }
+  return targetBaseKey;
+}
+
+function getLatestThemeInterleavableSourceOrder(args: {
+  decl: StyledDecl;
+  variantSourceOrder: Record<string, number>;
+  styleFnFromProps: Array<{ sourceOrder?: number }>;
+}): number {
+  const sourceOrders = Object.values(args.variantSourceOrder);
+  appendSourceOrders(sourceOrders, args.styleFnFromProps);
+  appendSourceOrders(sourceOrders, args.decl.needsUseThemeHook);
+  appendSourceOrders(sourceOrders, args.decl.pseudoAliasSelectors);
+  appendSourceOrders(sourceOrders, args.decl.variantDimensions);
+  return sourceOrders.length > 0 ? Math.max(...sourceOrders) : -1;
+}
+
+function appendSourceOrders(
+  sourceOrders: number[],
+  entries: readonly { sourceOrder?: number }[] | undefined,
+): void {
+  for (const entry of entries ?? []) {
+    if (entry.sourceOrder !== undefined) {
+      sourceOrders.push(entry.sourceOrder);
+    }
+  }
 }
 
 type RuntimeBackgroundStylexProp = "backgroundImage" | "backgroundColor";

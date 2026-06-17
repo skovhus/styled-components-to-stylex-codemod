@@ -85,6 +85,7 @@ export function tryResolveConditionalValue(
     resolveCallResult: CallResolveResult;
     cssValueText?: string;
   };
+  type RuntimeCallBranch = "true" | "false" | "both";
   const runtimeCallState: { info: RuntimeCallInfo | null } = { info: null };
   const buildRuntimeCallResult = (): HandlerResult | null =>
     runtimeCallState.info
@@ -583,8 +584,20 @@ export function tryResolveConditionalValue(
     const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
     const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
 
+    let runtimeCallBranch: RuntimeCallBranch | null = null;
+    const noteRuntimeCallBranch = (branch: RuntimeCallBranch, before: RuntimeCallInfo | null) => {
+      if (runtimeCallState.info === before) {
+        return;
+      }
+      runtimeCallBranch = runtimeCallBranch && runtimeCallBranch !== branch ? "both" : branch;
+    };
+
+    const beforeTrueResolve = runtimeCallState.info;
     const trueResolved = resolveThemeBooleanStyleValue(trueBranch);
+    noteRuntimeCallBranch("true", beforeTrueResolve);
+    const beforeFalseResolve = runtimeCallState.info;
     const falseResolved = resolveThemeBooleanStyleValue(falseBranch);
+    noteRuntimeCallBranch("false", beforeFalseResolve);
     const trueValue = trueResolved?.value ?? null;
     const falseValue = falseResolved?.value ?? null;
     const trueImports = trueResolved?.imports ?? [];
@@ -636,6 +649,12 @@ export function tryResolveConditionalValue(
       info,
     });
     if (inlineStyleFallback) {
+      if (inlineStyleFallback.type === "splitThemeBooleanWithInlineStyleFallback") {
+        const resolvedRuntimeBranch = inlineStyleFallback.resolvedBranchIsTrue ? "true" : "false";
+        if (runtimeCallBranch === resolvedRuntimeBranch || runtimeCallBranch === "both") {
+          return null;
+        }
+      }
       return inlineStyleFallback;
     }
     // Can't resolve branches as static values - fall through to other handlers

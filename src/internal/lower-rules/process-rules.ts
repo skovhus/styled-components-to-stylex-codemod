@@ -1738,6 +1738,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       pseudoElement: pseudoElement ?? (pseudoElementsList ? (pseudoElementsList[0] ?? null) : null),
       attrTarget,
       resolvedSelectorMedia,
+      hasAncestorAttributeScope: Boolean(ancestorAttrs?.length),
       applyResolvedPropValue,
     });
     if (state.bail) {
