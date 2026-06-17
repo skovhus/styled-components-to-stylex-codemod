@@ -918,10 +918,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       markDeclNeedsUseThemeHook(decl);
     }
 
-    const outs =
-      d.property === "background" && cssValueText
-        ? [{ prop: resolveBackgroundStylexProp(cssValueText) }]
-        : cssDeclarationToStylexDeclarations(d);
+    const runtimeBackgroundProp =
+      d.property === "background"
+        ? resolveRuntimeBackgroundStylexProp(baseRuntimeExpr, cssValueText)
+        : null;
+    if (runtimeBackgroundProp === "unsupported") {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+
+    const outs = runtimeBackgroundProp
+      ? [{ prop: runtimeBackgroundProp }]
+      : cssDeclarationToStylexDeclarations(d);
     if (outs.length !== 1 || !outs[0]?.prop) {
       warnings.push({
         severity: "error",
@@ -5550,6 +5563,99 @@ function applyThemeBooleanValue(
   // Default: camelCase the property name
   target[cssPropertyToStylexProp(cssProp)] = value;
   return true;
+}
+
+type RuntimeBackgroundStylexProp = "backgroundImage" | "backgroundColor";
+
+function resolveRuntimeBackgroundStylexProp(
+  value: unknown,
+  cssValueText?: string,
+): RuntimeBackgroundStylexProp | "unsupported" | null {
+  const node = unwrapExpressionNode(value);
+  if (node?.type !== "ConditionalExpression") {
+    const staticText = getRuntimeBackgroundStaticText(node);
+    if (staticText !== null) {
+      return resolveBackgroundStylexProp(staticText);
+    }
+    return cssValueText ? resolveBackgroundStylexProp(cssValueText) : null;
+  }
+
+  const consequentProp = classifyRuntimeBackgroundBranch(node.consequent);
+  const alternateProp = classifyRuntimeBackgroundBranch(node.alternate);
+  if (consequentProp && alternateProp) {
+    return consequentProp === alternateProp ? consequentProp : "unsupported";
+  }
+
+  const cssTextProp = cssValueText ? resolveBackgroundStylexProp(cssValueText) : null;
+  const knownProp = consequentProp ?? alternateProp;
+  if (knownProp) {
+    if (knownProp === "backgroundImage") {
+      return "unsupported";
+    }
+    if (cssTextProp && cssTextProp !== knownProp) {
+      return "unsupported";
+    }
+    return "backgroundColor";
+  }
+  if (cssTextProp === "backgroundImage") {
+    return "unsupported";
+  }
+  return "backgroundColor";
+}
+
+function classifyRuntimeBackgroundBranch(value: unknown): RuntimeBackgroundStylexProp | null {
+  const staticText = getRuntimeBackgroundStaticText(unwrapExpressionNode(value));
+  return staticText === null ? null : resolveBackgroundStylexProp(staticText);
+}
+
+function unwrapExpressionNode(value: unknown): {
+  type?: string;
+  expression?: unknown;
+  consequent?: unknown;
+  alternate?: unknown;
+  quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+  value?: unknown;
+} | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const node = value as {
+    type?: string;
+    expression?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+    quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+    value?: unknown;
+  };
+  if (
+    node.type === "ExpressionStatement" ||
+    node.type === "TSAsExpression" ||
+    node.type === "TSSatisfiesExpression"
+  ) {
+    return unwrapExpressionNode(node.expression);
+  }
+  return node;
+}
+
+function getRuntimeBackgroundStaticText(
+  value: ReturnType<typeof unwrapExpressionNode>,
+): string | null {
+  if (!value) {
+    return null;
+  }
+  if (
+    (value.type === "StringLiteral" || value.type === "Literal") &&
+    typeof value.value === "string"
+  ) {
+    return value.value;
+  }
+  if (value.type === "TemplateLiteral") {
+    const text = (value.quasis ?? [])
+      .map((quasi) => quasi.value?.cooked ?? quasi.value?.raw ?? "")
+      .join("");
+    return text || null;
+  }
+  return null;
 }
 
 type DynamicHelperCallContext = {

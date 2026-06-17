@@ -360,6 +360,7 @@ export function tryResolveConditionalValue(
             runtimeCallState.info = {
               resolveCallContext: res.resolveCallContext,
               resolveCallResult: res.resolveCallResult,
+              cssValueText: res.result.expr,
             };
           }
           return res.result;
@@ -390,6 +391,7 @@ export function tryResolveConditionalValue(
                 runtimeCallState.info = {
                   resolveCallContext: innerRes.resolveCallContext,
                   resolveCallResult: innerRes.resolveCallResult,
+                  cssValueText: innerRes.result.expr,
                 };
               }
               return innerRes.result;
