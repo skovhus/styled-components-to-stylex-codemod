@@ -7697,6 +7697,35 @@ export const Box = styled.div\`
     expect(result.code).toBeNull();
   });
 
+  it("should preserve important helper-backed theme branch values", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)} !important;
+  color: green;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanImportant.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).toMatch(/\$\{\$colors\.labelBase\} !important/);
+    expect(code).toMatch(/\$\{\$colors\.labelMuted\} !important/);
+    expect(code).toContain('color: "green"');
+  });
+
   it("should clear theme background images when a later resolved background helper wins", () => {
     const source = `
 import styled from "styled-components";

@@ -102,6 +102,7 @@ import {
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
+import { appendImportantToStyleValue } from "./important-values.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
@@ -2213,12 +2214,28 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const falseStyle: Record<string, unknown> = {};
 
       // Expand CSS shorthands (border -> width/style/color, background -> backgroundColor/Image)
-      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle, res.trueCssValueText)) {
+      if (
+        !applyThemeBooleanValue(
+          j,
+          res.cssProp,
+          res.trueValue,
+          trueStyle,
+          d.important,
+          res.trueCssValueText,
+        )
+      ) {
         bail = true;
         continue;
       }
       if (
-        !applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle, res.falseCssValueText)
+        !applyThemeBooleanValue(
+          j,
+          res.cssProp,
+          res.falseValue,
+          falseStyle,
+          d.important,
+          res.falseCssValueText,
+        )
       ) {
         bail = true;
         continue;
@@ -5591,10 +5608,11 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
  * Returns false if the value cannot be expanded (caller should bail).
  */
 function applyThemeBooleanValue(
-  j: { literal: (value: string) => unknown },
+  j: JSCodeshift,
   cssProp: string,
   value: unknown,
   target: Record<string, unknown>,
+  important: boolean,
   cssValueText?: string,
 ): boolean {
   // Try to extract string value from AST node (shared across border/background paths)
@@ -5621,13 +5639,25 @@ function applyThemeBooleanValue(
       return false;
     }
     if (parsed.width) {
-      target[`border${direction}Width`] = j.literal(parsed.width);
+      target[`border${direction}Width`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.width),
+        important,
+      );
     }
     if (parsed.style) {
-      target[`border${direction}Style`] = j.literal(parsed.style);
+      target[`border${direction}Style`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.style),
+        important,
+      );
     }
     if (parsed.color) {
-      target[`border${direction}Color`] = j.literal(parsed.color);
+      target[`border${direction}Color`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.color),
+        important,
+      );
     }
     return true;
   }
@@ -5637,16 +5667,16 @@ function applyThemeBooleanValue(
   if (cssProp === "background") {
     const backgroundText = strValue ?? cssValueText ?? "";
     if (backgroundText.trim() === "none") {
-      target.backgroundImage = j.literal("none");
-      target.backgroundColor = j.literal("transparent");
+      target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
+      target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
       return true;
     }
     const backgroundProp = resolveBackgroundStylexProp(backgroundText);
-    target[backgroundProp] = value;
+    target[backgroundProp] = appendImportantToStyleValue(j, value, important);
     if (backgroundProp === "backgroundColor") {
-      target.backgroundImage = j.literal("none");
+      target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
     } else {
-      target.backgroundColor = j.literal("transparent");
+      target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
     }
     return true;
   }
@@ -5656,7 +5686,7 @@ function applyThemeBooleanValue(
   }
 
   // Default: camelCase the property name
-  target[cssPropertyToStylexProp(cssProp)] = value;
+  target[cssPropertyToStylexProp(cssProp)] = appendImportantToStyleValue(j, value, important);
   return true;
 }
 
