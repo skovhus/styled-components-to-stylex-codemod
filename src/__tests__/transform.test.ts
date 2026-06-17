@@ -7337,6 +7337,60 @@ export const Box = styled.div\`
     expect(runtimeStyleIndex).toBeGreaterThan(themeStyleIndex);
   });
 
+  it("should suppress preserved runtime overrides when a later base declaration wins", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+  background: white;
+\`;
+`;
+
+    const adapterWithRuntimeFallback = {
+      ...fixtureAdapter,
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`color-mix(in srgb, ${$colors.bgBase} 50%, transparent)`",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+            preserveRuntimeCall: true,
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeLaterBaseOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeFallback },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("ColorConverter.cssWithAlpha");
+    expect(code).not.toContain("styles.boxBackgroundColor(");
+    expect(code).not.toContain("theme.isDark");
+  });
+
   it("should bail on inline fallback when a resolved theme branch preserves a runtime override", () => {
     const source = `
 import styled from "styled-components";
@@ -7724,6 +7778,36 @@ export const Box = styled.div\`
     expect(code).toMatch(/\$\{\$colors\.labelBase\} !important/);
     expect(code).toMatch(/\$\{\$colors\.labelMuted\} !important/);
     expect(code).toContain('color: "green"');
+  });
+
+  it("should keep earlier important values when reusing theme buckets", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)} !important;
+  color: \${(props) =>
+    props.theme.isDark ? color("bgSub")(props) : color("bgBase")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanImportantReuse.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/\$\{\$colors\.labelBase\} !important/);
+    expect(code).toMatch(/\$\{\$colors\.labelMuted\} !important/);
+    expect(code).not.toContain("color: $colors.bgSub");
+    expect(code).not.toContain("color: $colors.bgBase");
   });
 
   it("should clear theme background images when a later resolved background helper wins", () => {

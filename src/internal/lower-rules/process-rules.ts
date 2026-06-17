@@ -76,6 +76,7 @@ import {
   tryResolveAdapterCall,
   type AdapterCallResolver,
 } from "./utils.js";
+import { cssValueIsImportant } from "./important-values.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -2839,36 +2840,6 @@ function recoverStandaloneInterpolationsInPseudoBlock(
 
   const when = needsNegation ? negateWhen(testInfo.when) : testInfo.when;
   return { when, propName: testInfo.propName, cssProps };
-}
-
-/**
- * Whether a lowered StyleX value carries `!important`. Values are stored either
- * as plain strings (e.g. `"red !important"`) or as AST string/template literals.
- */
-function cssValueIsImportant(value: unknown): boolean {
-  if (typeof value === "string") {
-    return value.includes("!important");
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const node = value as {
-    type?: string;
-    value?: unknown;
-    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
-  };
-  if (
-    (node.type === "StringLiteral" || node.type === "Literal") &&
-    typeof node.value === "string"
-  ) {
-    return node.value.includes("!important");
-  }
-  if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
-    return node.quasis.some((q) =>
-      (q?.value?.cooked ?? q?.value?.raw ?? "").includes("!important"),
-    );
-  }
-  return false;
 }
 
 /** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */

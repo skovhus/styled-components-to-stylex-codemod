@@ -47,6 +47,34 @@ export function appendImportantToStyleValue(
   );
 }
 
+export function cssValueIsImportant(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.includes("!important");
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const node = value as ImportantValueNode;
+  if (node.type === "ExpressionStatement") {
+    return cssValueIsImportant(node.expression);
+  }
+  if (
+    (node.type === "StringLiteral" || node.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return node.value.includes("!important");
+  }
+  if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
+    return node.quasis.some((q) => {
+      const raw = q?.value?.raw ?? "";
+      const cooked = q?.value?.cooked ?? "";
+      return raw.includes("!important") || cooked.includes("!important");
+    });
+  }
+  return false;
+}
+
 type ImportantValueNode = {
   type?: string;
   value?: unknown;

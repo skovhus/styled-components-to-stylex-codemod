@@ -102,7 +102,7 @@ import {
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
-import { appendImportantToStyleValue } from "./important-values.js";
+import { appendImportantToStyleValue, cssValueIsImportant } from "./important-values.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
@@ -857,7 +857,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     originalExpr: unknown;
     loc: { line: number; column: number } | null | undefined;
     cssValueText?: string;
-  }): "not-requested" | "emitted" | "failed" => {
+  }): "not-requested" | "emitted" | "suppressed" | "failed" => {
     const { resolveCallResult, originalExpr, loc, cssValueText } = args;
     if (
       !resolveCallResult ||
@@ -954,16 +954,52 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const out = outs[0]!;
-    const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+    const runtimeStyle = { [out.prop]: runtimeCallArg } as Record<string, unknown>;
+    if (
+      !subtractLaterStaticOverrides({
+        rule,
+        allRules,
+        currentDecl: d,
+        branchStyles: [runtimeStyle],
+        ignoreUnsafeOverlaps: true,
+      })
+    ) {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+    const runtimeProps = Object.keys(runtimeStyle);
+    if (runtimeProps.length === 0) {
+      return "suppressed";
+    }
+    if (runtimeProps.length > 1) {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+    const [runtimeProp] = runtimeProps;
+    if (!runtimeProp) {
+      return "suppressed";
+    }
+
+    const fnKey = styleKeyWithSuffix(decl.styleKey, runtimeProp);
     if (!styleFnDecls.has(fnKey)) {
-      const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+      const outParamName = cssPropertyToIdentifier(runtimeProp, avoidNames);
       const param = j.identifier(outParamName);
       if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
           j.tsStringKeyword(),
         );
       }
-      const body = j.objectExpression([makeCssProperty(j, out.prop, outParamName)]);
+      const body = j.objectExpression([makeCssProperty(j, runtimeProp, outParamName)]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
@@ -2268,7 +2304,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
       const mergeExtraStyleObject = (styleKey: string, style: Record<string, unknown>): void => {
         const existing = extraStyleObjects.get(styleKey);
-        extraStyleObjects.set(styleKey, existing ? { ...existing, ...style } : style);
+        if (!existing) {
+          extraStyleObjects.set(styleKey, style);
+          return;
+        }
+        const merged = { ...existing };
+        for (const [prop, value] of Object.entries(style)) {
+          if (
+            Object.hasOwn(merged, prop) &&
+            cssValueIsImportant(merged[prop]) &&
+            !cssValueIsImportant(value)
+          ) {
+            continue;
+          }
+          merged[prop] = value;
+        }
+        extraStyleObjects.set(styleKey, merged);
       };
 
       if (reusableEntry) {
@@ -4300,8 +4351,9 @@ function subtractLaterStaticOverrides(args: {
   allRules: readonly CssRuleIR[];
   currentDecl: CssDeclarationIR;
   branchStyles: Array<Record<string, unknown>>;
+  ignoreUnsafeOverlaps?: boolean;
 }): boolean {
-  const { rule, allRules, currentDecl, branchStyles } = args;
+  const { rule, allRules, currentDecl, branchStyles, ignoreUnsafeOverlaps = false } = args;
   const currentIndex = rule.declarations.indexOf(currentDecl);
   if (currentIndex === -1) {
     return true;
@@ -4331,6 +4383,9 @@ function subtractLaterStaticOverrides(args: {
       if (!laterDecl.property) {
         // Property-less interpolation (e.g. a helper mixin) may set anything.
         if (branchProps().length) {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
           return false;
         }
         continue;
@@ -4354,6 +4409,32 @@ function subtractLaterStaticOverrides(args: {
         }
         continue;
       }
+      if (laterDecl.property.trim() === "background") {
+        const overlapped = branchProps().filter((prop) => prop.startsWith("background"));
+        if (!overlapped.length) {
+          continue;
+        }
+        // A background shorthand resets both image and color layers, even when
+        // cssDeclarationToStylexDeclarations() maps the authored value to one longhand.
+        if (currentDecl.important && !laterDecl.important) {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
+          return false;
+        }
+        if (!context.unconditional || laterDecl.value.kind !== "static") {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
+          return false;
+        }
+        for (const branch of branchStyles) {
+          for (const prop of overlapped) {
+            delete branch[prop];
+          }
+        }
+        continue;
+      }
       for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
         const overrideProp = out.prop;
         const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
@@ -4365,9 +4446,15 @@ function subtractLaterStaticOverrides(args: {
         // branch and let the later declaration clobber the base, inverting the
         // cascade — bail instead so the important branches are preserved.
         if (currentDecl.important && !laterDecl.important) {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
           return false;
         }
         if (!context.unconditional || laterDecl.value.kind !== "static") {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
           return false;
         }
         for (const branch of branchStyles) {
