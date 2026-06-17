@@ -7221,9 +7221,86 @@ export const CalcBox = styled.div<{ $dark: string }>\`
     expect(code).toContain("color(props.light)");
     expect(code).toContain("linear-gradient");
     expect(code).toContain("color(props.dark)({");
+    expect(code).toContain("gradientBoxBackgroundImage");
     expect(code).not.toContain("backgroundColor: $colors");
+    expect(code).not.toContain("gradientBoxBackgroundColor");
     expect(code).not.toContain("linear-gradient(${$colors");
     expect(code).not.toContain("calc($colors");
+  });
+
+  it("should preserve adapter runtime overrides in theme boolean branches", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+\`;
+`;
+
+    const adapterWithRuntimeFallback = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme" && ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`color-mix(in srgb, ${$colors.bgBase} 50%, transparent)`",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+            preserveRuntimeCall: true,
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeFallback },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("color-mix(in srgb");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("styles.boxColor(");
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {

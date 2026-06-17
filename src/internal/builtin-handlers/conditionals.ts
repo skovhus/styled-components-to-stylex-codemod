@@ -83,6 +83,7 @@ export function tryResolveConditionalValue(
   type RuntimeCallInfo = {
     resolveCallContext: CallResolveContext;
     resolveCallResult: CallResolveResult;
+    cssValueText?: string;
   };
   const runtimeCallState: { info: RuntimeCallInfo | null } = { info: null };
   const buildRuntimeCallResult = (): HandlerResult | null =>
@@ -91,6 +92,9 @@ export function tryResolveConditionalValue(
           type: "runtimeCallOnly",
           resolveCallContext: runtimeCallState.info.resolveCallContext,
           resolveCallResult: runtimeCallState.info.resolveCallResult,
+          ...(runtimeCallState.info.cssValueText
+            ? { cssValueText: runtimeCallState.info.cssValueText }
+            : {}),
         }
       : null;
   const markAsRuntimeCall = (call: CallExpressionNode): void => {
@@ -352,6 +356,12 @@ export function tryResolveConditionalValue(
       );
       if (res.kind === "resolved") {
         if ("expr" in res.result) {
+          if ("preserveRuntimeCall" in res.result && res.result.preserveRuntimeCall) {
+            runtimeCallState.info = {
+              resolveCallContext: res.resolveCallContext,
+              resolveCallResult: res.resolveCallResult,
+            };
+          }
           return res.result;
         }
         if ("preserveRuntimeCall" in res.result && res.result.preserveRuntimeCall) {
@@ -376,6 +386,12 @@ export function tryResolveConditionalValue(
           );
           if (innerRes.kind === "resolved") {
             if ("expr" in innerRes.result) {
+              if ("preserveRuntimeCall" in innerRes.result && innerRes.result.preserveRuntimeCall) {
+                runtimeCallState.info = {
+                  resolveCallContext: innerRes.resolveCallContext,
+                  resolveCallResult: innerRes.resolveCallResult,
+                };
+              }
               return innerRes.result;
             }
             if ("preserveRuntimeCall" in innerRes.result && innerRes.result.preserveRuntimeCall) {
@@ -426,6 +442,9 @@ export function tryResolveConditionalValue(
       return null;
     });
     if (templateResult) {
+      if (templateHasDynamicArgUsage && runtimeCallState.info) {
+        runtimeCallState.info.cssValueText = templateResult.expr;
+      }
       return {
         usage: "create",
         ...templateResult,
@@ -567,6 +586,7 @@ export function tryResolveConditionalValue(
     const falseCssValueText = falseResolved?.cssValueText;
 
     if (trueValue !== null && falseValue !== null) {
+      const runtimeCallInfo = runtimeCallState.info;
       return {
         type: "splitThemeBooleanVariants",
         cssProp: node.css.property,
@@ -577,6 +597,12 @@ export function tryResolveConditionalValue(
         falseImports,
         ...(trueCssValueText ? { trueCssValueText } : {}),
         ...(falseCssValueText ? { falseCssValueText } : {}),
+        ...(runtimeCallInfo?.resolveCallResult
+          ? { runtimeResolveCallResult: runtimeCallInfo.resolveCallResult }
+          : {}),
+        ...(runtimeCallInfo?.cssValueText
+          ? { runtimeCssValueText: runtimeCallInfo.cssValueText }
+          : {}),
       };
     }
 
