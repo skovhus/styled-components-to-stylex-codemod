@@ -6,7 +6,7 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
-import { type WrapperPropDefaults } from "./types.js";
+import { type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
@@ -262,7 +262,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         allowClassNameProp,
         allowStyleProp,
         allowSxProp,
-        inlineStyleProps: [],
+        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticStyleExpr: attrsInfoWithoutForwardedAsStatic?.attrsStaticStyleExpr,
         staticClassNameExpr,
         isIntrinsicElement: false,

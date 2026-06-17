@@ -4390,9 +4390,6 @@ function subtractLaterStaticOverrides(args: {
       if (!laterDecl.property) {
         // Property-less interpolation (e.g. a helper mixin) may set anything.
         if (branchProps().length) {
-          if (ignoreUnsafeOverlaps) {
-            continue;
-          }
           return false;
         }
         continue;

@@ -7422,6 +7422,30 @@ export const Box = styled.div\`
     expect(code).not.toContain("theme.isDark");
   });
 
+  it("should bail when a later helper mixin could override preserved runtime background", () => {
+    const source = `
+import styled from "styled-components";
+import { color, gradient } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+  \${gradient()};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeLaterMixin.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should bail on inline fallback when a resolved theme branch preserves a runtime override", () => {
     const source = `
 import styled from "styled-components";
@@ -7964,6 +7988,45 @@ export const App = () => <Box as="section">Themed</Box>;
     const code = result.code ?? "";
     expect(code).toContain("const theme = useTheme();");
     expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).toContain("as?: C");
+  });
+
+  it("should pass inline theme fallbacks through polymorphic intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? runtimeColor() : props.theme.color.labelMuted)};
+\`;
+
+export const App = () => <Box as="section">Themed</Box>;
+`;
+
+    const adapterWithAsSupport = {
+      ...fixtureAdapter,
+      externalInterface() {
+        return { styles: false, as: true, ref: false };
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanPolymorphicInlineFallback.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAsSupport },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("const theme = useTheme();");
+    expect(code).toContain("color: theme.isDark ? runtimeColor() : undefined");
+    expect(code).toContain("style={{");
     expect(code).toContain("as?: C");
   });
 
