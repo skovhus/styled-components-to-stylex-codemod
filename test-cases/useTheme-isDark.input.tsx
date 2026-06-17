@@ -41,6 +41,15 @@ const NegatedRuntimeColorBox = styled.div`
   padding: 8px;
 `;
 
+// inline fallback must retain useTheme after later base declarations clear earlier theme buckets
+const ClearedThemeHookRuntimeColorBox = styled.div`
+  color: ${(props) => (props.theme.isDark ? "red" : "blue")};
+  background-color: ${(props) =>
+    props.theme.isDark ? runtimeColor() : color("labelMuted")(props)};
+  color: green;
+  padding: 8px;
+`;
+
 // theme.isDark controlling an entire CSS block (empty string vs padding)
 const Box = styled.div`
   ${(props) => (props.theme.isDark ? "" : `padding: ${thinPixel()};`)}
@@ -63,6 +72,9 @@ export const App = () => (
     <HelperGradientBox>Helper gradient box</HelperGradientBox>
     <RuntimeColorBox>Runtime color box</RuntimeColorBox>
     <NegatedRuntimeColorBox>Negated runtime color box</NegatedRuntimeColorBox>
+    <ClearedThemeHookRuntimeColorBox>
+      Cleared theme hook runtime color box
+    </ClearedThemeHookRuntimeColorBox>
     <Box>Box</Box>
     <DayPicker>DayPicker</DayPicker>
   </div>
