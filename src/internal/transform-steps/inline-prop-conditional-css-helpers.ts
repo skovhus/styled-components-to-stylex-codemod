@@ -462,7 +462,9 @@ for (const base of ["margin", "padding", "scrollMargin", "scrollPadding"]) {
 SHORTHAND_LEAVES.inset = ALL_INSET_SIDES;
 SHORTHAND_LEAVES.insetBlock = ALL_INSET_SIDES;
 SHORTHAND_LEAVES.insetInline = ALL_INSET_SIDES;
-SHORTHAND_LEAVES.border = ALL_BORDER_LEAVES;
+// The `border` shorthand resets `border-image` to its initial value (but not `border-radius`),
+// so it contends with the border-image longhands too.
+SHORTHAND_LEAVES.border = [...ALL_BORDER_LEAVES, ...SHORTHAND_LEAVES.borderImage!];
 SHORTHAND_LEAVES.borderBlock = ALL_BORDER_LEAVES;
 SHORTHAND_LEAVES.borderInline = ALL_BORDER_LEAVES;
 for (const side of PHYSICAL_SIDES) {

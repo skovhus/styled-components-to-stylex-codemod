@@ -152,6 +152,24 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline a border-image longhand contested by the border shorthand", () => {
+    // Comment #21: `border` resets `border-image` to its initial value, so it contends with a
+    // dynamic `border-image-source` even though `border` only sets width/style/color.
+    const helper = cssHelperDecl("dynImage", [
+      rule("&", [interpolatedDecl("border-image-source", 0)]),
+    ]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynImage", [
+      rule("&", [reference, staticDecl("border", "1px solid red")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("inlines when a different sub-shorthand family does not contest", () => {
     // `border-radius` does not overlap `border-top-color`, so the inline is still safe.
     const helper = cssHelperDecl("dynBorderTop", [
