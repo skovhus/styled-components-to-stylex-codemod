@@ -185,6 +185,22 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("does not inline a dynamic break longhand contested by a legacy page-break alias", () => {
+    // Comment #23: `page-break-before` is a legacy alias of `break-before`, so it contends with a
+    // dynamic `break-before` helper even though the camelCased names differ.
+    const helper = cssHelperDecl("dynBreak", [rule("&", [interpolatedDecl("break-before", 0)])]);
+    const reference = helperReferenceDecl(0);
+    const consumer = consumerDecl("Box", "dynBreak", [
+      rule("&", [reference, staticDecl("page-break-before", "always")]),
+    ]);
+    const ctx = createContext([consumer, helper]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    expect(helper.rules).toHaveLength(1);
+    expect(consumer.rules[0]!.declarations).toContain(reference);
+  });
+
   it("does not inline a border-image longhand contested by the border shorthand", () => {
     // Comment #21: `border` resets `border-image` to its initial value, so it contends with a
     // dynamic `border-image-source` even though `border` only sets width/style/color.

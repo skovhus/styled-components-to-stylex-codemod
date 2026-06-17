@@ -290,14 +290,19 @@ function leafLonghands(stylexProp: string): Set<string> {
 /**
  * Legacy CSS property aliases → their canonical StyleX property. `cssPropertyToStylexProp` only
  * camelCases authored names, so an alias and its modern name read as disjoint leaves unless
- * collapsed here. `word-wrap` is a legacy alias of `overflow-wrap`; `grid-gap`/`grid-row-gap`/
- * `grid-column-gap` are legacy aliases of `gap`/`row-gap`/`column-gap`.
+ * collapsed here. This is the standard set of legacy name aliases: `word-wrap` for `overflow-wrap`;
+ * `grid-gap`/`grid-row-gap`/`grid-column-gap` for `gap`/`row-gap`/`column-gap`; and
+ * `page-break-before`/`page-break-after`/`page-break-inside` for `break-before`/`break-after`/
+ * `break-inside`.
  */
 const CSS_ALIASES: Record<string, string> = {
   wordWrap: "overflowWrap",
   gridGap: "gap",
   gridRowGap: "rowGap",
   gridColumnGap: "columnGap",
+  pageBreakBefore: "breakBefore",
+  pageBreakAfter: "breakAfter",
+  pageBreakInside: "breakInside",
 };
 
 /**
