@@ -44,6 +44,7 @@ import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger
 import { ensureReactImportStep } from "./internal/transform-steps/ensure-react-import.js";
 import { extractCssHelpersStep } from "./internal/transform-steps/extract-css-helpers.js";
 import { finalize } from "./internal/transform-steps/finalize.js";
+import { inlinePropConditionalCssHelpersStep } from "./internal/transform-steps/inline-prop-conditional-css-helpers.js";
 import { lowerRulesStep } from "./internal/transform-steps/lower-rules.js";
 import { postProcessStep } from "./internal/transform-steps/post-process.js";
 import { preflight } from "./internal/transform-steps/preflight.js";
@@ -160,6 +161,7 @@ export function transformWithWarnings(
     extractCssHelpersStep,
     detectStringMappingFnsStep,
     collectStyledDeclsStep,
+    inlinePropConditionalCssHelpersStep,
     resolveBaseComponentsStep,
     applyLeavesOnlyPolicyStep,
     markPartialImportedRootsStep,
