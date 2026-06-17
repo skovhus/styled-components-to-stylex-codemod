@@ -218,6 +218,28 @@ describe("inlinePropConditionalCssHelpersStep", () => {
     expect(consumer.rules[0]!.declarations).toContain(reference);
   });
 
+  it("retains a fully-inlined helper that is also referenced by another helper", () => {
+    // Comment #25: `dynamic` is inlined into the styled consumer `Tile`, but it is also referenced
+    // inside another helper `composed`. Helper consumers are skipped, so that reference is never
+    // inlined — `dynamic`'s rules must stay intact (not emptied), or a component using `composed`
+    // would silently lose `dynamic`'s prop-conditional styles. The `composed` reference then falls
+    // through to the existing mixin bail.
+    const dynamic = cssHelperDecl("dynamic", [rule("&", [interpolatedDecl("width", 0)])]);
+    const composed = cssHelperDecl("composed", [
+      rule("&", [helperReferenceDecl(0), staticDecl("color", "red")]),
+    ]);
+    composed.templateExpressions = [parseExpr("dynamic")];
+    const consumer = consumerDecl("Tile", "dynamic", [rule("&", [helperReferenceDecl(0)])]);
+    const ctx = createContext([consumer, dynamic, composed]);
+
+    inlinePropConditionalCssHelpersStep(ctx);
+
+    // `dynamic` was inlined into Tile...
+    expect(consumer.rules[0]!.declarations.map((d) => d.property)).toEqual(["width"]);
+    // ...but its rules are retained (not emptied) because `composed` still references it.
+    expect(dynamic.rules).toHaveLength(1);
+  });
+
   it("does not inline a border-image longhand contested by the border shorthand", () => {
     // Comment #21: `border` resets `border-image` to its initial value, so it contends with a
     // dynamic `border-image-source` even though `border` only sets width/style/color.

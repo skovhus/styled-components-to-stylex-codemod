@@ -68,6 +68,25 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
     }
   }
 
+  // A helper referenced inside *another* helper is never inlined here (helper consumers are
+  // skipped above), so that `${inner}` reference still lives in the outer helper's rules. The
+  // referenced helper must therefore be retained — emptying its rules would make a component that
+  // uses the outer helper silently lose the inner helper's prop-conditional styles. Retaining it
+  // instead leaves the outer reference to fall through to the existing mixin bail.
+  for (const decl of styledDecls) {
+    if (!decl.isCssHelper) {
+      continue;
+    }
+    for (const rule of decl.rules) {
+      for (const declaration of rule.declarations) {
+        const referencedName = referencedHelperName(declaration, decl);
+        if (referencedName && declByLocalName.get(referencedName)?.isCssHelper) {
+          retainedHelpers.add(referencedName);
+        }
+      }
+    }
+  }
+
   // Empty the rules of fully-inlined helpers so they lower to nothing (no dead style keys).
   // The decls are deliberately kept in `styledDecls`: lowerRulesStep's skipped-decl safety
   // check relies on them remaining in `removedHelperLocalNames` to bail when a preserved
