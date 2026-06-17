@@ -2939,6 +2939,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-image: linear-gradient(90deg, red, #00f);
 }
 
+.x1h7pr10:not(#\#):not(#\#):not(#\#) {
+  background-image: linear-gradient(to bottom,transparent 0%,var(--x2ezp3p) 100%);
+}
+
+.xmdd53k:not(#\#):not(#\#):not(#\#) {
+  background-image: linear-gradient(to bottom,var(--xufgxy3) 0%,transparent 100%);
+}
+
 .xn8bucy:not(#\#):not(#\#):not(#\#) {
   background-image: linear-gradient(to bottom,var(--xufgxy3) 70%,#0000 100%);
 }
