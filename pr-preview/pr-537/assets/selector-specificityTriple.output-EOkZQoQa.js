@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{padding:16},children:(0,t.jsx)(`div`,{className:`xju2f9n`,children:`Should be blue (&&& wins over && by source order)`})});export{n as App};

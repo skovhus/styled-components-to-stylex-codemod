@@ -1,4 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{u as t}from"./index-B6fd3ZIy.js";import{s as n}from"./helpers-BRjabHk-.js";var r=e(),i=t.div`
-  pointer-events: all;
-  ${n(!0)};
-`;function a(){return(0,r.jsx)(i,{children:`Draggable`})}export{a as App};
