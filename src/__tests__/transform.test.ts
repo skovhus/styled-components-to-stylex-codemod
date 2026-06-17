@@ -7228,6 +7228,36 @@ export const CalcBox = styled.div<{ $dark: string }>\`
     expect(code).not.toContain("calc($colors");
   });
 
+  it("should not statically resolve curried helper branches with non-current outer args", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const otherTheme = { color: { bgBase: "purple" } };
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? color("bgBase")({ theme: otherTheme }) : "red"};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanUnsafeCurriedOuterArg.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    expect(code).not.toContain("backgroundColor: $colors.bgBase");
+    if (result.code) {
+      expect(code).toContain("otherTheme");
+      expect(code).toContain('color("bgBase")');
+    }
+  });
+
   it("should preserve adapter runtime overrides in theme boolean branches", () => {
     const source = `
 import styled from "styled-components";
@@ -7547,6 +7577,35 @@ export const Box = styled.div\`
     expect(result.code).not.toBeNull();
     const code = result.code ?? "";
     expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("backgroundImage");
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+  });
+
+  it("should clear theme background images when a later resolved background helper wins", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? "linear-gradient(red, blue)" : "url(/light.png)"};
+  background: \${(props) => color("bgBase")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLaterResolvedBackground.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundColor: $colors.bgBase");
     expect(code).not.toContain("backgroundImage");
     expect(code).not.toContain("theme.isDark");
     expect(code).not.toContain("useTheme");

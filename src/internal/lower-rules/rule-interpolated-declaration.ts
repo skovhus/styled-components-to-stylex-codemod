@@ -142,7 +142,12 @@ type InterpolatedDeclarationContext = {
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
   hasAncestorAttributeScope: boolean;
-  applyResolvedPropValue: (prop: string, value: unknown, commentSource: CommentSource) => void;
+  applyResolvedPropValue: (
+    prop: string,
+    value: unknown,
+    commentSource: CommentSource,
+    sourceCssProperty?: string,
+  ) => void;
 };
 export function handleInterpolatedDeclaration(args: InterpolatedDeclarationContext): void {
   const {
@@ -2155,7 +2160,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 trailingLine: (d as any).trailingLineComment,
               }
             : null;
-        applyResolvedPropValue(out.prop, exprAst as any, commentSource);
+        applyResolvedPropValue(out.prop, exprAst as any, commentSource, d.property);
       }
 
       const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
