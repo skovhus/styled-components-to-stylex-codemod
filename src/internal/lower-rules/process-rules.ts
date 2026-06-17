@@ -272,9 +272,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      // Normalize specificity hacks (&&/&&&) before any selector analysis.
-      // Repeated ampersands are collapsed and annotated for validation.
+      // Normalize exact double-ampersand specificity hacks before any selector analysis.
+      // Higher tiers can change cascade precedence and must bail instead.
       const specificityResult = normalizeSpecificityHacks(rule.selector);
+      if (specificityResult.hasHigherTier) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");

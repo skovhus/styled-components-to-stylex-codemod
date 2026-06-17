@@ -483,6 +483,11 @@ export function createCssHelperResolver(args: {
 
       const rawSelector = (rule.selector ?? "").trim();
       const specificityResult = normalizeSpecificityHacks(rawSelector);
+      if (specificityResult.hasHigherTier) {
+        return bail(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+        );
+      }
       const selector = specificityResult.normalized.trim();
       const specificityStripped = specificityResult.wasStripped;
       const allowDynamicValues = selector === "&";

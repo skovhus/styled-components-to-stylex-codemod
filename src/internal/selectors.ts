@@ -550,26 +550,30 @@ function normalizePseudoElementColon(value: string): string {
 // =============================================================================
 
 /**
- * Normalize styled-components ampersand specificity hacks by collapsing repeated `&`
- * sequences to a single `&`. StyleX ordering is used to preserve the intended
- * override order after migration, with emitted TODO comments prompting validation.
+ * Normalize double-ampersand specificity hacks (`&&`) by collapsing to a single `&`.
+ * Only handles `&&` (exactly two). Higher tiers (`&&&`, `&&&&`) are flagged as
+ * `hasHigherTier` because flattening them can change cascade precedence.
  *
  * Examples:
  *   - `&&` → `&` (stripped)
  *   - `&&:hover` → `&:hover` (stripped)
  *   - `.wrapper &&` → `.wrapper &` (stripped, but `.wrapper` will be caught later)
- *   - `&&&` → `&` (stripped)
+ *   - `&&&` → flagged as hasHigherTier (not normalized)
  *   - `&:hover` → no change
  */
 export function normalizeSpecificityHacks(selector: string): {
   normalized: string;
   wasStripped: boolean;
+  hasHigherTier: boolean;
 } {
   if (!selector.includes("&&")) {
-    return { normalized: selector, wasStripped: false };
+    return { normalized: selector, wasStripped: false, hasHigherTier: false };
   }
-  const normalized = selector.replace(/&{2,}/g, "&");
-  return { normalized, wasStripped: normalized !== selector };
+  if (/&{3,}/.test(selector)) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: true };
+  }
+  const normalized = selector.replace(/&&/g, "&");
+  return { normalized, wasStripped: normalized !== selector, hasHigherTier: false };
 }
 
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
