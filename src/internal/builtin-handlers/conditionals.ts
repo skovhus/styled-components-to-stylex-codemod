@@ -359,6 +359,7 @@ export function tryResolveConditionalValue(
     // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
     // e.g., `linear-gradient(to bottom, ${color("bgSub")(props)} 70%, rgba(0, 0, 0, 0) 100%)`
     // Template literals always need CSS values, so always pass cssProperty
+    let templateHasDynamicArgUsage = false;
     const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
       // First try theme member expression
       const themeInfo = resolveThemeFromMemberExpr(expr);
@@ -375,12 +376,21 @@ export function tryResolveConditionalValue(
       // Template literals need CSS values, so pass cssProperty
       if (isCallExpressionNode(expr)) {
         const callRes = resolveCallExpr(expr, node.css.property);
+        if (callRes?.dynamicArgUsage) {
+          templateHasDynamicArgUsage = true;
+          markAsRuntimeCall(expr);
+        }
         return callRes ? { expr: callRes.expr, imports: callRes.imports } : null;
       }
       return null;
     });
     if (templateResult) {
-      return { usage: "create", ...templateResult, cssValueText: templateResult.expr };
+      return {
+        usage: "create",
+        ...templateResult,
+        cssValueText: templateResult.expr,
+        ...(templateHasDynamicArgUsage ? { dynamicArgUsage: "call" } : {}),
+      };
     }
 
     if (isCallExpressionNode(b)) {
