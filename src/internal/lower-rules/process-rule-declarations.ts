@@ -28,6 +28,7 @@ type RuleDeclarationContext = {
   pseudoElement: string | null;
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
+  hasAncestorAttributeScope: boolean;
   applyResolvedPropValue: (
     prop: string,
     value: unknown,
@@ -46,6 +47,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     pseudoElement,
     attrTarget,
     resolvedSelectorMedia,
+    hasAncestorAttributeScope,
     applyResolvedPropValue,
   } = args;
   const { state } = ctx;
@@ -93,6 +95,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         pseudoElement,
         attrTarget,
         resolvedSelectorMedia,
+        hasAncestorAttributeScope,
         applyResolvedPropValue,
       });
       if (state.bail) {

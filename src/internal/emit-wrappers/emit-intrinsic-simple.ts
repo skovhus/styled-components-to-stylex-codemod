@@ -952,16 +952,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       extraStyleArgsAfterBase,
     );
 
-    // Handle theme boolean conditionals - add conditional true/false style args
-    const needsUseTheme = appendThemeBooleanStyleArgs(
-      d.needsUseThemeHook,
-      styleArgs,
-      j,
-      stylesIdentifier,
-      () => ctx.markNeedsUseThemeImport(),
-    );
-
-    buildAllVariantAndStyleExprs({
+    const needsUseTheme = buildAllVariantAndStyleExprs({
       d,
       emitter,
       j,
@@ -972,6 +963,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
       afterVariantStyleArgs,
       enableComplementaryMerging: true,
+      markNeedsUseThemeImport: () => ctx.markNeedsUseThemeImport(),
       buildCompoundVariantExpressions,
     });
 

@@ -102,6 +102,7 @@ import {
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
+import { appendImportantToStyleValue, cssValueIsImportant } from "./important-values.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
@@ -141,7 +142,13 @@ type InterpolatedDeclarationContext = {
   pseudoElement: string | null;
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
-  applyResolvedPropValue: (prop: string, value: unknown, commentSource: CommentSource) => void;
+  hasAncestorAttributeScope: boolean;
+  applyResolvedPropValue: (
+    prop: string,
+    value: unknown,
+    commentSource: CommentSource,
+    sourceCssProperty?: string,
+  ) => void;
 };
 export function handleInterpolatedDeclaration(args: InterpolatedDeclarationContext): void {
   const {
@@ -154,6 +161,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     pseudoElement,
     attrTarget,
     resolvedSelectorMedia,
+    hasAncestorAttributeScope,
     applyResolvedPropValue,
   } = args;
   const {
@@ -848,8 +856,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     resolveCallResult: CallResolveResult | undefined;
     originalExpr: unknown;
     loc: { line: number; column: number } | null | undefined;
-  }): "not-requested" | "emitted" | "failed" => {
-    const { resolveCallResult, originalExpr, loc } = args;
+    cssValueText?: string;
+  }): "not-requested" | "emitted" | "suppressed" | "failed" => {
+    const { resolveCallResult, originalExpr, loc, cssValueText } = args;
     if (
       !resolveCallResult ||
       !("preserveRuntimeCall" in resolveCallResult) ||
@@ -917,7 +926,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       markDeclNeedsUseThemeHook(decl);
     }
 
-    const outs = cssDeclarationToStylexDeclarations(d);
+    const runtimeBackgroundProp =
+      d.property === "background"
+        ? resolveRuntimeBackgroundStylexProp(baseRuntimeExpr, cssValueText)
+        : null;
+    if (runtimeBackgroundProp === "unsupported") {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+
+    const outs = runtimeBackgroundProp
+      ? [{ prop: runtimeBackgroundProp }]
+      : cssDeclarationToStylexDeclarations(d);
     if (outs.length !== 1 || !outs[0]?.prop) {
       warnings.push({
         severity: "error",
@@ -929,18 +954,53 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const out = outs[0]!;
-    const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
-    if (!styleFnDecls.has(fnKey)) {
-      const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
-      const param = j.identifier(outParamName);
-      if (/\.(ts|tsx)$/.test(filePath)) {
-        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          j.tsStringKeyword(),
-        );
-      }
-      const body = j.objectExpression([makeCssProperty(j, out.prop, outParamName)]);
-      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    const runtimeProp = out.prop;
+    const runtimeStyle = { [runtimeProp]: runtimeCallArg } as Record<string, unknown>;
+    if (runtimeBackgroundProp) {
+      applyBackgroundShorthandLayerReset(j, runtimeStyle, runtimeBackgroundProp, d.important);
     }
+    if (
+      !subtractLaterStaticOverrides({
+        rule,
+        allRules,
+        currentDecl: d,
+        branchStyles: [runtimeStyle],
+        ignoreUnsafeOverlaps: true,
+      })
+    ) {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+    const runtimeProps = Object.keys(runtimeStyle);
+    if (runtimeProps.length === 0) {
+      return "suppressed";
+    }
+
+    const fnKey = styleKeyWithSuffix(decl.styleKey, runtimeProp);
+    const outParamName = cssPropertyToIdentifier(runtimeProp, avoidNames);
+    const param = j.identifier(outParamName);
+    if (/\.(ts|tsx)$/.test(filePath)) {
+      (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+        j.tsStringKeyword(),
+      );
+    }
+    const body = j.objectExpression(
+      Object.entries(runtimeStyle).map(([prop, value]) =>
+        prop === runtimeProp
+          ? makeCssProperty(j, runtimeProp, outParamName)
+          : j.property(
+              "init",
+              makeCssPropKey(j, prop),
+              cloneAstNode(value as ExpressionKind) as ExpressionKind,
+            ),
+      ),
+    );
+    styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
 
     // P2 fix: Later declarations should override earlier ones (CSS source order).
     // Find and replace existing entry instead of skipping, or add new if not found.
@@ -953,6 +1013,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       jsxProp: "__props" as const,
       condition: "always" as const,
       callArg: cloneAstNode(runtimeCallArg) as ExpressionKind,
+      sourceOrder: ctx.allocateSourceOrder(),
     };
     if (existingIdx >= 0) {
       styleFnFromProps[existingIdx] = newEntry;
@@ -2002,6 +2063,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
+      if (hasSourceOrderedThemeStyleOverlap(decl, extraStyleObjects, res.cssText)) {
+        bail = true;
+        continue;
+      }
       addResolverImports(res.imports);
       const exprAst = parseExpr(res.expr);
       if (!exprAst) {
@@ -2098,6 +2163,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Preserve !important by appending it to the suffix
       const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
       const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
+      const cssValueTextForClassification =
+        prefix || effectiveSuffix ? wrappedExpr : res.cssValueText;
 
       const exprAst = parseExpr(wrappedExpr);
       if (!exprAst) {
@@ -2119,7 +2186,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
-      const outs = cssDeclarationToStylexDeclarations(d);
+      const outs =
+        d.property === "background" && cssValueTextForClassification
+          ? [{ prop: resolveBackgroundStylexProp(cssValueTextForClassification) }]
+          : cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
         const commentSource =
@@ -2130,13 +2200,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 trailingLine: (d as any).trailingLineComment,
               }
             : null;
-        applyResolvedPropValue(out.prop, exprAst as any, commentSource);
+        applyResolvedPropValue(out.prop, exprAst as any, commentSource, d.property);
       }
 
       const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
         resolveCallResult: res.resolveCallResult,
         originalExpr: expr,
         loc,
+        cssValueText: cssValueTextForClassification,
       });
       if (runtimeOverride === "failed") {
         break;
@@ -2149,6 +2220,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolveCallResult: res.resolveCallResult,
         originalExpr: expr,
         loc,
+        cssValueText: res.cssValueText,
       });
       if (runtimeOverride === "failed") {
         break;
@@ -2158,51 +2230,146 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
     if (res && res.type === "splitThemeBooleanVariants") {
+      if (
+        pseudos?.length ||
+        media ||
+        pseudoElement ||
+        attrTarget ||
+        resolvedSelectorMedia ||
+        hasAncestorAttributeScope
+      ) {
+        bail = true;
+        continue;
+      }
       // Add imports if present
       addResolverImports(res.trueImports);
       addResolverImports(res.falseImports);
 
-      const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
+      const trueStyle: Record<string, unknown> = {};
+      const falseStyle: Record<string, unknown> = {};
+
+      // Expand CSS shorthands (border -> width/style/color, background -> backgroundColor/Image)
+      if (
+        !applyThemeBooleanValue(
+          j,
+          res.cssProp,
+          res.trueValue,
+          trueStyle,
+          d.important,
+          res.trueCssValueText,
+        )
+      ) {
+        bail = true;
+        continue;
+      }
+      if (
+        !applyThemeBooleanValue(
+          j,
+          res.cssProp,
+          res.falseValue,
+          falseStyle,
+          d.important,
+          res.falseCssValueText,
+        )
+      ) {
+        bail = true;
+        continue;
+      }
+
+      const { trueKey: baseTrueStyleKey, falseKey: baseFalseStyleKey } = buildThemeStyleKeys(
         decl.styleKey,
         res.themeProp,
       );
 
-      // Initialize the array if needed
       if (!decl.needsUseThemeHook) {
         decl.needsUseThemeHook = [];
       }
 
-      // Check if we already have an entry for this theme prop
-      let entry = decl.needsUseThemeHook.find((e) => e.themeProp === res.themeProp);
-      if (!entry) {
-        entry = {
+      const latestSourceOrder = getLatestThemeInterleavableSourceOrder({
+        decl,
+        variantSourceOrder,
+        styleFnFromProps,
+      });
+      const matchingThemeEntries = decl.needsUseThemeHook.filter(
+        (entry) => entry.themeProp === res.themeProp && (entry.trueStyleKey || entry.falseStyleKey),
+      );
+      let reusableEntry: (typeof matchingThemeEntries)[number] | null = null;
+      for (let i = matchingThemeEntries.length - 1; i >= 0; i--) {
+        const entry = matchingThemeEntries[i]!;
+        if (entry.sourceOrder !== undefined && entry.sourceOrder === latestSourceOrder) {
+          reusableEntry = entry;
+          break;
+        }
+      }
+      const mergeExtraStyleObject = (styleKey: string, style: Record<string, unknown>): void => {
+        const existing = extraStyleObjects.get(styleKey);
+        if (!existing) {
+          extraStyleObjects.set(styleKey, style);
+          return;
+        }
+        const merged = { ...existing };
+        for (const [prop, value] of Object.entries(style)) {
+          if (
+            Object.hasOwn(merged, prop) &&
+            cssValueIsImportant(merged[prop]) &&
+            !cssValueIsImportant(value)
+          ) {
+            continue;
+          }
+          merged[prop] = value;
+        }
+        extraStyleObjects.set(styleKey, merged);
+      };
+
+      if (reusableEntry) {
+        const restoredTrueStyleKey =
+          reusableEntry.trueStyleKey ??
+          restoreThemeStyleKeyFromPairedSide(
+            baseTrueStyleKey,
+            baseFalseStyleKey,
+            reusableEntry.falseStyleKey,
+          );
+        const restoredFalseStyleKey =
+          reusableEntry.falseStyleKey ??
+          restoreThemeStyleKeyFromPairedSide(
+            baseFalseStyleKey,
+            baseTrueStyleKey,
+            reusableEntry.trueStyleKey,
+          );
+        reusableEntry.trueStyleKey = restoredTrueStyleKey;
+        reusableEntry.falseStyleKey = restoredFalseStyleKey;
+        mergeExtraStyleObject(restoredTrueStyleKey, trueStyle);
+        mergeExtraStyleObject(restoredFalseStyleKey, falseStyle);
+      } else {
+        const sourceOrder = ctx.allocateSourceOrder();
+        const hasExistingStyleBucketForThemeProp = matchingThemeEntries.length > 0;
+        const trueStyleKey = hasExistingStyleBucketForThemeProp
+          ? styleKeyWithSuffix(baseTrueStyleKey, `theme${sourceOrder}`)
+          : baseTrueStyleKey;
+        const falseStyleKey = hasExistingStyleBucketForThemeProp
+          ? styleKeyWithSuffix(baseFalseStyleKey, `theme${sourceOrder}`)
+          : baseFalseStyleKey;
+
+        decl.needsUseThemeHook.push({
           themeProp: res.themeProp,
           trueStyleKey,
           falseStyleKey,
-        };
-        decl.needsUseThemeHook.push(entry);
+          sourceOrder,
+        });
 
-        // Initialize the style objects
-        extraStyleObjects.set(trueStyleKey, {});
-        extraStyleObjects.set(falseStyleKey, {});
+        extraStyleObjects.set(trueStyleKey, trueStyle);
+        extraStyleObjects.set(falseStyleKey, falseStyle);
       }
 
-      // Add the property to the true/false style objects
-      const trueStyle = extraStyleObjects.get(trueStyleKey) ?? {};
-      const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
-
-      // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
-      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle)) {
-        bail = true;
-        continue;
+      const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
+        resolveCallResult: res.runtimeResolveCallResult,
+        originalExpr: expr,
+        loc,
+        cssValueText: res.runtimeCssValueText,
+      });
+      if (runtimeOverride === "failed") {
+        break;
       }
-      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle)) {
-        bail = true;
-        continue;
-      }
-
-      extraStyleObjects.set(trueStyleKey, trueStyle);
-      extraStyleObjects.set(falseStyleKey, falseStyle);
 
       decl.needsWrapperComponent = true;
       continue;
@@ -2213,7 +2380,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // is emitted as a conditional inline style using the useTheme() hook.
     if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
       // Inline style fallback cannot preserve pseudo/media context — bail
-      if (pseudos?.length || media || pseudoElement) {
+      if (
+        pseudos?.length ||
+        media ||
+        pseudoElement ||
+        attrTarget ||
+        resolvedSelectorMedia ||
+        hasAncestorAttributeScope
+      ) {
         bail = true;
         continue;
       }
@@ -2223,16 +2397,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         continue;
       }
+      const stylexDeclarations = cssDeclarationToStylexDeclarations(d);
+      const fallbackProps = new Set(stylexDeclarations.map((out) => out.prop).filter(Boolean));
+      if (hasLaterDeclarationForStylexProps(d, allRules, fallbackProps)) {
+        bail = true;
+        continue;
+      }
 
       // Add imports for the resolved value
       addResolverImports(res.resolvedImports);
 
-      // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
-      // with both keys null (no style buckets needed — only the import/declaration)
+      // Ensure useTheme() is imported and called by adding a hook-only entry
+      // with both keys null. Keep this separate from style-bucket entries for
+      // the same theme prop so later cascade cleanup can delete emptied style
+      // hooks without dropping inline fallbacks that still reference `theme`.
       if (!decl.needsUseThemeHook) {
         decl.needsUseThemeHook = [];
       }
-      if (!decl.needsUseThemeHook.some((e) => e.themeProp === res.themeProp)) {
+      if (
+        !decl.needsUseThemeHook.some(
+          (e) =>
+            e.themeProp === res.themeProp && e.trueStyleKey === null && e.falseStyleKey === null,
+        )
+      ) {
         decl.needsUseThemeHook.push({
           themeProp: res.themeProp,
           trueStyleKey: null,
@@ -2250,16 +2437,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       // Determine when the inline style should apply:
       // The inline style replaces the unresolvable branch.
-      // resolvedBranchIsTrue means: true branch is resolved → inline style is for the false branch.
-      // isNegated flips the mapping between consequent/alternate and true/false.
-      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue !== res.isNegated;
+      // resolvedBranchIsTrue is already normalized to the theme boolean, so a
+      // resolved true branch means the inline fallback applies when the theme
+      // boolean is false.
+      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue;
       const conditionalExpr = inlineAppliesWhenThemeIsTrue
         ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
         : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);
 
       // Expand shorthand CSS properties (e.g., padding → paddingTop/Right/Bottom/Left)
       // using the CSS declaration IR, consistent with other handlers.
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
+      for (const out of stylexDeclarations) {
         if (!out.prop) {
           continue;
         }
@@ -4201,8 +4389,9 @@ function subtractLaterStaticOverrides(args: {
   allRules: readonly CssRuleIR[];
   currentDecl: CssDeclarationIR;
   branchStyles: Array<Record<string, unknown>>;
+  ignoreUnsafeOverlaps?: boolean;
 }): boolean {
-  const { rule, allRules, currentDecl, branchStyles } = args;
+  const { rule, allRules, currentDecl, branchStyles, ignoreUnsafeOverlaps = false } = args;
   const currentIndex = rule.declarations.indexOf(currentDecl);
   if (currentIndex === -1) {
     return true;
@@ -4255,6 +4444,32 @@ function subtractLaterStaticOverrides(args: {
         }
         continue;
       }
+      if (laterDecl.property.trim() === "background") {
+        const overlapped = branchProps().filter((prop) => prop.startsWith("background"));
+        if (!overlapped.length) {
+          continue;
+        }
+        // A background shorthand resets both image and color layers, even when
+        // cssDeclarationToStylexDeclarations() maps the authored value to one longhand.
+        if (currentDecl.important && !laterDecl.important) {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
+          return false;
+        }
+        if (!context.unconditional || laterDecl.value.kind !== "static") {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
+          return false;
+        }
+        for (const branch of branchStyles) {
+          for (const prop of overlapped) {
+            delete branch[prop];
+          }
+        }
+        continue;
+      }
       for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
         const overrideProp = out.prop;
         const overlapped = branchProps().filter((prop) => stylexPropsOverlap(prop, overrideProp));
@@ -4266,9 +4481,15 @@ function subtractLaterStaticOverrides(args: {
         // branch and let the later declaration clobber the base, inverting the
         // cascade — bail instead so the important branches are preserved.
         if (currentDecl.important && !laterDecl.important) {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
           return false;
         }
         if (!context.unconditional || laterDecl.value.kind !== "static") {
+          if (ignoreUnsafeOverlaps) {
+            continue;
+          }
           return false;
         }
         for (const branch of branchStyles) {
@@ -5509,10 +5730,12 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
  * Returns false if the value cannot be expanded (caller should bail).
  */
 function applyThemeBooleanValue(
-  j: { literal: (value: string) => unknown },
+  j: JSCodeshift,
   cssProp: string,
   value: unknown,
   target: Record<string, unknown>,
+  important: boolean,
+  cssValueText?: string,
 ): boolean {
   // Try to extract string value from AST node (shared across border/background paths)
   const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
@@ -5538,13 +5761,25 @@ function applyThemeBooleanValue(
       return false;
     }
     if (parsed.width) {
-      target[`border${direction}Width`] = j.literal(parsed.width);
+      target[`border${direction}Width`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.width),
+        important,
+      );
     }
     if (parsed.style) {
-      target[`border${direction}Style`] = j.literal(parsed.style);
+      target[`border${direction}Style`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.style),
+        important,
+      );
     }
     if (parsed.color) {
-      target[`border${direction}Color`] = j.literal(parsed.color);
+      target[`border${direction}Color`] = appendImportantToStyleValue(
+        j,
+        j.literal(parsed.color),
+        important,
+      );
     }
     return true;
   }
@@ -5552,13 +5787,166 @@ function applyThemeBooleanValue(
   // Background shorthand → backgroundColor or backgroundImage
   // Use the actual branch value (not valueRaw which contains placeholders)
   if (cssProp === "background") {
-    target[resolveBackgroundStylexProp(strValue ?? "")] = value;
+    const backgroundText = strValue ?? cssValueText ?? "";
+    if (backgroundText.trim() === "none") {
+      target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
+      target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
+      return true;
+    }
+    const backgroundProp = resolveBackgroundStylexProp(backgroundText);
+    target[backgroundProp] = appendImportantToStyleValue(j, value, important);
+    applyBackgroundShorthandLayerReset(j, target, backgroundProp, important);
     return true;
   }
 
+  if (isCssShorthandProperty(cssProp)) {
+    return false;
+  }
+
   // Default: camelCase the property name
-  target[cssPropertyToStylexProp(cssProp)] = value;
+  target[cssPropertyToStylexProp(cssProp)] = appendImportantToStyleValue(j, value, important);
   return true;
+}
+
+function restoreThemeStyleKeyFromPairedSide(
+  targetBaseKey: string,
+  pairedBaseKey: string,
+  pairedStyleKey: string | null,
+): string {
+  if (pairedStyleKey?.startsWith(pairedBaseKey)) {
+    return `${targetBaseKey}${pairedStyleKey.slice(pairedBaseKey.length)}`;
+  }
+  return targetBaseKey;
+}
+
+function getLatestThemeInterleavableSourceOrder(args: {
+  decl: StyledDecl;
+  variantSourceOrder: Record<string, number>;
+  styleFnFromProps: Array<{ sourceOrder?: number }>;
+}): number {
+  const sourceOrders = Object.values(args.variantSourceOrder);
+  appendSourceOrders(sourceOrders, args.styleFnFromProps);
+  appendSourceOrders(sourceOrders, args.decl.needsUseThemeHook);
+  appendSourceOrders(sourceOrders, args.decl.pseudoAliasSelectors);
+  appendSourceOrders(sourceOrders, args.decl.variantDimensions);
+  return sourceOrders.length > 0 ? Math.max(...sourceOrders) : -1;
+}
+
+function appendSourceOrders(
+  sourceOrders: number[],
+  entries: readonly { sourceOrder?: number }[] | undefined,
+): void {
+  for (const entry of entries ?? []) {
+    if (entry.sourceOrder !== undefined) {
+      sourceOrders.push(entry.sourceOrder);
+    }
+  }
+}
+
+type BackgroundLayerStylexProp = "backgroundImage" | "backgroundColor";
+
+function applyBackgroundShorthandLayerReset(
+  j: JSCodeshift,
+  target: Record<string, unknown>,
+  backgroundProp: BackgroundLayerStylexProp,
+  important: boolean,
+): void {
+  if (backgroundProp === "backgroundColor") {
+    target.backgroundImage = appendImportantToStyleValue(j, j.literal("none"), important);
+    return;
+  }
+  target.backgroundColor = appendImportantToStyleValue(j, j.literal("transparent"), important);
+}
+
+function resolveRuntimeBackgroundStylexProp(
+  value: unknown,
+  cssValueText?: string,
+): BackgroundLayerStylexProp | "unsupported" | null {
+  const node = unwrapExpressionNode(value);
+  if (node?.type !== "ConditionalExpression") {
+    const staticText = getRuntimeBackgroundStaticText(node);
+    if (staticText !== null) {
+      return resolveBackgroundStylexProp(staticText);
+    }
+    return cssValueText ? resolveBackgroundStylexProp(cssValueText) : null;
+  }
+
+  const consequentProp = classifyRuntimeBackgroundBranch(node.consequent);
+  const alternateProp = classifyRuntimeBackgroundBranch(node.alternate);
+  if (consequentProp && alternateProp) {
+    return consequentProp === alternateProp ? consequentProp : "unsupported";
+  }
+
+  const cssTextProp = cssValueText ? resolveBackgroundStylexProp(cssValueText) : null;
+  const knownProp = consequentProp ?? alternateProp;
+  if (knownProp) {
+    if (knownProp === "backgroundImage") {
+      return "unsupported";
+    }
+    if (cssTextProp && cssTextProp !== knownProp) {
+      return "unsupported";
+    }
+    return "backgroundColor";
+  }
+  if (cssTextProp === "backgroundImage") {
+    return "unsupported";
+  }
+  return "backgroundColor";
+}
+
+function classifyRuntimeBackgroundBranch(value: unknown): BackgroundLayerStylexProp | null {
+  const staticText = getRuntimeBackgroundStaticText(unwrapExpressionNode(value));
+  return staticText === null ? null : resolveBackgroundStylexProp(staticText);
+}
+
+function unwrapExpressionNode(value: unknown): {
+  type?: string;
+  expression?: unknown;
+  consequent?: unknown;
+  alternate?: unknown;
+  quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+  value?: unknown;
+} | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const node = value as {
+    type?: string;
+    expression?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+    quasis?: Array<{ value?: { cooked?: string | null; raw?: string } }>;
+    value?: unknown;
+  };
+  if (
+    node.type === "ExpressionStatement" ||
+    node.type === "TSAsExpression" ||
+    node.type === "TSSatisfiesExpression"
+  ) {
+    return unwrapExpressionNode(node.expression);
+  }
+  return node;
+}
+
+function getRuntimeBackgroundStaticText(
+  value: ReturnType<typeof unwrapExpressionNode>,
+): string | null {
+  if (!value) {
+    return null;
+  }
+  if (
+    (value.type === "StringLiteral" || value.type === "Literal") &&
+    typeof value.value === "string"
+  ) {
+    return value.value;
+  }
+  if (value.type === "TemplateLiteral") {
+    const text = (value.quasis ?? [])
+      .map((quasi) => quasi.value?.cooked ?? quasi.value?.raw ?? "")
+      .join("");
+    return text || null;
+  }
+  return null;
 }
 
 type DynamicHelperCallContext = {
@@ -6863,6 +7251,171 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
 
 function hasRuntimeImport(imports: readonly ImportSpec[] | undefined): boolean {
   return (imports ?? []).some((imp) => !isStylexImportSource(imp.from.value));
+}
+
+function hasSourceOrderedThemeStyleOverlap(
+  decl: StyledDecl,
+  extraStyleObjects: ReadonlyMap<string, Record<string, unknown>>,
+  cssText: string | undefined,
+): boolean {
+  const themeProps = new Set<string>();
+  for (const entry of decl.needsUseThemeHook ?? []) {
+    if (entry.sourceOrder === undefined) {
+      continue;
+    }
+    collectStyleObjectProps(extraStyleObjects.get(entry.trueStyleKey ?? ""), themeProps);
+    collectStyleObjectProps(extraStyleObjects.get(entry.falseStyleKey ?? ""), themeProps);
+  }
+  return cssTextMayOverlapStylexProps(cssText, themeProps);
+}
+
+function collectStyleObjectProps(
+  style: Record<string, unknown> | undefined,
+  props: Set<string>,
+): void {
+  if (!style) {
+    return;
+  }
+  for (const prop of Object.keys(style)) {
+    props.add(prop);
+  }
+}
+
+function cssTextMayOverlapStylexProps(
+  cssText: string | undefined,
+  props: ReadonlySet<string>,
+): boolean {
+  if (props.size === 0) {
+    return false;
+  }
+  if (!cssText) {
+    return true;
+  }
+
+  const chunks = cssText
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) {
+    return true;
+  }
+
+  for (const chunk of chunks) {
+    const match = chunk.match(/^([^:]+):([\s\S]+)$/);
+    if (!match?.[1] || !match[2]) {
+      return true;
+    }
+    const property = match[1].trim();
+    const valueRaw = match[2].trim();
+    if (laterDeclarationMayResetStylexProps(property, props)) {
+      return true;
+    }
+    for (const out of cssDeclarationToStylexDeclarations({
+      property,
+      value: { kind: "static", value: valueRaw },
+      important: false,
+      valueRaw,
+    })) {
+      if (hasOverlappingStylexProp(props, out.prop)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function hasLaterDeclarationForStylexProps(
+  current: CssDeclarationIR,
+  rules: readonly CssRuleIR[],
+  props: ReadonlySet<string>,
+): boolean {
+  if (props.size === 0) {
+    return false;
+  }
+
+  let sawCurrent = false;
+  for (const rule of rules) {
+    for (const candidate of rule.declarations) {
+      if (candidate === current) {
+        sawCurrent = true;
+        continue;
+      }
+      if (!isDeclarationAfter(current, candidate, sawCurrent)) {
+        continue;
+      }
+      if (!candidate.property) {
+        return true;
+      }
+      if (laterDeclarationMayResetStylexProps(candidate.property, props)) {
+        return true;
+      }
+      for (const out of cssDeclarationToStylexDeclarations(candidate)) {
+        if (hasOverlappingStylexProp(props, out.prop)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function isDeclarationAfter(
+  current: CssDeclarationIR,
+  candidate: CssDeclarationIR,
+  sawCurrent: boolean,
+): boolean {
+  if (current.sourceOrder !== undefined && candidate.sourceOrder !== undefined) {
+    return candidate.sourceOrder > current.sourceOrder;
+  }
+  return sawCurrent;
+}
+
+function hasOverlappingStylexProp(props: ReadonlySet<string>, candidate: string): boolean {
+  for (const prop of props) {
+    if (stylexPropsOverlap(prop, candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function laterDeclarationMayResetStylexProps(
+  cssProperty: string,
+  props: ReadonlySet<string>,
+): boolean {
+  const property = cssProperty.trim();
+  if (property === "background") {
+    return hasStylexPropWithPrefix(props, "background");
+  }
+  if (!isBorderShorthandProperty(property)) {
+    return false;
+  }
+  const side = property.match(/^border-(top|right|bottom|left)$/)?.[1];
+  return hasBorderResetOverlap(props, side);
+}
+
+function hasStylexPropWithPrefix(props: ReadonlySet<string>, prefix: string): boolean {
+  for (const prop of props) {
+    if (prop.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasBorderResetOverlap(props: ReadonlySet<string>, side: string | undefined): boolean {
+  const sidePrefix = side ? `border${side.charAt(0).toUpperCase()}${side.slice(1)}` : "border";
+  for (const prop of props) {
+    if (!/^border(?:Top|Right|Bottom|Left)?(?:Width|Style|Color)$/.test(prop)) {
+      continue;
+    }
+    if (!side || prop.startsWith(sidePrefix) || /^border(?:Width|Style|Color)$/.test(prop)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

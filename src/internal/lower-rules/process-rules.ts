@@ -76,6 +76,7 @@ import {
   tryResolveAdapterCall,
   type AdapterCallResolver,
 } from "./utils.js";
+import { cssValueIsImportant } from "./important-values.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -86,6 +87,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropMedia,
     nestedSelectors,
     variantBuckets,
+    extraStyleObjects,
     styleFnDecls,
     attrBuckets,
     localVarValues,
@@ -1357,6 +1359,64 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     };
 
+    const clearEarlierThemeBaseValues = (
+      prop: string,
+      laterBaseValue: unknown,
+      sourceCssProperty?: string,
+    ): void => {
+      const hooks = decl.needsUseThemeHook;
+      if (!hooks?.length) {
+        return;
+      }
+      const propsToClear =
+        sourceCssProperty === "background" ? ["backgroundColor", "backgroundImage"] : [prop];
+      const laterBaseIsImportant = cssValueIsImportant(laterBaseValue);
+      const clearHookStyleKey = (
+        hook: NonNullable<StyledDecl["needsUseThemeHook"]>[number],
+        side: "trueStyleKey" | "falseStyleKey",
+      ): boolean => {
+        const styleKey = hook[side];
+        if (!styleKey) {
+          return false;
+        }
+        const bucket = extraStyleObjects.get(styleKey);
+        if (!bucket) {
+          return false;
+        }
+        let changed = false;
+        for (const propToClear of propsToClear) {
+          if (!Object.hasOwn(bucket, propToClear)) {
+            continue;
+          }
+          const bucketValue = bucket[propToClear];
+          if (!laterBaseIsImportant && cssValueIsImportant(bucketValue)) {
+            continue;
+          }
+          delete bucket[propToClear];
+          changed = true;
+        }
+        if (!changed) {
+          return false;
+        }
+        if (Object.keys(bucket).length === 0) {
+          extraStyleObjects.delete(styleKey);
+          hook[side] = null;
+        }
+        return true;
+      };
+
+      for (let i = hooks.length - 1; i >= 0; i--) {
+        const hook = hooks[i]!;
+        const hadStyleKeys = Boolean(hook.trueStyleKey || hook.falseStyleKey);
+        const clearedTrue = clearHookStyleKey(hook, "trueStyleKey");
+        const clearedFalse = clearHookStyleKey(hook, "falseStyleKey");
+        const changed = clearedTrue || clearedFalse;
+        if (changed && hadStyleKeys && !hook.trueStyleKey && !hook.falseStyleKey) {
+          hooks.splice(i, 1);
+        }
+      }
+    };
+
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
@@ -1657,6 +1717,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
       clearEarlierVariantBaseValues(prop, value);
+      clearEarlierThemeBaseValues(prop, value, sourceCssProperty);
       const target = ctx.getBaseStyleTarget();
       setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);
@@ -1678,6 +1739,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       pseudoElement: pseudoElement ?? (pseudoElementsList ? (pseudoElementsList[0] ?? null) : null),
       attrTarget,
       resolvedSelectorMedia,
+      hasAncestorAttributeScope: Boolean(ancestorAttrs?.length),
       applyResolvedPropValue,
     });
     if (state.bail) {
@@ -2778,36 +2840,6 @@ function recoverStandaloneInterpolationsInPseudoBlock(
 
   const when = needsNegation ? negateWhen(testInfo.when) : testInfo.when;
   return { when, propName: testInfo.propName, cssProps };
-}
-
-/**
- * Whether a lowered StyleX value carries `!important`. Values are stored either
- * as plain strings (e.g. `"red !important"`) or as AST string/template literals.
- */
-function cssValueIsImportant(value: unknown): boolean {
-  if (typeof value === "string") {
-    return value.includes("!important");
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const node = value as {
-    type?: string;
-    value?: unknown;
-    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
-  };
-  if (
-    (node.type === "StringLiteral" || node.type === "Literal") &&
-    typeof node.value === "string"
-  ) {
-    return node.value.includes("!important");
-  }
-  if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
-    return node.quasis.some((q) =>
-      (q?.value?.cooked ?? q?.value?.raw ?? "").includes("!important"),
-    );
-  }
-  return false;
 }
 
 /** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */

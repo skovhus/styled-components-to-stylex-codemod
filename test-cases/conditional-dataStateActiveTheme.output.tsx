@@ -33,9 +33,11 @@ const styles = stylex.create({
   },
   containerDark: {
     backgroundColor: $colors.bgBase,
+    backgroundImage: "none",
   },
   containerLight: {
     backgroundColor: $colors.bgSub,
+    backgroundImage: "none",
   },
   tab: {
     flex: "1",

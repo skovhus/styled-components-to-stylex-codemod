@@ -780,6 +780,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       () => {
         needsUseThemeImport = true;
       },
+      hasSourceOrder ? orderedEntries : undefined,
     );
 
     for (const gp of appendAllPseudoStyleArgs(

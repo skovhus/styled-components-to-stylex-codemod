@@ -81,9 +81,9 @@ function Container(props: ContainerProps) {
       {...mergedSx(
         [
           styles.container,
-          theme.isDark ? styles.containerDark : styles.containerLight,
           styles.containerWidth(size),
           styles.containerHeight(size),
+          theme.isDark ? styles.containerDark : styles.containerLight,
           styles.containerFontSize(`${Math.round(size * (2 / 3))}px`),
           styles.containerLineHeight(size),
           sx,

@@ -20,6 +20,7 @@ import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize } from "../utilities/string-utils.js";
+import { appendImportantToStyleValue } from "./important-values.js";
 import { registerImports } from "./utils.js";
 
 type SplitVariantsContext = Pick<
@@ -280,78 +281,9 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       return map;
     };
 
-    // Preserve `!important` from the source declaration on the resolved variant
-    // value. Without this, a `color: ${p => p.$x ? "a" : undefined} !important`
-    // variant would silently drop its importance, letting later non-important
-    // base declarations win in the cascade.
-    const withImportant = (valueAst: unknown): unknown => {
-      if (!d.important || !valueAst || typeof valueAst !== "object") {
-        return valueAst;
-      }
-      const node = valueAst as {
-        type?: string;
-        value?: unknown;
-        quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
-        expressions?: unknown[];
-      };
-      // `!important` must be carried as a string value in StyleX. String/numeric
-      // literals become a string carrying the marker; a template literal gets the
-      // marker appended to its trailing quasi; any other value expression
-      // (theme token member access, helper call, identifier) is wrapped in a
-      // template literal — matching the canonical `${token} !important` form the
-      // base-style path emits.
-      if (
-        node.type === "StringLiteral" ||
-        node.type === "Literal" ||
-        node.type === "NumericLiteral"
-      ) {
-        if (typeof node.value === "string") {
-          return node.value.includes("!important")
-            ? valueAst
-            : j.literal(`${node.value} !important`);
-        }
-        if (typeof node.value === "number") {
-          return j.literal(`${node.value} !important`);
-        }
-        return valueAst;
-      }
-      if (node.type === "TemplateLiteral" && Array.isArray(node.quasis)) {
-        const quasis = node.quasis;
-        const lastIndex = quasis.length - 1;
-        const last = quasis[lastIndex];
-        const lastText = last?.value?.cooked ?? last?.value?.raw ?? "";
-        if (lastText.includes("!important")) {
-          return valueAst;
-        }
-        const newQuasis = quasis.map((q, i) =>
-          i === lastIndex
-            ? j.templateElement(
-                { raw: `${lastText} !important`, cooked: `${lastText} !important` },
-                true,
-              )
-            : j.templateElement(
-                {
-                  raw: q?.value?.raw ?? q?.value?.cooked ?? "",
-                  cooked: q?.value?.cooked ?? q?.value?.raw ?? "",
-                },
-                false,
-              ),
-        );
-        return j.templateLiteral(newQuasis, (node.expressions ?? []) as never[]);
-      }
-      // Wrap an arbitrary value expression: `${expr} !important`.
-      return j.templateLiteral(
-        [
-          j.templateElement({ raw: "", cooked: "" }, false),
-          j.templateElement({ raw: " !important", cooked: " !important" }, true),
-        ],
-        [valueAst as never],
-      );
-    };
-
     // Helper: apply a single prop value to target, respecting media/pseudo context.
     const applyWithContext = (prop: string, valueAstRaw: unknown): void => {
-      const valueAst = withImportant(valueAstRaw);
+      const valueAst = appendImportantToStyleValue(j, valueAstRaw, d.important);
       if (media) {
         const map = getOrCreateConditionMap(prop);
         map[media] = valueAst as any;

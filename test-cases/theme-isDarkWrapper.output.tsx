@@ -38,8 +38,10 @@ const styles = stylex.create({
   },
   listDark: {
     backgroundColor: $colors.bgBase,
+    backgroundImage: "none",
   },
   listLight: {
     backgroundColor: $colors.bgSub,
+    backgroundImage: "none",
   },
 });

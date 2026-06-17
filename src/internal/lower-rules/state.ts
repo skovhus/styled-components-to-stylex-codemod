@@ -78,6 +78,9 @@ export function createLowerRulesState(ctx: TransformContext) {
   // Non-bailing versions: call the adapter directly without triggering the global bail flag.
   // Used for speculative/optional resolution (e.g., prop-arg helper remapping, theme branch probing).
   const resolveValueOptional: InternalHandlerContext["resolveValueOptional"] = (rvCtx) => {
+    if (rvCtx.kind === "importedValue" && isStylexFileSource(rvCtx.source)) {
+      return resolveValue(rvCtx);
+    }
     const res = ctx.adapter.resolveValue(rvCtx);
     if (res && isDirectionalResult(res)) {
       return undefined;
@@ -558,4 +561,10 @@ function getJsxIdentifierName(node: unknown): string | null {
   }
   const record = node as { type?: string; name?: unknown };
   return record.type === "JSXIdentifier" && typeof record.name === "string" ? record.name : null;
+}
+
+const STYLEX_FILE_RE = /\.stylex(\.\w+)?$/;
+
+function isStylexFileSource(source: ImportSource): boolean {
+  return STYLEX_FILE_RE.test(source.value);
 }

@@ -2,7 +2,12 @@
  * Conditional expression handlers for the built-in handler system.
  * Core concepts: ternary splitting, CSS block conditionals, and nested variant extraction.
  */
-import type { CallResolveContext, CallResolveResult, ImportSpec } from "../../adapter.js";
+import type {
+  CallResolveContext,
+  CallResolveResult,
+  CallResolveResultWithExpr,
+  ImportSpec,
+} from "../../adapter.js";
 import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
@@ -40,7 +45,6 @@ import {
 import type {
   ConditionalExpressionBody,
   DynamicNode,
-  ExpressionKind,
   HandlerResult,
   InternalHandlerContext,
   ThemeParamInfo,
@@ -79,7 +83,9 @@ export function tryResolveConditionalValue(
   type RuntimeCallInfo = {
     resolveCallContext: CallResolveContext;
     resolveCallResult: CallResolveResult;
+    cssValueText?: string;
   };
+  type RuntimeCallBranch = "true" | "false" | "both";
   const runtimeCallState: { info: RuntimeCallInfo | null } = { info: null };
   const buildRuntimeCallResult = (): HandlerResult | null =>
     runtimeCallState.info
@@ -87,8 +93,62 @@ export function tryResolveConditionalValue(
           type: "runtimeCallOnly",
           resolveCallContext: runtimeCallState.info.resolveCallContext,
           resolveCallResult: runtimeCallState.info.resolveCallResult,
+          ...(runtimeCallState.info.cssValueText
+            ? { cssValueText: runtimeCallState.info.cssValueText }
+            : {}),
         }
       : null;
+  const markAsRuntimeCall = (call: CallExpressionNode): void => {
+    runtimeCallState.info = {
+      resolveCallContext: {
+        callSiteFilePath: ctx.filePath,
+        calleeImportedName: "<local>",
+        calleeSource: { kind: "specifier", value: ctx.filePath },
+        args: [],
+        ...(call.loc?.start
+          ? { loc: { line: call.loc.start.line, column: call.loc.start.column } }
+          : {}),
+      },
+      resolveCallResult: { preserveRuntimeCall: true },
+    };
+  };
+  const markFirstRuntimeCallInBranch = (branch: unknown): void => {
+    const pending = [branch];
+    const seen = new Set<unknown>();
+
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || typeof current !== "object" || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+
+      if (isCallExpressionNode(current)) {
+        markAsRuntimeCall(current);
+        return;
+      }
+
+      const node = current as {
+        type?: string;
+        left?: unknown;
+        right?: unknown;
+        expressions?: unknown[];
+        expression?: unknown;
+        test?: unknown;
+        consequent?: unknown;
+        alternate?: unknown;
+      };
+      if (node.type === "BinaryExpression" || node.type === "LogicalExpression") {
+        pending.push(node.left, node.right);
+      } else if (node.type === "TemplateLiteral") {
+        pending.push(...(node.expressions ?? []));
+      } else if (node.type === "ConditionalExpression") {
+        pending.push(node.test, node.consequent, node.alternate);
+      } else if (node.expression) {
+        pending.push(node.expression);
+      }
+    }
+  };
 
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
@@ -173,105 +233,39 @@ export function tryResolveConditionalValue(
     return null;
   };
 
-  // Helper to resolve a theme member expression branch to an AST node with imports
-  const resolveThemeBranchValue = (
-    branch: unknown,
-  ): { astNode: ExpressionKind; imports: ImportSpec[] } | null => {
-    const themeInfo = resolveThemeFromMemberExpr(branch);
-    if (!themeInfo) {
-      return null;
-    }
-    const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
-    const res = resolveTheme({
-      kind: "theme",
-      path: themeInfo.path,
-      filePath: ctx.filePath,
-      loc: getNodeLocStart(branch) ?? undefined,
-    });
-    if (!res) {
-      return null;
-    }
-    const astNode = parseExpr(ctx.api, res.expr);
-    if (!astNode) {
-      return null;
-    }
-    return { astNode, imports: res.imports };
-  };
-
-  const themeBoolInfo = checkThemeBooleanTest(body.test);
-  if (themeBoolInfo && node.css.property) {
-    const { consequent, alternate } = body;
-    // Determine true/false branches based on negation
-    const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
-    const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
-
-    // Resolve both branches as static values (excluding booleans, which aren't valid CSS values)
-    const trueRaw = literalToStaticValue(trueBranch);
-    const falseRaw = literalToStaticValue(falseBranch);
-    let trueValue: unknown = trueRaw !== null && typeof trueRaw !== "boolean" ? trueRaw : null;
-    let falseValue: unknown = falseRaw !== null && typeof falseRaw !== "boolean" ? falseRaw : null;
-    const trueImports: ImportSpec[] = [];
-    const falseImports: ImportSpec[] = [];
-
-    // Fallback: resolve theme member expressions (e.g., props.theme.color.labelBase)
-    if (trueValue === null) {
-      const resolved = resolveThemeBranchValue(trueBranch);
-      if (resolved) {
-        trueValue = resolved.astNode;
-        trueImports.push(...resolved.imports);
-      }
-    }
-    if (falseValue === null) {
-      const resolved = resolveThemeBranchValue(falseBranch);
-      if (resolved) {
-        falseValue = resolved.astNode;
-        falseImports.push(...resolved.imports);
-      }
-    }
-
-    if (trueValue !== null && falseValue !== null) {
-      return {
-        type: "splitThemeBooleanVariants",
-        cssProp: node.css.property,
-        themeProp: themeBoolInfo.themeProp,
-        trueValue,
-        falseValue,
-        trueImports,
-        falseImports,
-      };
-    }
-
-    // Fallback: one branch resolved but the other is an unresolvable call expression.
-    // Use the resolved branch as the base StyleX value and emit the unresolvable
-    // branch as a conditional inline style guarded by the theme boolean.
-    const inlineStyleFallback = tryBuildThemeBooleanInlineStyleFallback({
-      trueValue,
-      falseValue,
-      trueImports,
-      falseImports,
-      trueBranch,
-      falseBranch,
-      themeBoolInfo,
-      cssProp: node.css.property,
-      paramName,
-      info,
-    });
-    if (inlineStyleFallback) {
-      return inlineStyleFallback;
-    }
-    // Can't resolve branches as static values - fall through to other handlers
-    // which may bail with a warning
-  }
-
   type BranchUsage = "props" | "create";
-  type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
+  type BranchDynamicArgUsage = NonNullable<CallResolveResultWithExpr["dynamicArgUsage"]>;
+  type ResolvedCallBranch = {
+    expr: string;
+    imports: ImportSpec[];
+    usage?: BranchUsage;
+    dynamicArgUsage?: BranchDynamicArgUsage;
+  };
+  type BranchResolveMode = "default" | "optional";
+  type Branch = {
+    usage: BranchUsage;
+    expr: string;
+    imports: ImportSpec[];
+    cssValueText?: string;
+    dynamicArgUsage?: BranchDynamicArgUsage;
+  } | null;
 
   // Determine expected usage from context:
   // - Has CSS property -> "create" (CSS value)
   // - No CSS property -> "props" (StyleX reference)
   const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
 
-  const branchToExpr = (b: unknown): Branch => {
+  const branchToExpr = (b: unknown, mode: BranchResolveMode = "default"): Branch => {
+    const resolveValue =
+      mode === "optional" ? (ctx.resolveValueOptional ?? ctx.resolveValue) : ctx.resolveValue;
+    const resolverCtx: InternalHandlerContext =
+      mode === "optional"
+        ? {
+            ...ctx,
+            resolveValue,
+            resolveCall: ctx.resolveCallOptional ?? ctx.resolveCall,
+          }
+        : ctx;
     const v = literalToStaticValue(b);
     if (v !== null) {
       // Booleans are not valid CSS values; styled-components treats falsy
@@ -284,6 +278,7 @@ export function tryResolveConditionalValue(
         usage: "create",
         expr: typeof v === "string" ? JSON.stringify(v) : String(v),
         imports: [],
+        ...(typeof v === "string" ? { cssValueText: v } : {}),
       };
     }
     if (!b || typeof b !== "object") {
@@ -293,8 +288,8 @@ export function tryResolveConditionalValue(
     if ((b as { type?: string }).type === "BinaryExpression") {
       const binary = b as { operator?: string; left?: unknown; right?: unknown };
       if (isCssCalcOperator(binary.operator)) {
-        const left = branchToExpr(binary.left);
-        const right = branchToExpr(binary.right);
+        const left = branchToExpr(binary.left, mode);
+        const right = branchToExpr(binary.right, mode);
         if (
           left &&
           right &&
@@ -304,6 +299,10 @@ export function tryResolveConditionalValue(
           isCssCalcSafeOperand(left) &&
           isCssCalcSafeOperand(right)
         ) {
+          if (left.dynamicArgUsage || right.dynamicArgUsage) {
+            markFirstRuntimeCallInBranch(left.dynamicArgUsage ? binary.left : binary.right);
+            return null;
+          }
           return {
             usage: expectedUsage,
             expr: buildCssCalcExprSource(left, binary.operator!, right),
@@ -341,21 +340,6 @@ export function tryResolveConditionalValue(
         return false;
       });
 
-    const markAsRuntimeCall = (call: CallExpressionNode): void => {
-      runtimeCallState.info = {
-        resolveCallContext: {
-          callSiteFilePath: ctx.filePath,
-          calleeImportedName: "<local>",
-          calleeSource: { kind: "specifier", value: ctx.filePath },
-          args: [],
-          ...(call.loc?.start
-            ? { loc: { line: call.loc.start.line, column: call.loc.start.column } }
-            : {}),
-        },
-        resolveCallResult: { preserveRuntimeCall: true },
-      };
-    };
-
     // Helper to resolve call expressions (simple or curried) via adapter.
     // Preserves the full CallResolveResult including `kind` for proper CSS value vs StyleX ref detection.
     // Also tracks preserveRuntimeCall results so the caller can emit runtimeCallOnly.
@@ -363,16 +347,23 @@ export function tryResolveConditionalValue(
     const resolveCallExpr = (
       call: CallExpressionNode,
       cssProperty: string | undefined,
-    ): { expr: string; imports: ImportSpec[]; usage?: "create" | "props" } | null => {
+    ): ResolvedCallBranch | null => {
       const res = resolveImportedHelperCall(
         call,
-        ctx,
+        resolverCtx,
         propsParamName,
         cssProperty,
         themeBindingName,
       );
       if (res.kind === "resolved") {
         if ("expr" in res.result) {
+          if ("preserveRuntimeCall" in res.result && res.result.preserveRuntimeCall) {
+            runtimeCallState.info = {
+              resolveCallContext: res.resolveCallContext,
+              resolveCallResult: res.resolveCallResult,
+              cssValueText: res.result.expr,
+            };
+          }
           return res.result;
         }
         if ("preserveRuntimeCall" in res.result && res.result.preserveRuntimeCall) {
@@ -387,16 +378,26 @@ export function tryResolveConditionalValue(
       if (isCallExpressionNode(call.callee)) {
         const inner = call.callee;
         const outerArgs = call.arguments ?? [];
-        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
+        if (
+          outerArgs.length === 1 &&
+          isCurrentCurriedHelperContextArg(outerArgs[0], propsParamName, themeBindingName)
+        ) {
           const innerRes = resolveImportedHelperCall(
             inner,
-            ctx,
+            resolverCtx,
             propsParamName,
             cssProperty,
             themeBindingName,
           );
           if (innerRes.kind === "resolved") {
             if ("expr" in innerRes.result) {
+              if ("preserveRuntimeCall" in innerRes.result && innerRes.result.preserveRuntimeCall) {
+                runtimeCallState.info = {
+                  resolveCallContext: innerRes.resolveCallContext,
+                  resolveCallResult: innerRes.resolveCallResult,
+                  cssValueText: innerRes.result.expr,
+                };
+              }
               return innerRes.result;
             }
             if ("preserveRuntimeCall" in innerRes.result && innerRes.result.preserveRuntimeCall) {
@@ -421,11 +422,12 @@ export function tryResolveConditionalValue(
     // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
     // e.g., `linear-gradient(to bottom, ${color("bgSub")(props)} 70%, rgba(0, 0, 0, 0) 100%)`
     // Template literals always need CSS values, so always pass cssProperty
+    let templateHasDynamicArgUsage = false;
     const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
       // First try theme member expression
       const themeInfo = resolveThemeFromMemberExpr(expr);
       if (themeInfo) {
-        const res = ctx.resolveValue({
+        const res = resolveValue({
           kind: "theme",
           path: themeInfo.path,
           filePath: ctx.filePath,
@@ -437,12 +439,24 @@ export function tryResolveConditionalValue(
       // Template literals need CSS values, so pass cssProperty
       if (isCallExpressionNode(expr)) {
         const callRes = resolveCallExpr(expr, node.css.property);
+        if (callRes?.dynamicArgUsage) {
+          templateHasDynamicArgUsage = true;
+          markAsRuntimeCall(expr);
+        }
         return callRes ? { expr: callRes.expr, imports: callRes.imports } : null;
       }
       return null;
     });
     if (templateResult) {
-      return { usage: "create", ...templateResult };
+      if (templateHasDynamicArgUsage && runtimeCallState.info) {
+        runtimeCallState.info.cssValueText = templateResult.expr;
+      }
+      return {
+        usage: "create",
+        ...templateResult,
+        cssValueText: templateResult.expr,
+        ...(templateHasDynamicArgUsage ? { dynamicArgUsage: "call" } : {}),
+      };
     }
 
     if (isCallExpressionNode(b)) {
@@ -453,7 +467,13 @@ export function tryResolveConditionalValue(
         // Use adapter's explicit `kind` if provided, otherwise infer from cssProperty context
         const isCssValue = isAdapterResultCssValue(resolved, node.css.property);
         const usage: BranchUsage = isCssValue ? "create" : "props";
-        return { usage, expr: resolved.expr, imports: resolved.imports };
+        return {
+          usage,
+          expr: resolved.expr,
+          imports: resolved.imports,
+          cssValueText: resolved.expr,
+          ...(resolved.dynamicArgUsage ? { dynamicArgUsage: resolved.dynamicArgUsage } : {}),
+        };
       }
       return null;
     }
@@ -461,7 +481,7 @@ export function tryResolveConditionalValue(
     // Handle direct MemberExpression theme access (reuse the helper)
     const themeInfo = resolveThemeFromMemberExpr(b);
     if (themeInfo) {
-      const res = ctx.resolveValue({
+      const res = resolveValue({
         kind: "theme",
         path: themeInfo.path,
         filePath: ctx.filePath,
@@ -470,14 +490,14 @@ export function tryResolveConditionalValue(
       if (!res) {
         return null;
       }
-      return { usage: expectedUsage, expr: res.expr, imports: res.imports };
+      return { usage: expectedUsage, expr: res.expr, imports: res.imports, cssValueText: res.expr };
     }
 
     const importedInfo = extractRootAndPath(b);
     if (importedInfo) {
       const imp = ctx.resolveImport(importedInfo.rootName, importedInfo.rootNode);
       if (imp) {
-        const res = ctx.resolveValue({
+        const res = resolveValue({
           kind: "importedValue",
           importedName: imp.importedName,
           source: imp.source,
@@ -486,7 +506,12 @@ export function tryResolveConditionalValue(
           loc: getNodeLocStart(b) ?? undefined,
         });
         if (res) {
-          return { usage: expectedUsage, expr: res.expr, imports: res.imports };
+          return {
+            usage: expectedUsage,
+            expr: res.expr,
+            imports: res.imports,
+            cssValueText: res.expr,
+          };
         }
       }
     }
@@ -496,6 +521,148 @@ export function tryResolveConditionalValue(
   const getBranch = (value: unknown): Branch => {
     return branchToExpr(value);
   };
+
+  const getBranchOptional = (value: unknown): Branch => {
+    return branchToExpr(value, "optional");
+  };
+
+  const isEmptyCssInterpolationBranch = (value: unknown): boolean => isEmptyCssBranch(value);
+
+  const resolveThemeBooleanStyleValue = (
+    branch: unknown,
+  ): { value: unknown; imports: ImportSpec[]; cssValueText?: string } | null => {
+    if (isEmptyCssBranch(branch)) {
+      return null;
+    }
+    const raw = literalToStaticValue(branch);
+    if (raw !== null && typeof raw !== "boolean") {
+      return {
+        value: raw,
+        imports: [],
+        ...(typeof raw === "string" ? { cssValueText: raw } : {}),
+      };
+    }
+
+    const themeInfo = resolveThemeFromMemberExpr(branch);
+    if (themeInfo) {
+      const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
+      const res = resolveTheme({
+        kind: "theme",
+        path: themeInfo.path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(branch) ?? undefined,
+      });
+      if (!res) {
+        return null;
+      }
+      const astNode = parseExpr(ctx.api, res.expr);
+      return astNode ? { value: astNode, imports: res.imports, cssValueText: res.expr } : null;
+    }
+
+    const resolved = getBranchOptional(branch);
+    if (!resolved || resolved.usage !== "create") {
+      return null;
+    }
+    if (resolved.dynamicArgUsage) {
+      if (isCallExpressionNode(branch)) {
+        markAsRuntimeCall(branch);
+      }
+      return null;
+    }
+
+    const astNode = parseExpr(ctx.api, resolved.expr);
+    return astNode
+      ? {
+          value: astNode,
+          imports: resolved.imports,
+          cssValueText: resolved.cssValueText ?? resolved.expr,
+        }
+      : null;
+  };
+
+  const themeBoolInfo = checkThemeBooleanTest(body.test);
+  if (themeBoolInfo && node.css.property) {
+    const { consequent, alternate } = body;
+    // Determine true/false branches based on negation
+    const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
+    const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
+
+    let runtimeCallBranch: RuntimeCallBranch | null = null;
+    const noteRuntimeCallBranch = (branch: RuntimeCallBranch, before: RuntimeCallInfo | null) => {
+      if (runtimeCallState.info === before) {
+        return;
+      }
+      runtimeCallBranch = runtimeCallBranch && runtimeCallBranch !== branch ? "both" : branch;
+    };
+
+    const beforeTrueResolve = runtimeCallState.info;
+    const trueResolved = resolveThemeBooleanStyleValue(trueBranch);
+    noteRuntimeCallBranch("true", beforeTrueResolve);
+    const beforeFalseResolve = runtimeCallState.info;
+    const falseResolved = resolveThemeBooleanStyleValue(falseBranch);
+    noteRuntimeCallBranch("false", beforeFalseResolve);
+    const trueValue = trueResolved?.value ?? null;
+    const falseValue = falseResolved?.value ?? null;
+    const trueImports = trueResolved?.imports ?? [];
+    const falseImports = falseResolved?.imports ?? [];
+    const trueCssValueText = trueResolved?.cssValueText;
+    const falseCssValueText = falseResolved?.cssValueText;
+
+    if (trueValue !== null && falseValue !== null) {
+      const runtimeCallInfo = runtimeCallState.info;
+      return {
+        type: "splitThemeBooleanVariants",
+        cssProp: node.css.property,
+        themeProp: themeBoolInfo.themeProp,
+        trueValue,
+        falseValue,
+        trueImports,
+        falseImports,
+        ...(trueCssValueText ? { trueCssValueText } : {}),
+        ...(falseCssValueText ? { falseCssValueText } : {}),
+        ...(runtimeCallInfo?.resolveCallResult
+          ? { runtimeResolveCallResult: runtimeCallInfo.resolveCallResult }
+          : {}),
+        ...(runtimeCallInfo?.cssValueText
+          ? { runtimeCssValueText: runtimeCallInfo.cssValueText }
+          : {}),
+      };
+    }
+
+    if (
+      (trueValue === null) !== (falseValue === null) &&
+      isEmptyCssInterpolationBranch(trueValue === null ? trueBranch : falseBranch)
+    ) {
+      return null;
+    }
+
+    // Fallback: one branch resolved but the other is an unresolvable call expression.
+    // Use the resolved branch as the base StyleX value and emit the unresolvable
+    // branch as a conditional inline style guarded by the theme boolean.
+    const inlineStyleFallback = tryBuildThemeBooleanInlineStyleFallback({
+      trueValue,
+      falseValue,
+      trueImports,
+      falseImports,
+      trueBranch,
+      falseBranch,
+      themeBoolInfo,
+      cssProp: node.css.property,
+      paramName,
+      info,
+    });
+    if (inlineStyleFallback) {
+      if (inlineStyleFallback.type === "splitThemeBooleanWithInlineStyleFallback") {
+        const resolvedRuntimeBranch = inlineStyleFallback.resolvedBranchIsTrue ? "true" : "false";
+        if (runtimeCallBranch === resolvedRuntimeBranch || runtimeCallBranch === "both") {
+          return null;
+        }
+      }
+      return inlineStyleFallback;
+    }
+    // Can't resolve branches as static values - fall through to other handlers
+    // which may bail with a warning
+  }
 
   // Convert `prop ? value : undefined/null/false/""` into a positive-only
   // `splitVariantsResolved*` result (one variant bucket gated on `prop`).
@@ -1691,6 +1858,53 @@ function isDestructuredFromParam(arrowFn: unknown, name: string): boolean {
   });
 }
 
+function isCurrentCurriedHelperContextArg(
+  arg: unknown,
+  propsParamName: string | undefined,
+  themeBindingName: string | undefined,
+): boolean {
+  if (!arg || typeof arg !== "object") {
+    return false;
+  }
+  const node = arg as {
+    type?: string;
+    name?: string;
+    properties?: unknown[];
+  };
+  if (node.type === "Identifier") {
+    return node.name === propsParamName || node.name === themeBindingName;
+  }
+  if (node.type !== "ObjectExpression" || node.properties?.length !== 1) {
+    return false;
+  }
+  const property = node.properties[0] as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string };
+    value?: unknown;
+  };
+  if (
+    (property.type !== "Property" && property.type !== "ObjectProperty") ||
+    property.computed ||
+    property.key?.type !== "Identifier" ||
+    property.key.name !== "theme"
+  ) {
+    return false;
+  }
+  const value = property.value as { type?: string; name?: string } | null | undefined;
+  if (value?.type === "Identifier" && value.name === themeBindingName) {
+    return true;
+  }
+  if (propsParamName) {
+    const valuePath = getMemberPathFromIdentifier(
+      property.value as Parameters<typeof getMemberPathFromIdentifier>[0],
+      propsParamName,
+    );
+    return valuePath?.length === 1 && valuePath[0] === "theme";
+  }
+  return false;
+}
+
 /**
  * Parses a template literal that contains a simple prop-based ternary expression.
  * Supports patterns like: `background: ${props.$primary ? "red" : "blue"}`
@@ -1761,7 +1975,7 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   falseImports: ImportSpec[];
   trueBranch: unknown;
   falseBranch: unknown;
-  themeBoolInfo: { isNegated: boolean; themeProp: string };
+  themeBoolInfo: { themeProp: string };
   cssProp: string;
   paramName: string | null;
   info: ThemeParamInfo | null;
@@ -1803,7 +2017,6 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
     type: "splitThemeBooleanWithInlineStyleFallback",
     cssProp,
     themeProp: themeBoolInfo.themeProp,
-    isNegated: themeBoolInfo.isNegated,
     resolvedValue: resolvedBranchIsTrue ? trueValue : falseValue,
     resolvedImports: resolvedBranchIsTrue ? trueImports : falseImports,
     resolvedBranchIsTrue,

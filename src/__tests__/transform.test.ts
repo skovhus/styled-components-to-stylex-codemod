@@ -7183,6 +7183,1113 @@ export const Box = styled.div<{ tone: string }>\`
     expect(code).not.toContain("backgroundColor: $colors");
   });
 
+  it("should not split dynamic helper theme branches into static theme variants", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background-color: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+\`;
+
+export const GradientBox = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? \`linear-gradient(\${color(props.$dark)(props)}, transparent)\`
+      : \`linear-gradient(transparent, \${color(props.$light)(props)})\`};
+\`;
+
+export const CalcBox = styled.div<{ $dark: string }>\`
+  width: \${(props) => (props.theme.isDark ? color(props.$dark)(props) * 2 : 4)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanDynamicArg.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("color(props.dark)");
+    expect(code).toContain("color(props.light)");
+    expect(code).toContain("linear-gradient");
+    expect(code).toContain("color(props.dark)({");
+    expect(code).toContain("gradientBoxBackgroundImage");
+    expect(code).not.toContain("backgroundColor: $colors");
+    expect(code).not.toContain("gradientBoxBackgroundColor");
+    expect(code).not.toContain("linear-gradient(${$colors");
+    expect(code).not.toContain("calc($colors");
+  });
+
+  it("should reset earlier background images for runtime background shorthand helper branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: url(/old.png);
+  background: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeBackgroundReset.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).not.toContain('backgroundImage: "url(/old.png)"');
+    expect(code).toContain("backgroundColor,");
+    expect(code).toContain('backgroundImage: "none"');
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("color(props.dark)");
+    expect(code).toContain("color(props.light)");
+  });
+
+  it("should not statically resolve curried helper branches with non-current outer args", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const otherTheme = { color: { bgBase: "purple" } };
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? color("bgBase")({ theme: otherTheme }) : "red"};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanUnsafeCurriedOuterArg.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    expect(code).not.toContain("backgroundColor: $colors.bgBase");
+    if (result.code) {
+      expect(code).toContain("otherTheme");
+      expect(code).toContain('color("bgBase")');
+    }
+  });
+
+  it("should preserve adapter runtime overrides in theme boolean branches", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+\`;
+`;
+
+    const adapterWithRuntimeFallback = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme" && ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`color-mix(in srgb, ${$colors.bgBase} 50%, transparent)`",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+            preserveRuntimeCall: true,
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeFallback },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("color-mix(in srgb");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+    expect(code).toContain("theme.isDark");
+    expect(code).toContain("styles.boxColor(");
+    const themeStyleIndex = code.indexOf("theme.isDark ? styles.boxDark : styles.boxLight");
+    const runtimeStyleIndex = code.indexOf("styles.boxColor(");
+    expect(themeStyleIndex).toBeGreaterThanOrEqual(0);
+    expect(runtimeStyleIndex).toBeGreaterThan(themeStyleIndex);
+  });
+
+  it("should suppress preserved runtime overrides when a later base declaration wins", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+  background: white;
+\`;
+`;
+
+    const adapterWithRuntimeFallback = {
+      ...fixtureAdapter,
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`color-mix(in srgb, ${$colors.bgBase} 50%, transparent)`",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+            preserveRuntimeCall: true,
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeLaterBaseOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeFallback },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("ColorConverter.cssWithAlpha");
+    expect(code).not.toContain("styles.boxBackgroundColor(");
+    expect(code).not.toContain("theme.isDark");
+  });
+
+  it("should bail when a later helper mixin could override preserved runtime background", () => {
+    const source = `
+import styled from "styled-components";
+import { color, gradient } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark ? color(props.$dark)(props) : color(props.$light)(props)};
+  \${gradient()};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeLaterMixin.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail on inline fallback when a resolved theme branch preserves a runtime override", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : props.theme.baseTheme?.color.bgBase};
+\`;
+`;
+
+    const adapterWithRuntimeFallback = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme" && ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`color-mix(in srgb, ${$colors.bgBase} 50%, transparent)`",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+            preserveRuntimeCall: true,
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRuntimeInlineFallback.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeFallback },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail on mixed background branches with adapter runtime overrides", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? ColorConverter.cssWithAlpha(props.theme.color.bgBase, 0.5)
+      : "red"};
+\`;
+`;
+
+    const adapterWithRuntimeGradientFallback = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme" && ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "ColorConverter" &&
+          ctx.calleeMemberPath?.[0] === "cssWithAlpha"
+        ) {
+          return {
+            usage: "create" as const,
+            expr: "`linear-gradient(red, transparent)`",
+            imports: [],
+            preserveRuntimeCall: true,
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanMixedBackgroundRuntime.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeGradientFallback },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail on mixed dynamic background template and helper branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div<{ $dark: string; $light: string }>\`
+  background: \${(props) =>
+    props.theme.isDark
+      ? \`linear-gradient(\${color(props.$dark)(props)}, transparent)\`
+      : color(props.$light)(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanMixedDynamicBackground.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail instead of emitting an unconditional class for omitted theme branches", () => {
+    for (const [caseName, emptyBranch] of [
+      ["undefined", "undefined"],
+      ["emptyString", '""'],
+      ["emptyTemplate", "``"],
+    ]) {
+      const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? color("labelBase")(props) : ${emptyBranch})};
+\`;
+`;
+
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, `helper-themeBooleanOmittedBranch-${caseName}.input.tsx`),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: fixtureAdapter },
+      );
+
+      expect(result.code, caseName).toBeNull();
+    }
+  });
+
+  it("should let later base declarations override helper-backed theme branches", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? color("bgSub")(props) : color("bgBase")(props)};
+  background: white;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLaterBaseOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+    expect(code).not.toContain("boxIsDark");
+  });
+
+  it("should bail when helper-backed theme branches target an unsupported shorthand", () => {
+    const source = `
+import styled from "styled-components";
+import { thinPixel } from "./lib/helpers";
+
+export const Box = styled.div\`
+  padding: \${(props) => (props.theme.isDark ? thinPixel() : "4px")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanUnsupportedShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when literal theme branches target an unsupported shorthand", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  margin: \${(props) => (props.theme.isDark ? "8px 16px" : "4px")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLiteralShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should clear theme background images when a later background shorthand wins", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? "linear-gradient(red, blue)" : "url(/light.png)"};
+  background: white;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLaterBackgroundShorthand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('backgroundColor: "white"');
+    expect(code).not.toContain("backgroundImage");
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+  });
+
+  it("should reset earlier background images from helper-backed theme color shorthands", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: url(/old.png);
+  background: \${(props) =>
+    props.theme.isDark ? color("bgBase")(props) : color("bgSub")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanBackgroundColorReset.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundColor: $colors.bgBase");
+    expect(code).toContain("backgroundColor: $colors.bgSub");
+    expect(code).toContain('backgroundImage: "none"');
+  });
+
+  it("should bail when a later resolved style helper can override source-ordered theme buckets", () => {
+    const source = `
+import styled from "styled-components";
+import { color, colorMixin } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  \${colorMixin()};
+\`;
+`;
+
+    const adapterWithColorMixin = {
+      ...fixtureAdapter,
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "colorMixin") {
+          return {
+            usage: "props" as const,
+            expr: "mixins.color",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./mixins.stylex" },
+                names: [{ imported: "mixins" }],
+              },
+            ],
+            cssText: "color: green;",
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanResolvedMixinOverride.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithColorMixin },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should preserve important helper-backed theme branch values", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)} !important;
+  color: green;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanImportant.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).toMatch(/\$\{\$colors\.labelBase\} !important/);
+    expect(code).toMatch(/\$\{\$colors\.labelMuted\} !important/);
+    expect(code).toContain('color: "green"');
+  });
+
+  it("should keep earlier important values when reusing theme buckets", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)} !important;
+  color: \${(props) =>
+    props.theme.isDark ? color("bgSub")(props) : color("bgBase")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanImportantReuse.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/\$\{\$colors\.labelBase\} !important/);
+    expect(code).toMatch(/\$\{\$colors\.labelMuted\} !important/);
+    expect(code).not.toContain("color: $colors.bgSub");
+    expect(code).not.toContain("color: $colors.bgBase");
+  });
+
+  it("should clear theme background images when a later resolved background helper wins", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: \${(props) =>
+    props.theme.isDark ? "linear-gradient(red, blue)" : "url(/light.png)"};
+  background: \${(props) => color("bgBase")(props)};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanLaterResolvedBackground.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundColor: $colors.bgBase");
+    expect(code).not.toContain("backgroundImage");
+    expect(code).not.toContain("theme.isDark");
+    expect(code).not.toContain("useTheme");
+  });
+
+  it("should classify full background values wrapped around resolved helpers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  background: linear-gradient(\${(props) => color("bgSub")(props)}, transparent);
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-backgroundWrappedResolvedValue.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundImage");
+    expect(code).toContain("linear-gradient");
+    expect(code).not.toContain("backgroundColor");
+  });
+
+  it("should preserve theme hook ordering in intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const Box = styled.div<{ active: boolean }>\`
+  color: \${(props) => (props.active ? "green" : "yellow")};
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+\`;
+
+export const App = () => <Box active />;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanIntrinsicOrder.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    const activeStyleMatch = code.match(
+      /active\s*\?\s*styles\.box[A-Za-z0-9_]*(?:\s*:\s*styles\.box[A-Za-z0-9_]*)?|styles\.box[A-Za-z0-9_]*\(active/,
+    );
+    const activeStyleIndex = activeStyleMatch?.index ?? -1;
+    const themeStyleIndex = code.indexOf("theme.isDark ? styles.boxDark : styles.boxLight");
+    if (activeStyleIndex >= 0) {
+      expect(themeStyleIndex).toBeGreaterThan(activeStyleIndex);
+    }
+  });
+
+  it("should preserve theme hook styles in polymorphic intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  color: \${(props) =>
+    props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+\`;
+
+export const App = () => <Box as="section">Themed</Box>;
+`;
+
+    const adapterWithAsSupport = {
+      ...fixtureAdapter,
+      externalInterface() {
+        return { styles: false, as: true, ref: false };
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanPolymorphicIntrinsic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAsSupport },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("const theme = useTheme();");
+    expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).toContain("as?: C");
+  });
+
+  it("should pass inline theme fallbacks through polymorphic intrinsic wrappers", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? runtimeColor() : props.theme.color.labelMuted)};
+\`;
+
+export const App = () => <Box as="section">Themed</Box>;
+`;
+
+    const adapterWithAsSupport = {
+      ...fixtureAdapter,
+      externalInterface() {
+        return { styles: false, as: true, ref: false };
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanPolymorphicInlineFallback.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAsSupport },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("const theme = useTheme();");
+    expect(code).toContain("color: theme.isDark ? runtimeColor() : undefined");
+    expect(code).toContain("style={{");
+    expect(code).toContain("as?: C");
+  });
+
+  it("should keep repeated same-theme declarations at their latest source order", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ active: boolean }>\`
+  color: \${(props) => (props.theme.isDark ? "red" : "blue")};
+  color: \${(props) => (props.active ? "green" : "yellow")};
+  color: \${(props) => (props.theme.isDark ? "black" : "white")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanRepeatedSourceOrder.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    const variantStyleMatch = code.match(
+      /active\s*\?\s*styles\.box[A-Za-z0-9_]*(?:\s*:\s*styles\.box[A-Za-z0-9_]*)?|styles\.box[A-Za-z0-9_]*\(active/,
+    );
+    const variantStyleIndex = variantStyleMatch?.index ?? -1;
+    const themeStyleMatches = [
+      ...code.matchAll(
+        /theme\.isDark\s*\?\s*styles\.box[A-Za-z0-9_]*\s*:\s*styles\.box[A-Za-z0-9_]*/g,
+      ),
+    ];
+    const latestThemeStyleMatch = themeStyleMatches[themeStyleMatches.length - 1];
+    const themeStyleIndex = latestThemeStyleMatch?.index ?? -1;
+    expect(themeStyleMatches.length).toBeGreaterThanOrEqual(2);
+    if (variantStyleIndex >= 0) {
+      expect(themeStyleIndex).toBeGreaterThan(variantStyleIndex);
+    }
+    expect(code).toContain('color: "black"');
+    expect(code).toContain('color: "white"');
+  });
+
+  it("should not move earlier same-theme properties when later theme properties are added", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ active: boolean }>\`
+  color: \${(props) => (props.theme.isDark ? "red" : "blue")};
+  color: \${(props) => (props.active ? "green" : "yellow")};
+  background: \${(props) => (props.theme.isDark ? "black" : "white")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanSplitPropertyOrder.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    const variantStyleMatch = code.match(
+      /active\s*\?\s*styles\.box[A-Za-z0-9_]*(?:\s*:\s*styles\.box[A-Za-z0-9_]*)?|styles\.box[A-Za-z0-9_]*\(active/,
+    );
+    const variantStyleIndex = variantStyleMatch?.index ?? -1;
+    const themeStyleMatches = [
+      ...code.matchAll(
+        /theme\.isDark\s*\?\s*styles\.box[A-Za-z0-9_]*\s*:\s*styles\.box[A-Za-z0-9_]*/g,
+      ),
+    ];
+    const firstThemeStyleMatch = themeStyleMatches[0];
+    const latestThemeStyleMatch = themeStyleMatches[themeStyleMatches.length - 1];
+    const firstThemeStyleIndex = firstThemeStyleMatch?.index ?? -1;
+    const latestThemeStyleIndex = latestThemeStyleMatch?.index ?? -1;
+    expect(themeStyleMatches.length).toBeGreaterThanOrEqual(2);
+    if (variantStyleIndex >= 0) {
+      expect(firstThemeStyleIndex).toBeLessThan(variantStyleIndex);
+      expect(latestThemeStyleIndex).toBeGreaterThan(variantStyleIndex);
+    }
+    expect(code).toContain('backgroundColor: "black"');
+    expect(code).toContain('backgroundColor: "white"');
+  });
+
+  it("should emit later same-theme branches after a base declaration clears one side", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? "red" : "blue !important")};
+  color: green;
+  color: \${(props) => (props.theme.isDark ? "black" : "white !important")};
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanClearedSideReuse.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("theme.isDark ? styles.boxDark : styles.boxLight");
+    expect(code).not.toContain("undefined");
+    expect(code).toMatch(/boxDark:\s*\{\s*color: "black"/);
+    expect(code).toMatch(/boxLight:\s*\{\s*color: "white !important"/);
+  });
+
+  it("should bail instead of hoisting helper-backed theme branches out of nested selectors", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  &:hover {
+    color: \${(props) =>
+      props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanNestedSelector.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail instead of hoisting helper-backed theme branches out of attribute selectors", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Input = styled.input\`
+  &[readonly] {
+    color: \${(props) =>
+      props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanAttributeSelector.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail instead of hoisting helper-backed theme branches out of computed media selectors", () => {
+    const source = `
+import styled from "styled-components";
+import { color, screenSize } from "./lib/helpers";
+
+export const Box = styled.div\`
+  \${screenSize.phone} {
+    color: \${(props) =>
+      props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanComputedMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail instead of hoisting helper-backed theme branches out of ancestor attributes", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+export const Box = styled.div\`
+  [data-active] & {
+    color: \${(props) =>
+      props.theme.isDark ? color("labelBase")(props) : color("labelMuted")(props)};
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanAncestorAttribute.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should preserve stylex imported values in optional theme branch probing", () => {
+    const source = `
+import styled from "styled-components";
+import { $colors } from "./tokens.stylex";
+
+export const Box = styled.div\`
+  color: \${(props) => (props.theme.isDark ? $colors.bgSub : $colors.bgBase)};
+\`;
+`;
+
+    const adapterWithoutImportedValueResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "importedValue") {
+          throw new Error("Imported values should use .stylex passthrough");
+        }
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeBooleanStylexImport.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutImportedValueResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("$colors.bgSub");
+    expect(code).toContain("$colors.bgBase");
+    expect(code).toContain("theme.isDark");
+  });
+
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
     const source = `
 import styled from "styled-components";
@@ -7502,6 +8609,58 @@ export const App = () => <Toggle>Toggle</Toggle>;
     expect(code).not.toContain("useTheme");
     expect(code).not.toContain("ColorConverter.cssWithAlpha(");
     expect(code).not.toContain("toggleBackgroundColor");
+  });
+
+  it("should classify preserved background runtime overrides from resolved helper text", () => {
+    const source = `
+import styled from "styled-components";
+import { imageHelper } from "./lib/helpers";
+
+const Box = styled.div\`
+  background: \${(props) => imageHelper("hero")};
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const adapterWithRuntimeBackgroundImage = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName !== "imageHelper") {
+          return undefined;
+        }
+        return {
+          usage: "create" as const,
+          expr: '`url("/static/hero.png")`',
+          imports: [],
+          preserveRuntimeCall: true,
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-background-image.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRuntimeBackgroundImage },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("backgroundImage");
+    expect(code).toContain('stylex.props(styles.box(imageHelper("hero")))');
+    expect(code).toContain('backgroundColor: "transparent"');
   });
 
   it("should preserve static suffix in runtime call override (P1 fix)", () => {
@@ -10789,6 +11948,81 @@ export const App = () => <Box>Test</Box>;
 
     const result = transformWithWarnings(
       { source, path: "theme-shorthand-inline-fallback.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when a later declaration would override an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+const Box = styled.div\`
+  color: \${(p) => (p.theme.isDark ? runtimeColor() : p.theme.color.bgBase)};
+  color: green;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when a later dynamic declaration would override an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeColor() {
+  return "crimson";
+}
+
+const Box = styled.div\`
+  color: \${(p) => (p.theme.isDark ? runtimeColor() : p.theme.color.bgBase)};
+  color: \${(p) => (p.$active ? "green" : "blue")};
+\`;
+
+export const App = () => <Box $active>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-dynamic-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when a later background shorthand would reset an inline theme fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+function runtimeImage() {
+  return "url(hero.png)";
+}
+
+const Box = styled.div\`
+  background-image: \${(p) => (p.theme.isDark ? runtimeImage() : "none")};
+  background: white;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-inline-fallback-later-background-reset.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );

@@ -62,6 +62,8 @@ export type HandlerResult =
       type: "resolvedValue";
       expr: string;
       imports: ImportSpec[];
+      /** Original/resolved CSS value text for shorthand classification. */
+      cssValueText?: string;
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
     }
@@ -115,6 +117,8 @@ export type HandlerResult =
       type: "runtimeCallOnly";
       resolveCallContext: CallResolveContext;
       resolveCallResult: CallResolveResult;
+      /** Resolved CSS value text used to classify ambiguous shorthands like background. */
+      cssValueText?: string;
     }
   | {
       /**
@@ -380,6 +384,14 @@ export type HandlerResult =
       trueImports: ImportSpec[];
       /** Imports required for false branch value */
       falseImports: ImportSpec[];
+      /** Original/resolved CSS value text for true branch classification */
+      trueCssValueText?: string;
+      /** Original/resolved CSS value text for false branch classification */
+      falseCssValueText?: string;
+      /** Optional runtime override requested by an adapter result used inside a branch. */
+      runtimeResolveCallResult?: CallResolveResult;
+      /** Resolved CSS value text used to classify runtime overrides for ambiguous shorthands. */
+      runtimeCssValueText?: string;
     }
   | {
       /**
@@ -401,13 +413,11 @@ export type HandlerResult =
       cssProp: string;
       /** The theme property name being tested (e.g., "isDark") */
       themeProp: string;
-      /** Whether the theme boolean test was negated */
-      isNegated: boolean;
       /** The resolved value for the resolvable branch */
       resolvedValue: unknown;
       /** Imports required for the resolved value */
       resolvedImports: ImportSpec[];
-      /** Whether the resolved branch is the true (consequent) or false (alternate) branch */
+      /** Whether the resolved branch applies when the theme boolean is true */
       resolvedBranchIsTrue: boolean;
       /** The unresolvable branch expression with props.theme.* replaced by theme.* */
       inlineExpr: unknown;

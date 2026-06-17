@@ -734,11 +734,15 @@ export function buildVariantDimensionLookups(
 export type OrderedStyleEntry = { order: number; expr: ExpressionKind };
 
 export function hasStyleSourceOrder(
-  d: Pick<StyledDecl, "variantSourceOrder" | "styleFnFromProps" | "pseudoAliasSelectors">,
+  d: Pick<
+    StyledDecl,
+    "variantSourceOrder" | "styleFnFromProps" | "pseudoAliasSelectors" | "needsUseThemeHook"
+  >,
 ): boolean {
   return (
     !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0) ||
-    (d.pseudoAliasSelectors ?? []).some((entry) => entry.sourceOrder !== undefined)
+    (d.pseudoAliasSelectors ?? []).some((entry) => entry.sourceOrder !== undefined) ||
+    (d.needsUseThemeHook ?? []).some((entry) => entry.sourceOrder !== undefined)
   );
 }
 
@@ -1161,6 +1165,7 @@ export function appendThemeBooleanStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
   markNeedsUseThemeImport: () => void,
+  orderedEntries?: OrderedStyleEntry[],
 ): boolean {
   if (!hooks || hooks.length === 0) {
     return false;
@@ -1181,7 +1186,12 @@ export function appendThemeBooleanStyleArgs(
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
       : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
-    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+    const finalExpr = j.conditionalExpression(condition, trueExpr, falseExpr);
+    if (orderedEntries && entry.sourceOrder !== undefined) {
+      orderedEntries.push({ order: entry.sourceOrder, expr: finalExpr });
+    } else {
+      styleArgs.push(finalExpr);
+    }
   }
   return true;
 }
@@ -1362,13 +1372,14 @@ export function buildAllVariantAndStyleExprs(opts: {
   compoundVariantKeys: ReadonlySet<string>;
   afterVariantStyleArgs?: ExpressionKind[];
   enableComplementaryMerging?: boolean;
+  markNeedsUseThemeImport?: () => void;
   /** Custom compound variant builder from ctx.helpers */
   buildCompoundVariantExpressions: (
     compoundVariants: NonNullable<StyledDecl["compoundVariants"]>,
     styleArgs: ExpressionKind[],
     destructureProps: string[],
   ) => void;
-}): void {
+}): boolean {
   const {
     d,
     emitter,
@@ -1380,6 +1391,7 @@ export function buildAllVariantAndStyleExprs(opts: {
     compoundVariantKeys,
     afterVariantStyleArgs,
     enableComplementaryMerging,
+    markNeedsUseThemeImport,
     buildCompoundVariantExpressions,
   } = opts;
 
@@ -1387,6 +1399,16 @@ export function buildAllVariantAndStyleExprs(opts: {
   const knownProps = collectKnownConditionPropNames(emitter, d);
   const hasSourceOrder = hasStyleSourceOrder(d);
   const orderedEntries: OrderedStyleEntry[] = [];
+  const needsUseTheme = markNeedsUseThemeImport
+    ? appendThemeBooleanStyleArgs(
+        d.needsUseThemeHook,
+        styleArgs,
+        j,
+        stylesIdentifier,
+        markNeedsUseThemeImport,
+        hasSourceOrder ? orderedEntries : undefined,
+      )
+    : false;
 
   buildVariantStyleExprs({
     d,
@@ -1449,6 +1471,8 @@ export function buildAllVariantAndStyleExprs(opts: {
   if (afterVariantStyleArgs && afterVariantStyleArgs.length > 0) {
     styleArgs.push(...afterVariantStyleArgs);
   }
+
+  return needsUseTheme;
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
