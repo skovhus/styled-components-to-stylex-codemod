@@ -6,11 +6,7 @@
 import { literalToAst } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
 import { findCssVarCallsInString } from "../css-vars.js";
-import {
-  cloneAstNode,
-  getFunctionBodyExpr,
-  isAstNode,
-} from "../utilities/jscodeshift-utils.js";
+import { cloneAstNode, getFunctionBodyExpr, isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { isStyleConditionKey, mapAst, walkAst } from "./utils.js";

@@ -13,16 +13,8 @@ import {
   normalizeSpecificityHacks,
   parseSelector,
 } from "../selectors.js";
-import {
-  extractRootAndPath,
-  getNodeLocStart,
-  isAstNode,
-} from "../utilities/jscodeshift-utils.js";
-import {
-  SOURCE_CSS_PROPERTIES_KEY,
-  literalToAst,
-  toStyleKey,
-} from "../transform/helpers.js";
+import { extractRootAndPath, getNodeLocStart, isAstNode } from "../utilities/jscodeshift-utils.js";
+import { SOURCE_CSS_PROPERTIES_KEY, literalToAst, toStyleKey } from "../transform/helpers.js";
 import {
   getOrCreateRelationOverrideBucket,
   makeAncestorKeyExpr,

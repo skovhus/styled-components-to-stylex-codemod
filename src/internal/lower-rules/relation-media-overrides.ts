@@ -14,11 +14,7 @@ import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, literalToAst, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
-import {
-  cssPropertyToIdentifier,
-  makeAncestorKeyExpr,
-  makeCssPropKey,
-} from "./shared.js";
+import { cssPropertyToIdentifier, makeAncestorKeyExpr, makeCssPropKey } from "./shared.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {

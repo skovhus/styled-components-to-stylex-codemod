@@ -121,7 +121,6 @@ export function hasLocalElementPseudoCollision(
 
 // --- Non-exported helpers ---
 
-
 /**
  * Checks whether a component is exported from the file (named, default, or re-export).
  */

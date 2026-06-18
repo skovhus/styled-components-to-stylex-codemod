@@ -11,11 +11,7 @@ import { cssValueToJs } from "../transform/helpers.js";
 import { maybeApplyAuthoredMultilineToExpression } from "../utilities/css-authored-multiline.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { maybeOmitPxUnitFromStylexValue } from "./inline-styles.js";
-import {
-  setStyleObjectValue,
-  tryResolveAdapterCall,
-  type AdapterCallResolver,
-} from "./utils.js";
+import { setStyleObjectValue, tryResolveAdapterCall, type AdapterCallResolver } from "./utils.js";
 
 /**
  * Processes rule declarations into a relation override bucket, handling both static

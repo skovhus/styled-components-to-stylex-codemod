@@ -1593,4 +1593,3 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
   return { emitted, needsReactTypeImport, needsUseThemeImport };
 }
-
