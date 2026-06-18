@@ -10,7 +10,7 @@ import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
 import { parseElementSelectorPattern } from "../selectors.js";
 
-export type ElementSelectorBailReason =
+type ElementSelectorBailReason =
   | "bail-exported"
   | "bail-ambiguous"
   | "bail-dynamic"

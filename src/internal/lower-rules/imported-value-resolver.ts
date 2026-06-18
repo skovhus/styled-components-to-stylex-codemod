@@ -31,10 +31,7 @@ import type {
   ImportedValueResolution,
 } from "./interpolated-declaration-context.js";
 
-export type ImportedValueResolverContext = Pick<
-  InterpolatedDeclarationContext,
-  "ctx" | "rule" | "d"
-> & {
+type ImportedValueResolverContext = Pick<InterpolatedDeclarationContext, "ctx" | "rule" | "d"> & {
   flags: { bail: boolean };
 };
 

@@ -291,10 +291,7 @@ export function isModuleScopeBinding(
 }
 
 /** Recursively check if a pattern (Identifier, ArrayPattern, ObjectPattern, etc.) contains a binding with the given name. */
-export function patternContainsName(
-  node: { type?: string } | null | undefined,
-  name: string,
-): boolean {
+function patternContainsName(node: { type?: string } | null | undefined, name: string): boolean {
   if (!node || typeof node !== "object") {
     return false;
   }

@@ -18,7 +18,7 @@ import { staticStringValue } from "./style-object-normalization.js";
 import { splitCssValueWhitespace } from "../css-value-split.js";
 import { cloneAstNode, isAstNode } from "../utilities/jscodeshift-utils.js";
 
-export type HarmonizeShorthandOptions = {
+type HarmonizeShorthandOptions = {
   baseStyleObj?: Record<string, unknown>;
   inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
   /** Base style entries captured before shorthand/longhand resolution mutated them. */

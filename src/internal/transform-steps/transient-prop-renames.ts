@@ -445,7 +445,7 @@ export function renameTransientPropsInReferencedTypes(
   }
 }
 
-export type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
+type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
 
 /**
  * Walks TSPropertySignature members in a type AST node (TSTypeLiteral,

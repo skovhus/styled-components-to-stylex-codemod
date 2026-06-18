@@ -9,7 +9,7 @@ import { getArrowFnSingleParamName } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { renameIdentifierInAst } from "./ast-style-utils.js";
 
-export type StyleFnParamBuilderJ = {
+type StyleFnParamBuilderJ = {
   identifier: JSCodeshift["identifier"];
   tsBooleanKeyword: JSCodeshift["tsBooleanKeyword"];
   tsNumberKeyword: JSCodeshift["tsNumberKeyword"];
@@ -150,7 +150,7 @@ export function narrowGuardedStyleFnParamTypes(
   }
 }
 
-export function buildStyleFnParam(
+function buildStyleFnParam(
   j: StyleFnParamBuilderJ,
   decl: StyledDecl,
   propName: string,

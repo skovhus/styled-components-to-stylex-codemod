@@ -124,7 +124,7 @@ export function writeResolvedDeclaration(
  * When `callResolver` is provided, imported function calls like `colorCSS("labelMuted")`
  * are resolved via the adapter's `resolveCall` before falling back to theme resolution.
  */
-export function resolveAllSlots(
+function resolveAllSlots(
   d: {
     value: { kind: string; parts?: Array<{ kind: string; slotId?: number }> };
     property?: string;
@@ -190,7 +190,7 @@ export function resolveAllSlots(
  * For a purely interpolated value like `${color}`, returns the resolved
  * expression directly.
  */
-export function buildInterpolatedValue(
+function buildInterpolatedValue(
   j: DeclProcessingState["state"]["j"],
   d: {
     value: {

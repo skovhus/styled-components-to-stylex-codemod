@@ -241,7 +241,7 @@ export function keyofExprForType(
  * Returns null for named type references, complex types, or when keys
  * cannot be statically extracted.
  */
-export function extractDirectPropertyKeys(propsType: ASTNode): string[] | null {
+function extractDirectPropertyKeys(propsType: ASTNode): string[] | null {
   if (propsType.type !== "TSTypeLiteral") {
     return null;
   }

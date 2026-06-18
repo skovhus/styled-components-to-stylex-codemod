@@ -77,7 +77,7 @@ import type {
   ResolveImportedValueExpr,
 } from "./interpolated-declaration-context.js";
 
-export type ObservedVariantHandlersContext = Pick<
+type ObservedVariantHandlersContext = Pick<
   InterpolatedDeclarationContext,
   | "ctx"
   | "rule"

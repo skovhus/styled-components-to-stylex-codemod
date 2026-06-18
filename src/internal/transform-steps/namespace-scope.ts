@@ -60,7 +60,7 @@ export function nearestNamespacePath(path: { parentPath?: unknown }): string | n
   return namespacePath.length > 0 ? namespacePath.join(".") : null;
 }
 
-export function namespacePathForPath(path: { parentPath?: unknown }): string[] {
+function namespacePathForPath(path: { parentPath?: unknown }): string[] {
   const names: string[] = [];
   let current = path.parentPath as { node?: { type?: string; id?: unknown }; parentPath?: unknown };
   while (current) {
