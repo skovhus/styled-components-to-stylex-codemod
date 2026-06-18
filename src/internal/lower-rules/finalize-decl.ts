@@ -60,7 +60,6 @@ import {
   collectRawCssVarStyleObjectProps,
   collectStyleOverrideProps,
   dropCssVariableDefinitionsFromBucket,
-  extractSingleRawCssVarStyleFnProperty,
   findLocalCustomPropertyFallbackFromRules,
   moveCustomPropertyOnlyBaseToInlineStyles,
   moveUnsafeRawCssVarPropsToInlineStyles,
@@ -74,9 +73,6 @@ import {
   mergeBaseIntoSingleStyleFn,
   mergeVariantBucketsIntoStyleFns,
 } from "./style-fn-merging.js";
-import { replaceIdentifierInAst } from "./ast-style-utils.js";
-
-export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {

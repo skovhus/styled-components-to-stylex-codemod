@@ -59,7 +59,6 @@ import {
   collectReservedStyleKeys,
   ensureUniqueKey,
   mergePromotedStaticStyleObject,
-  NON_PROMOTABLE_STYLE_PROPS,
 } from "./promotable-style-props.js";
 import {
   applyTypeScriptMetadata,
@@ -95,8 +94,6 @@ import {
   validateSxRestrictedWrappedComponentStyles,
   validateWrappedComponentStyleChannels,
 } from "./sx-style-validation.js";
-
-export { NON_PROMOTABLE_STYLE_PROPS };
 
 const INLINE_USAGE_THRESHOLD = 1;
 const ELEMENT_TYPE_PROP_NAMES = new Set(["innerElementType", "outerElementType"]);

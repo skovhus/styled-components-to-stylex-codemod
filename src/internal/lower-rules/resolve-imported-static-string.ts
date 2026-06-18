@@ -14,7 +14,11 @@
 import { readFileSync } from "node:fs";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { createModuleResolver, type ModuleResolver } from "../prepass/resolve-imports.js";
-import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import {
+  identifierName,
+  isIdentifierNode,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
 
 export function resolveExpressionToStaticString(
@@ -880,10 +884,6 @@ function findImportTargetForBinding(
     }
     return null;
   });
-}
-
-function identifierName(node: { type?: string; name?: string } | undefined): string | undefined {
-  return node?.type === "Identifier" && node.name ? node.name : undefined;
 }
 
 /**

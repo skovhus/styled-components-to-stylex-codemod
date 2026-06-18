@@ -59,10 +59,6 @@ export function buildFullInterpolatedDeclarationValueExpr(
   return j.templateLiteral(quasis, expressions);
 }
 
-export function isCssCalcOperator(operator: string | undefined): boolean {
-  return operator === "+" || operator === "-" || operator === "*" || operator === "/";
-}
-
 export function buildCssCalcTemplateExpression(args: {
   j: JSCodeshift;
   operator: string;

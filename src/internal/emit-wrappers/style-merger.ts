@@ -7,6 +7,7 @@ import type { StyleMergerConfig } from "../../adapter.js";
 import type { InlineStyleProp } from "./types.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
+import { isUndefinedIdentifier } from "../utilities/jscodeshift-utils.js";
 
 /**
  * Result of emitting style merging logic.
@@ -910,10 +911,6 @@ function isExpressionField(node: unknown, field: string): boolean {
     typeof node === "object" &&
     isPlainArrayElement((node as Record<string, unknown>)[field])
   );
-}
-
-function isUndefinedIdentifier(node: unknown): node is { type: "Identifier"; name: "undefined" } {
-  return getNodeType(node) === "Identifier" && (node as { name?: unknown }).name === "undefined";
 }
 
 function getNodeType(node: unknown): string | undefined {

@@ -5,7 +5,10 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { JSCodeshift } from "jscodeshift";
-import { getArrowFnSingleParamName } from "../utilities/jscodeshift-utils.js";
+import {
+  getArrowFnSingleParamName,
+  isUndefinedIdentifier,
+} from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { renameIdentifierInAst } from "./ast-style-utils.js";
 
@@ -345,15 +348,6 @@ function isNullLiteral(node: ExpressionKind): boolean {
     ((node as { type?: string }).type === "NullLiteral" ||
       ((node as { type?: string; value?: unknown }).type === "Literal" &&
         (node as { value?: unknown }).value === null))
-  );
-}
-
-function isUndefinedIdentifier(node: ExpressionKind): boolean {
-  return (
-    !!node &&
-    typeof node === "object" &&
-    (node as { type?: string }).type === "Identifier" &&
-    (node as { name?: string }).name === "undefined"
   );
 }
 

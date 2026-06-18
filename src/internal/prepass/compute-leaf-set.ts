@@ -9,6 +9,7 @@ import {
   resolveBarrelReExportBinding,
   type Resolve,
 } from "./extract-external-interface.js";
+import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import type { ResolveBaseComponentContext, ResolveBaseComponentResult } from "../../adapter.js";
 import type { AstNode } from "./prepass-parser.js";
 
@@ -414,11 +415,4 @@ function leafKeyExists(
   }
   const defaultLocalName = findDefaultExportedLocalName(cachedRead(defFile));
   return defaultLocalName ? (globalLeaves.get(defFile)?.has(defaultLocalName) ?? false) : false;
-}
-
-function findDefaultExportedLocalName(source: string): string | undefined {
-  return (
-    source.match(/\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/)?.[1] ??
-    source.match(/\bexport\s*\{[^}]*\b([A-Z][A-Za-z0-9]*)\s+as\s+default\b[^}]*\}/)?.[1]
-  );
 }

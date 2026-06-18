@@ -202,23 +202,6 @@ export function buildObservedExpressionFallbackValueExpr(args: {
     : rewritten;
 }
 
-export function isNumberLikeTsType(tsType: unknown): boolean {
-  if (!tsType || typeof tsType !== "object") {
-    return false;
-  }
-  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
-  if (type.type === "TSNumberKeyword") {
-    return true;
-  }
-  if (type.type === "TSLiteralType") {
-    return typeof type.literal?.value === "number";
-  }
-  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
-    return type.types.length > 0 && type.types.every(isNumberLikeTsType);
-  }
-  return false;
-}
-
 const UNITLESS_NUMERIC_STYLEX_PROPS = new Set([
   "animationIterationCount",
   "aspectRatio",

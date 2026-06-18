@@ -24,7 +24,11 @@ import {
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import {
+  collectIdentifiers,
+  identifierName,
+  isIdentifierNamed,
+} from "../utilities/jscodeshift-utils.js";
 import { isMemberExpression } from "../lower-rules/utils.js";
 import { getPositiveWhen, parseVariantWhenToAst } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -1611,14 +1615,6 @@ function extractPropEqUndefined(expr: ExpressionKind): string | null {
   }
 
   return null;
-}
-
-function isIdentifierNamed(expr: ExpressionKind, name: string): boolean {
-  return expr.type === "Identifier" && expr.name === name;
-}
-
-function identifierName(expr: ExpressionKind): string | null {
-  return expr.type === "Identifier" ? expr.name : null;
 }
 
 function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string>): void {

@@ -5,6 +5,7 @@
  */
 import type { ASTNode } from "jscodeshift";
 import jscodeshift from "jscodeshift";
+import { isReactComponentPropsUtilityName } from "../utilities/jscodeshift-utils.js";
 
 export type TypeReferenceName =
   | { kind: "identifier"; name: string }
@@ -191,14 +192,6 @@ function isUtilityTypeReference(typeName: TypeReferenceName | null): boolean {
   }
   return ["PropsWithChildren", "Partial", "Required", "Readonly", "Omit", "Pick"].includes(
     typeName.name,
-  );
-}
-
-function isReactComponentPropsUtilityName(name: string): boolean {
-  return (
-    name === "ComponentProps" ||
-    name === "ComponentPropsWithRef" ||
-    name === "ComponentPropsWithoutRef"
   );
 }
 

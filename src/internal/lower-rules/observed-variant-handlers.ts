@@ -21,6 +21,7 @@ import {
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getNodeLocStart,
+  isNumericTsType,
 } from "../utilities/jscodeshift-utils.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
@@ -68,7 +69,6 @@ import {
   emitStaticObservedValue,
   getNumericCssEmissionMode,
   getSingleSlotStaticParts,
-  isNumberLikeTsType,
   staticVariantStyleObject,
 } from "./numeric-css-props.js";
 import { extractGuardedDynamicBranch } from "./interpolated-decl-helpers.js";
@@ -684,8 +684,7 @@ export function createObservedVariantHandlers(c: ObservedVariantHandlersContext)
 
   const shouldPreserveNumericCssTextForProp = (jsxProp: string, stylexProp: string): boolean => {
     return (
-      (observedNumericCssTextProps.has(jsxProp) ||
-        isNumberLikeTsType(findJsxPropTsType(jsxProp))) &&
+      (observedNumericCssTextProps.has(jsxProp) || isNumericTsType(findJsxPropTsType(jsxProp))) &&
       getNumericCssEmissionMode(stylexProp) === "cssText"
     );
   };

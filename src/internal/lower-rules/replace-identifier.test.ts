@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
-import { replaceIdentifierInAst } from "./finalize-decl.js";
+import { replaceIdentifierInAst } from "./ast-style-utils.js";
 
 const j = jscodeshift.withParser("tsx");
 

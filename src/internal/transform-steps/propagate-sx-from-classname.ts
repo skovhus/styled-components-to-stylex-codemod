@@ -5,6 +5,7 @@
 import type { ASTNode, ASTPath, JSCodeshift } from "jscodeshift";
 import { CONTINUE, type StepResult, type StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
+import { isReactComponentPropsUtilityName } from "../utilities/jscodeshift-utils.js";
 
 /**
  * Adds an `sx` prop to typed wrapper components that pass their `className`
@@ -489,14 +490,6 @@ function isComponentPropsTypeName(typeReference: any): boolean {
     typeName.left.name === "React" &&
     typeName.right?.type === "Identifier" &&
     isReactComponentPropsUtilityName(typeName.right.name)
-  );
-}
-
-function isReactComponentPropsUtilityName(name: string): boolean {
-  return (
-    name === "ComponentProps" ||
-    name === "ComponentPropsWithRef" ||
-    name === "ComponentPropsWithoutRef"
   );
 }
 

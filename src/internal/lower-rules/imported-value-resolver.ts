@@ -14,11 +14,11 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { literalToStaticValue } from "./types.js";
+import { isCssCalcOperator } from "../builtin-handlers/conditional-css-calc.js";
 import {
   buildCssCalcTemplateExpression,
   buildNegatedCssTokenTemplate,
   hasAdjacentTemplateUnit,
-  isCssCalcOperator,
 } from "./interpolated-calc.js";
 import {
   getSingleSlotStaticParts,

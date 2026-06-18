@@ -16,6 +16,10 @@ import {
   getArrowFnParamBindings,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  isFunctionNode,
+  isIdentifierNamed,
+  isNumericTsType,
+  patternBindsAnyName,
   resolveIdentifierToPropName,
 } from "../utilities/jscodeshift-utils.js";
 import type { DeclProcessingState } from "./decl-setup.js";
@@ -130,7 +134,10 @@ export function numericIdentifierSetForJsxProp(
   jsxProp: string,
   findJsxPropTsType: (propName: string) => unknown,
 ): ReadonlySet<string> {
-  if (jsxProp === "__props" || !isNumericOrOptionalTsType(findJsxPropTsType(jsxProp))) {
+  if (
+    jsxProp === "__props" ||
+    !isNumericTsType(findJsxPropTsType(jsxProp), { allowOptional: true })
+  ) {
     return new Set();
   }
   const names = new Set([jsxProp]);
@@ -138,30 +145,6 @@ export function numericIdentifierSetForJsxProp(
     names.add(jsxProp.slice(1));
   }
   return names;
-}
-
-function isNumericOrOptionalTsType(tsType: unknown): boolean {
-  if (!tsType || typeof tsType !== "object") {
-    return false;
-  }
-  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
-  if (type.type === "TSNumberKeyword") {
-    return true;
-  }
-  if (type.type === "TSLiteralType") {
-    return typeof type.literal?.value === "number";
-  }
-  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
-    return type.types.every((member) => {
-      const memberType = (member as { type?: string } | null)?.type;
-      return (
-        memberType === "TSUndefinedKeyword" ||
-        memberType === "TSNullKeyword" ||
-        isNumericOrOptionalTsType(member)
-      );
-    });
-  }
-  return false;
 }
 
 /**
@@ -693,7 +676,7 @@ function expressionContainsFunctionBindingName(node: unknown, names: ReadonlySet
   }
 
   const record = node as Record<string, unknown>;
-  if (isFunctionLikeNode(record)) {
+  if (isFunctionNode(record)) {
     const params = record.params;
     if (Array.isArray(params) && params.some((param) => patternBindsAnyName(param, names))) {
       return true;
@@ -707,48 +690,6 @@ function expressionContainsFunctionBindingName(node: unknown, names: ReadonlySet
     if (expressionContainsFunctionBindingName(record[key], names)) {
       return true;
     }
-  }
-  return false;
-}
-
-function isFunctionLikeNode(node: Record<string, unknown>): boolean {
-  return (
-    node.type === "ArrowFunctionExpression" ||
-    node.type === "FunctionExpression" ||
-    node.type === "FunctionDeclaration" ||
-    node.type === "ObjectMethod" ||
-    node.type === "ClassMethod"
-  );
-}
-
-function patternBindsAnyName(node: unknown, names: ReadonlySet<string>): boolean {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const record = node as Record<string, unknown>;
-  if (record.type === "Identifier") {
-    return typeof record.name === "string" && names.has(record.name);
-  }
-  if (record.type === "RestElement") {
-    return patternBindsAnyName(record.argument, names);
-  }
-  if (record.type === "AssignmentPattern") {
-    return patternBindsAnyName(record.left, names);
-  }
-  if (record.type === "ObjectPattern") {
-    return (
-      Array.isArray(record.properties) &&
-      record.properties.some((prop) => patternBindsAnyName(prop, names))
-    );
-  }
-  if (record.type === "ObjectProperty" || record.type === "Property") {
-    return patternBindsAnyName(record.value, names);
-  }
-  if (record.type === "ArrayPattern") {
-    return (
-      Array.isArray(record.elements) &&
-      record.elements.some((element) => patternBindsAnyName(element, names))
-    );
   }
   return false;
 }
@@ -1101,10 +1042,6 @@ function getStyledHelperCall(callExpr: CallExpressionLike): StyledHelperCall | n
     innerCall: callExpr,
     dynamicArg: args[0] as ExpressionKind,
   };
-}
-
-function isIdentifierNamed(node: ExpressionKind, name: string): boolean {
-  return node?.type === "Identifier" && node.name === name;
 }
 
 type NullishLogicalExpression = ExpressionKind & {

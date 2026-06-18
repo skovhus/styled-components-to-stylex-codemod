@@ -23,6 +23,7 @@ import {
   localNamesForExport,
 } from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
+import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 
@@ -286,13 +287,6 @@ function globalLeafKeyExists(
     }
   }
   return false;
-}
-
-function findDefaultExportedLocalName(source: string): string | undefined {
-  return (
-    source.match(/\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/)?.[1] ??
-    source.match(/\bexport\s*\{[^}]*\b([A-Z][A-Za-z0-9]*)\s+as\s+default\b[^}]*\}/)?.[1]
-  );
 }
 
 function findDefaultReExportSpecifier(source: string): string | undefined {

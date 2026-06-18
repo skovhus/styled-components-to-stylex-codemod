@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import { SHORTHAND_LONGHANDS, STYLEX_LONGHAND_ONLY_SHORTHANDS } from "./stylex-shorthands.js";
 import { UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR } from "./builtin-handlers/css-parsing.js";
-import { NON_PROMOTABLE_STYLE_PROPS } from "./transform-steps/analyze-before-emit.js";
+import { NON_PROMOTABLE_STYLE_PROPS } from "./transform-steps/promotable-style-props.js";
 import { camelToKebabCase } from "./utilities/string-utils.js";
 
 // --- Helpers to parse StyleX property-priorities source ---

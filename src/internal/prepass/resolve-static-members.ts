@@ -7,6 +7,7 @@
  * (cached per source) with the shared prepass parser and answer member lookups against real nodes.
  */
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
+import { identifierName } from "../utilities/jscodeshift-utils.js";
 import { walkAst } from "../utilities/ast-walk.js";
 
 /**
@@ -240,10 +241,6 @@ function addMemberTarget(
     byMember.set(property, targets);
   }
   targets.add(target);
-}
-
-function identifierName(node: AstNode | undefined): string | null {
-  return node?.type === "Identifier" && typeof node.name === "string" ? node.name : null;
 }
 
 function capitalizedIdentifierName(node: AstNode | undefined): string | null {

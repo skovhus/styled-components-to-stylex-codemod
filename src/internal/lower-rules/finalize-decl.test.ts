@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import jscodeshift from "jscodeshift";
-import { extractSingleRawCssVarStyleFnProperty } from "./finalize-decl.js";
+import { extractSingleRawCssVarStyleFnProperty } from "./raw-css-var-inlining.js";
 
 const j = jscodeshift.withParser("tsx");
 
