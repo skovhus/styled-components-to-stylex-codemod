@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,o as n}from"./index-CAVTIZGV.js";import{t as r}from"./helpers.stylex-DSNxaO5f.js";t();var i=e();function a(e){return(0,i.jsx)(`span`,{...e,...n([r.gradient,s.gradientText])})}var o=()=>(0,i.jsx)(a,{children:`Gradient text`}),s={gradientText:{k63SB2:`x1s688f`,$$css:!0}};export{o as App,a as GradientText};
