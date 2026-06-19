@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-CWv6t7He.js";t();var n=e();function r({className:e,style:t,size:r=`regular`,user:i}){return(0,n.jsx)(`div`,{className:e,style:t,children:(0,n.jsxs)(`span`,{children:[i,` (`,r,`)`]})})}export{r as t};
