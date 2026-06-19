@@ -640,11 +640,20 @@ function isCssTag(tag: AstNode | undefined, cssImportNames?: ReadonlySet<string>
 
 /* ── Debug logging ────────────────────────────────────────────────────── */
 
-function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
+/**
+ * Build the shared `DEBUG_CODEMOD` report lines for cross-file prepass info.
+ * `header` distinguishes the standalone scan from the unified prepass; callers
+ * may append their own sections before writing.
+ */
+export function buildCrossFileDebugLines(
+  header: string,
+  scannedFiles: string[],
+  info: CrossFileInfo,
+): string[] {
   const cwd = process.cwd();
   const rel = (p: string): string => relative(cwd, p);
 
-  const lines: string[] = ["[DEBUG_CODEMOD] Cross-file selector prepass:"];
+  const lines: string[] = [header];
   lines.push(`  Scanned ${scannedFiles.length} file(s)`);
 
   if (info.selectorUsages.size === 0) {
@@ -674,6 +683,15 @@ function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
     }
   }
 
+  return lines;
+}
+
+function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
+  const lines = buildCrossFileDebugLines(
+    "[DEBUG_CODEMOD] Cross-file selector prepass:",
+    scannedFiles,
+    info,
+  );
   process.stderr.write(lines.join("\n") + "\n");
 }
 

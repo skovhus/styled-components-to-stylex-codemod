@@ -3,11 +3,10 @@
  * Core concepts: Stylis parsing and keyframes extraction.
  */
 import type { ASTNode, ASTPath, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
-import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
-import { classifyAnimationTokens } from "./lower-rules/animation.js";
+import { classifyAnimationTokens, parseAnimationSegments } from "./lower-rules/animation.js";
 import { cloneAstNode, literalToStaticValue } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
@@ -1152,34 +1151,6 @@ export function expandStaticAnimationShorthand(
   assignAnimationLonghand(styleObj, "animationIterationCount", iterations, "1");
 
   return true;
-}
-
-function parseAnimationSegments(value: string): string[][] {
-  const parsed = valueParser(value.trim());
-  const segments: valueParser.Node[][] = [];
-  let current: valueParser.Node[] = [];
-  for (const node of parsed.nodes) {
-    if (node.type === "div" && node.value === ",") {
-      if (current.length > 0) {
-        segments.push(current);
-      }
-      current = [];
-      continue;
-    }
-    current.push(node);
-  }
-  if (current.length > 0) {
-    segments.push(current);
-  }
-  return segments
-    .map((nodes) =>
-      nodes
-        .filter((node) => node.type !== "space")
-        .map((node) => valueParser.stringify(node))
-        .map((token) => token.trim())
-        .filter(Boolean),
-    )
-    .filter((tokens) => tokens.length > 0);
 }
 
 function buildAnimationNameTemplate(j: JSCodeshift, names: string[]): ExpressionKind {

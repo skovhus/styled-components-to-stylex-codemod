@@ -762,6 +762,40 @@ export function collectPatternBindingNames(node: unknown, names: Set<string>): v
   }
 }
 
+/**
+ * Locate the `VariableDeclaration` statement owning `declaratorPath` within the
+ * Program body, returning the body array and the statement's index. Falls back
+ * to a source-location match when the node identity lookup misses (e.g. after
+ * the AST was cloned). Returns `null` when the declarator is not a top-level
+ * variable declaration; `index` is `-1` when the statement cannot be located.
+ */
+export function locateDeclarationInProgram(
+  root: any,
+  declaratorPath: any,
+): { programBody: any[]; index: number } | null {
+  const varDeclPath = declaratorPath?.parentPath;
+  if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+    return null;
+  }
+  const programBody = (root.get().node.program as any)?.body;
+  if (!Array.isArray(programBody)) {
+    return null;
+  }
+  const direct = programBody.indexOf(varDeclPath.node);
+  if (direct >= 0) {
+    return { programBody, index: direct };
+  }
+  const loc = (varDeclPath.node as any)?.loc?.start;
+  if (!loc) {
+    return { programBody, index: -1 };
+  }
+  const index = programBody.findIndex((s: any) => {
+    const sloc = s?.loc?.start;
+    return sloc && sloc.line === loc.line && sloc.column === loc.column;
+  });
+  return { programBody, index };
+}
+
 export type StaticLiteralValue = string | number | boolean | null;
 
 type LiteralToStaticValueOptions = {

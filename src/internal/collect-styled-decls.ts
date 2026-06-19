@@ -14,6 +14,7 @@ import {
   extractStaticLiteralValue,
   getFunctionBodyExpr,
   getNodeLocStart,
+  locateDeclarationInProgram,
 } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
@@ -659,28 +660,11 @@ function collectStyledDeclsImpl(args: {
   const getPlacementHints = (
     declaratorPath: any,
   ): { declIndex?: number; insertAfterName?: string } => {
-    const varDeclPath = declaratorPath?.parentPath;
-    if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+    const located = locateDeclarationInProgram(root, declaratorPath);
+    if (!located) {
       return {};
     }
-    const programBody = (root.get().node.program as any)?.body;
-    if (!Array.isArray(programBody)) {
-      return {};
-    }
-    const idx = (() => {
-      const direct = programBody.indexOf(varDeclPath.node);
-      if (direct >= 0) {
-        return direct;
-      }
-      const loc = (varDeclPath.node as any)?.loc?.start;
-      if (!loc) {
-        return -1;
-      }
-      return programBody.findIndex((s: any) => {
-        const sloc = s?.loc?.start;
-        return sloc && sloc.line === loc.line && sloc.column === loc.column;
-      });
-    })();
+    const { programBody, index: idx } = located;
     if (idx < 0) {
       return {};
     }

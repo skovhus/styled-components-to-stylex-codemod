@@ -6,7 +6,7 @@ import type { Collection, Expression, JSCodeshift, TemplateLiteral } from "jscod
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import { getNodeLocStart, locateDeclarationInProgram } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
@@ -238,28 +238,11 @@ function getCssHelperPlacementHints(
   root: any,
   declaratorPath: any,
 ): { declIndex?: number; insertAfterName?: string } {
-  const varDeclPath = declaratorPath?.parentPath;
-  if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+  const located = locateDeclarationInProgram(root, declaratorPath);
+  if (!located) {
     return {};
   }
-  const programBody = (root.get().node.program as any)?.body;
-  if (!Array.isArray(programBody)) {
-    return {};
-  }
-  const idx = (() => {
-    const direct = programBody.indexOf(varDeclPath.node);
-    if (direct >= 0) {
-      return direct;
-    }
-    const loc = (varDeclPath.node as any)?.loc?.start;
-    if (!loc) {
-      return -1;
-    }
-    return programBody.findIndex((s: any) => {
-      const sloc = s?.loc?.start;
-      return sloc && sloc.line === loc.line && sloc.column === loc.column;
-    });
-  })();
+  const { programBody, index: idx } = located;
   let insertAfterName: string | undefined = undefined;
   if (idx > 0) {
     for (let i = idx - 1; i >= 0; i--) {
