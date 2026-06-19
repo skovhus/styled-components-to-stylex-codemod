@@ -23,6 +23,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
 import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
 import { shouldSkipPartialImportedComponentRoot } from "../utilities/partial-migration.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
@@ -651,19 +652,7 @@ function skippedDeclReferencesHelper(
   decl: { templateExpressions?: unknown[] },
   helperLocalNames: Set<string>,
 ): boolean {
-  if (helperLocalNames.size === 0) {
-    return false;
-  }
-  const identifiers = new Set<string>();
-  for (const expr of decl.templateExpressions ?? []) {
-    collectIdentifiers(expr, identifiers);
-  }
-  for (const name of identifiers) {
-    if (helperLocalNames.has(name)) {
-      return true;
-    }
-  }
-  return false;
+  return expressionsReferenceAnyPath(decl.templateExpressions, helperLocalNames);
 }
 
 function collectRemovableCssHelperFunctions(

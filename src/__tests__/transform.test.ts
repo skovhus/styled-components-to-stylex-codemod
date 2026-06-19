@@ -1459,6 +1459,49 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
+  it("propagates universal-selector skips from object-member helpers through composed css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    & * {
+      margin: 0;
+    }
+  \`,
+};
+
+const typographyStyles = css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorObjectComposedHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toMatch(/const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
     // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
     // must survive the re-emit. Emitting only the alias would produce

@@ -6,7 +6,7 @@ import type { Collection, Expression, JSCodeshift, TemplateLiteral } from "jscod
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { collectIdentifiers, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
@@ -15,7 +15,7 @@ import {
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 import { isMemberExpression } from "../lower-rules/utils.js";
-import { collectMemberExpressionPaths } from "../utilities/member-expression-paths.js";
+import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
 
 type Loc = { line: number; column: number } | null;
 
@@ -291,9 +291,7 @@ function preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls: Styled
       if (!decl.isCssHelper || universalCssHelperNames.has(decl.localName)) {
         continue;
       }
-      if (
-        !templateExpressionsReferenceAnyHelper(decl.templateExpressions, universalCssHelperNames)
-      ) {
+      if (!expressionsReferenceAnyPath(decl.templateExpressions, universalCssHelperNames)) {
         continue;
       }
       universalCssHelperNames.add(decl.localName);
@@ -303,29 +301,6 @@ function preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls: Styled
       changed = true;
     }
   }
-}
-
-function templateExpressionsReferenceAnyHelper(
-  expressions: unknown[],
-  helperNames: Set<string>,
-): boolean {
-  for (const expression of expressions) {
-    const identifiers = new Set<string>();
-    collectIdentifiers(expression, identifiers);
-    for (const name of identifiers) {
-      if (helperNames.has(name)) {
-        return true;
-      }
-    }
-    const memberPaths = new Set<string>();
-    collectMemberExpressionPaths(expression, memberPaths);
-    for (const path of memberPaths) {
-      if (helperNames.has(path)) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 function removeCssHelperDeclarator(j: JSCodeshift, path: any): void {
@@ -401,8 +376,8 @@ function isNodeInsideStyledTemplate(
 }
 
 /**
- * Check if all usages of specific object member CSS helpers are inside styled templates.
- * Returns true if all usages are safe, false if any usage is outside styled templates.
+ * Check if all usages of specific object member CSS helpers are inside styled or css templates.
+ * Returns true if all usages are safe, false if any usage is outside transformable templates.
  */
 function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
   root: any;
@@ -410,8 +385,9 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
   objectName: string;
   propNames: Set<string>;
   styledLocalNames: Set<string>;
+  cssLocal?: string;
 }): boolean {
-  const { root, j, objectName, propNames, styledLocalNames } = args;
+  const { root, j, objectName, propNames, styledLocalNames, cssLocal } = args;
 
   // Find all MemberExpression nodes where object is the objectName
   const memberExpressions = root.find(j.MemberExpression, {
@@ -438,8 +414,8 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
     ) {
       return;
     }
-    // Check if this usage is inside a styled template
-    if (!isNodeInsideStyledTemplate(p, styledLocalNames)) {
+    // Check if this usage is inside a styled/css template
+    if (!isNodeInsideStyledTemplate(p, styledLocalNames, cssLocal)) {
       allSafe = false;
     }
   });
@@ -1181,17 +1157,6 @@ export function extractAndRemoveCssHelpers(args: {
       changed = true;
     });
 
-  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
-    preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
-    for (const removal of pendingCssHelperRemovals) {
-      const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
-      if (helperDecl?.preserveCssHelperDeclaration) {
-        continue;
-      }
-      removeCssHelperDeclarator(j, removal.path);
-    }
-  }
-
   if (unsupportedCssUsages.length > 0) {
     return {
       unsupportedCssUsages,
@@ -1385,6 +1350,7 @@ export function extractAndRemoveCssHelpers(args: {
           objectName,
           propNames: cssHelperPropNames,
           styledLocalNames,
+          cssLocal,
         });
 
         if (!allUsagesSafe) {
@@ -1444,6 +1410,17 @@ export function extractAndRemoveCssHelpers(args: {
         changed = true;
       }
     });
+
+  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
+    preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
+    for (const removal of pendingCssHelperRemovals) {
+      const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
+      if (helperDecl?.preserveCssHelperDeclaration) {
+        continue;
+      }
+      removeCssHelperDeclarator(j, removal.path);
+    }
+  }
 
   const standaloneNameSeeds = new Set<string>(cssHelperNames);
   const getPreferredStandaloneName = (path: any): string | null => {
