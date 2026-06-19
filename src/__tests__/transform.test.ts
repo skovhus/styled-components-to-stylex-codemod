@@ -1608,6 +1608,89 @@ export const App = () => <Icon />;
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
   });
 
+  it("preserves standalone css templates composed from universal helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const reset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const rules = [
+  css\`
+    \${reset}
+    color: red;
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorComposedStandaloneCssTemplate.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+rules\s*=\s*\[/);
+    expect(result.code).toMatch(/\$\{reset\}/);
+    expect(result.code).not.toMatch(/standaloneCssHelper/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves selector targets in universal standalone css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const rules = [
+  css\`
+    \${Child} {
+      color: tomato;
+    }
+
+    & * {
+      margin: 0;
+    }
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorStandaloneTemplateSelectorTarget.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+rules\s*=\s*\[/);
+    expect(result.code).toMatch(/\$\{Child\}/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
   it("propagates universal-selector skips through exported composed css helpers", () => {
     const source = `
 import styled, { css } from "styled-components";

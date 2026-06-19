@@ -42,6 +42,11 @@ type CssHelperTemplateReplacement = {
   styleKey: string;
 };
 
+type PendingCssHelperTemplateReplacement = {
+  node: CssHelperTemplateReplacement["node"];
+  decl: StyledDecl;
+};
+
 type PendingCssHelperRemoval = {
   path: any;
   localName: string;
@@ -1713,23 +1718,7 @@ export function extractAndRemoveCssHelpers(args: {
       }
     });
 
-  if (preserveUniversalSelectorHelpers) {
-    preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
-  }
-  applyCssHelperSourcePreservationPlan(cssHelperDecls, preservationPlan);
-  for (const removal of pendingCssHelperObjectRemovals) {
-    removeUnpreservedCssHelperObjectMembers(j, removal);
-  }
-  if (pendingCssHelperRemovals.length > 0) {
-    for (const removal of pendingCssHelperRemovals) {
-      const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
-      if (helperDecl?.preserveCssHelperDeclaration) {
-        continue;
-      }
-      removeCssHelperDeclarator(j, removal.path);
-    }
-  }
-
+  const standaloneCssHelperTemplateCandidates: PendingCssHelperTemplateReplacement[] = [];
   const standaloneNameSeeds = new Set<string>(cssHelperNames);
   const getPreferredStandaloneName = (path: any): string | null => {
     let cur: any = path;
@@ -1826,12 +1815,12 @@ export function extractAndRemoveCssHelpers(args: {
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
 
-      if (preserveUniversalSelectorHelpers && hasUniversalSelector) {
-        seenStandaloneTemplates.add(p.node);
-        return;
+      const preserveStandaloneTemplate = preserveUniversalSelectorHelpers && hasUniversalSelector;
+      if (preserveStandaloneTemplate) {
+        recordSourcePreservedCssHelperReferences(templateExpressions);
       }
 
-      cssHelperDecls.push({
+      const decl: StyledDecl = {
         localName,
         base: { kind: "intrinsic", tagName: "div" },
         styleKey,
@@ -1840,10 +1829,40 @@ export function extractAndRemoveCssHelpers(args: {
         templateExpressions,
         rawCss,
         ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
-      });
-      cssHelperTemplateReplacements.push({ node: p.node, styleKey });
+        preserveCssHelperDeclaration: preserveStandaloneTemplate,
+        suppressCssHelperStyleEmission: preserveStandaloneTemplate,
+      };
+      cssHelperDecls.push(decl);
+      standaloneCssHelperTemplateCandidates.push({ node: p.node, decl });
       seenStandaloneTemplates.add(p.node);
+      changed = true;
     });
+
+  if (preserveUniversalSelectorHelpers) {
+    preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
+  }
+  applyCssHelperSourcePreservationPlan(cssHelperDecls, preservationPlan);
+  for (const candidate of standaloneCssHelperTemplateCandidates) {
+    if (candidate.decl.suppressCssHelperStyleEmission === true) {
+      continue;
+    }
+    cssHelperTemplateReplacements.push({
+      node: candidate.node,
+      styleKey: candidate.decl.styleKey,
+    });
+  }
+  for (const removal of pendingCssHelperObjectRemovals) {
+    removeUnpreservedCssHelperObjectMembers(j, removal);
+  }
+  if (pendingCssHelperRemovals.length > 0) {
+    for (const removal of pendingCssHelperRemovals) {
+      const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
+      if (helperDecl?.preserveCssHelperDeclaration) {
+        continue;
+      }
+      removeCssHelperDeclarator(j, removal.path);
+    }
+  }
 
   // Remove `css` import specifier from styled-components imports ONLY if `css` is no longer referenced.
   // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
