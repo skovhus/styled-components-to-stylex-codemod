@@ -1,5 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,u as n}from"./index-6BrwjydO.js";t();var r=e(),i=function(e){return e.primary=`primary`,e.gradient=`gradient`,e.success=`success`,e.warning=`warning`,e.error=`error`,e}({}),a=n.div`
-  height: 40px;
-  padding: 8px 16px;
-  background: ${e=>e.$type===`success`?e.theme.color.greenBase:e.$type===`error`?e.theme.color.bgBase:e.$type===`warning`?e.theme.color.bgBaseHover:e.$type===`primary`?e.theme.color.controlPrimary:e.$type===`gradient`?`linear-gradient(to right, ${e.theme.color.bgBorderSolid}, ${e.theme.color.labelMuted})`:e.theme.color.labelBase};
-`,o=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8,padding:16},children:[(0,r.jsx)(a,{$type:`success`,children:`Success`}),(0,r.jsx)(a,{$type:`error`,children:`Error`}),(0,r.jsx)(a,{$type:`warning`,children:`Warning`}),(0,r.jsx)(a,{$type:`primary`,children:`Primary`}),(0,r.jsx)(a,{$type:`gradient`,children:`Gradient`}),(0,r.jsx)(a,{children:`Default`})]});export{o as App,i as ProgressType};
