@@ -119,18 +119,7 @@ export function resolveMediaAndEmitComputedKeys(
 
   let media = findSupportedAtRule(rule.atRuleStack);
   if (media) {
-    const resolved = resolveMediaAtRulePlaceholders(
-      media,
-      (slotId) => decl.templateExpressions[slotId],
-      {
-        lookupImport: state.resolveImportInScope,
-        resolveValue: state.resolveValue,
-        resolveSelector: state.resolveSelector,
-        parseExpr: state.parseExpr,
-        filePath: state.filePath,
-        resolverImports: state.resolverImports,
-      },
-    );
+    const resolved = resolveDeclMediaPlaceholders(state, decl, media);
     if (resolved === null) {
       state.markBail();
       warnings.push({
@@ -289,18 +278,7 @@ export function handleAdjacentSiblingSelector(
 
   let media = findSupportedAtRule(rule.atRuleStack);
   if (media) {
-    const resolved = resolveMediaAtRulePlaceholders(
-      media,
-      (slotId) => decl.templateExpressions[slotId],
-      {
-        lookupImport: state.resolveImportInScope,
-        resolveValue: state.resolveValue,
-        resolveSelector: state.resolveSelector,
-        parseExpr: state.parseExpr,
-        filePath: state.filePath,
-        resolverImports: state.resolverImports,
-      },
-    );
+    const resolved = resolveDeclMediaPlaceholders(state, decl, media);
     if (resolved === null) {
       state.markBail();
       state.warnings.push({
@@ -576,4 +554,24 @@ function jsxElementName(name: unknown): string | null {
   }
   const node = name as { type?: string; name?: string };
   return node.type === "JSXIdentifier" ? (node.name ?? null) : null;
+}
+
+/**
+ * Resolve `__SC_EXPR_N__` placeholders inside a media/at-rule query using the
+ * declaration's template expressions and the shared lowering resolvers from
+ * `state`. Centralizes the otherwise-repeated resolver options wiring.
+ */
+function resolveDeclMediaPlaceholders(
+  state: DeclProcessingState["state"],
+  decl: DeclProcessingState["decl"],
+  media: string,
+) {
+  return resolveMediaAtRulePlaceholders(media, (slotId) => decl.templateExpressions[slotId], {
+    lookupImport: state.resolveImportInScope,
+    resolveValue: state.resolveValue,
+    resolveSelector: state.resolveSelector,
+    parseExpr: state.parseExpr,
+    filePath: state.filePath,
+    resolverImports: state.resolverImports,
+  });
 }

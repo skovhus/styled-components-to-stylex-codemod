@@ -28,26 +28,10 @@ export function importedPropsTypeExposesForwardedSx(args: {
 }): boolean {
   const { emitter, typeName, wrappedComponent, seenTypeNames } = args;
   const imported = findImportedType(emitter, typeName);
-  if (!imported) {
-    return false;
-  }
-  const resolvedPath = moduleResolver.resolve(emitter.filePath, imported.source);
-  if (!resolvedPath) {
-    return false;
-  }
-  const source = readSourceWithExtensionFallback(resolvedPath);
-  if (!source) {
-    return false;
-  }
-  const parsed = parseTypeSource(source);
-  if (!parsed) {
-    return false;
-  }
-  return externalTypeReferenceExposesForwardedSx({
-    j: parsed.j,
-    root: parsed.root,
-    filePath: resolvedPath,
-    typeName: imported.importedName,
+  return importedModuleTypeExposesForwardedSx({
+    emitter,
+    imported,
+    referencedTypeName: imported?.importedName ?? "",
     wrappedComponent,
     seenTypeNames,
   });
@@ -60,7 +44,29 @@ export function importedNamespacePropsTypeExposesForwardedSx(args: {
   seenTypeNames: Set<string>;
 }): boolean {
   const { emitter, typeName, wrappedComponent, seenTypeNames } = args;
-  const imported = findNamespaceTypeImport(emitter, typeName.namespace);
+  return importedModuleTypeExposesForwardedSx({
+    emitter,
+    imported: findNamespaceTypeImport(emitter, typeName.namespace),
+    referencedTypeName: typeName.name,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+/**
+ * Resolve an imported type's defining module, parse it, and check whether the
+ * referenced type exposes a forwarded `sx`. Shared by the named-import and
+ * namespace-import props-type checks. Returns false when the import cannot be
+ * located, resolved, read, or parsed.
+ */
+function importedModuleTypeExposesForwardedSx(args: {
+  emitter: WrapperEmitter;
+  imported: { source: string } | null;
+  referencedTypeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { emitter, imported, referencedTypeName, wrappedComponent, seenTypeNames } = args;
   if (!imported) {
     return false;
   }
@@ -80,7 +86,7 @@ export function importedNamespacePropsTypeExposesForwardedSx(args: {
     j: parsed.j,
     root: parsed.root,
     filePath: resolvedPath,
-    typeName: typeName.name,
+    typeName: referencedTypeName,
     wrappedComponent,
     seenTypeNames,
   });

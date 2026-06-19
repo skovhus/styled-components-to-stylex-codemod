@@ -272,14 +272,14 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
       return entries;
     };
 
-    const wrapValueWithResolvedPseudos = (
+    // Append one `[pseudo]: value` (or conditioned `{ default, [cond]: value }`)
+    // property per pseudo entry onto `properties`, returning the object expression.
+    const buildPseudoEntryProperties = (
+      properties: Parameters<typeof j.objectExpression>[0],
       value: ExpressionKind,
       defaultExpr: ExpressionKind,
       pseudoEntries: ResolvedPseudoEntry[],
     ): ExpressionKind => {
-      const properties = [
-        j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind),
-      ];
       for (const entry of pseudoEntries) {
         let entryValue = value;
         if (entry.conditionExpr) {
@@ -302,6 +302,18 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
       return j.objectExpression(properties) as ExpressionKind;
     };
 
+    const wrapValueWithResolvedPseudos = (
+      value: ExpressionKind,
+      defaultExpr: ExpressionKind,
+      pseudoEntries: ResolvedPseudoEntry[],
+    ): ExpressionKind =>
+      buildPseudoEntryProperties(
+        [j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind)],
+        value,
+        defaultExpr,
+        pseudoEntries,
+      );
+
     const appendValueWithResolvedPseudos = (
       existing: ExpressionKind,
       value: ExpressionKind,
@@ -312,27 +324,7 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
         existing.type === "ObjectExpression"
           ? ([...existing.properties] as Parameters<typeof j.objectExpression>[0])
           : [];
-      const properties = existingProperties ?? [];
-      for (const entry of pseudoEntries) {
-        let entryValue = value;
-        if (entry.conditionExpr) {
-          const conditioned = j.objectExpression([
-            j.property(
-              "init",
-              j.identifier("default"),
-              cloneAstNode(defaultExpr) as ExpressionKind,
-            ),
-            (() => {
-              const p = j.property("init", entry.conditionExpr!, value);
-              (p as { computed?: boolean }).computed = true;
-              return p;
-            })(),
-          ]);
-          entryValue = conditioned as ExpressionKind;
-        }
-        properties.push(j.property("init", j.literal(entry.pseudo), entryValue));
-      }
-      return j.objectExpression(properties) as ExpressionKind;
+      return buildPseudoEntryProperties(existingProperties, value, defaultExpr, pseudoEntries);
     };
 
     for (const rule of rules) {
