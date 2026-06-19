@@ -1428,9 +1428,15 @@ const typographyReset = css\`
   }
 \`;
 
+const mixins = {
+  typographyColor: css\`
+    color: navy;
+  \`,
+};
+
 const typographyStyles = css\`
   \${typographyReset}
-  color: navy;
+  \${mixins.typographyColor}
 \`;
 
 const Icon = styled.div\`
@@ -1455,6 +1461,7 @@ export const App = () => (
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/const\s+typographyReset\s*=\s*css`/);
     expect(result.code).toMatch(/const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/typographyColor:\s*css`/);
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
@@ -1633,6 +1640,85 @@ export const App = () => (
     expect(result.code).toMatch(/export\s+const\s+typographyStyles\s*=\s*css`/);
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("preserves css helpers interpolated by skipped universal-selector declarations", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const baseColor = css\`
+  color: navy;
+\`;
+
+const typographyColor = css\`
+  \${baseColor}
+  font-weight: 600;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyColor}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorTemplateHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+typographyColor\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("does not treat member properties as standalone helper identifiers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const reset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const mixins = {
+  reset: css\`
+    color: navy;
+  \`,
+};
+
+const card = css\`
+  \${mixins.reset}
+  background-color: green;
+\`;
+
+const Box = styled.div\`
+  \${card}
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+    const result = runPartial(source, "partial-universalSelectorMemberPropertyName.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=/);
+    expect(result.code).not.toMatch(/const\s+Box\s*=\s*styled\.div`/);
   });
 
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
@@ -4162,6 +4248,38 @@ export const App = () => <Title>Imported root with object-member helper</Title>;
     expect(result).toMatch(/root:\s*css`/);
     // The skipped `styled(Text)` template still uses `mixins.root`.
     expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("${mixins.root}");
+  });
+
+  it("does not preserve standalone helpers from imported-root member property names", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const root = css\`
+  background-color: hotpink;
+\`;
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins.root}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with object-member helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).not.toContain("const root = css");
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
     expect(result).toContain("${mixins.root}");
   });
 

@@ -2,7 +2,6 @@
  * Utilities for collecting qualified member-expression paths.
  * Core concepts: AST traversal and object-member helper references.
  */
-import { collectIdentifiers } from "./jscodeshift-utils.js";
 
 export function expressionsReferenceAnyPath(
   expressions: readonly unknown[] | undefined,
@@ -19,7 +18,7 @@ export function expressionsReferenceAnyPath(
   return false;
 }
 
-export function collectMemberExpressionPaths(node: unknown, out: Set<string>): void {
+function collectMemberExpressionPaths(node: unknown, out: Set<string>): void {
   if (!node || typeof node !== "object") {
     return;
   }
@@ -35,7 +34,7 @@ export function collectMemberExpressionPaths(node: unknown, out: Set<string>): v
     property?: { type?: string; name?: string; value?: unknown };
     computed?: boolean;
   };
-  if (typed.type === "MemberExpression") {
+  if (typed.type === "MemberExpression" || typed.type === "OptionalMemberExpression") {
     const propertyName = memberPropertyName(typed.property, typed.computed === true);
     const objectPath = memberExpressionPath(typed.object);
     if (objectPath && propertyName) {
@@ -61,9 +60,44 @@ function nodeReferencesAnyPath(node: unknown, targetPaths: ReadonlySet<string>):
   return false;
 }
 
-function collectReferencePaths(node: unknown, out: Set<string>): void {
-  collectIdentifiers(node, out);
+export function collectReferencePaths(node: unknown, out: Set<string>): void {
+  collectBareIdentifierReferencePaths(node, out);
   collectMemberExpressionPaths(node, out);
+}
+
+function collectBareIdentifierReferencePaths(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectBareIdentifierReferencePaths(child, out);
+    }
+    return;
+  }
+  const typed = node as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: unknown;
+    computed?: boolean;
+  };
+  if (typed.type === "Identifier" && typed.name) {
+    out.add(typed.name);
+    return;
+  }
+  if (typed.type === "MemberExpression" || typed.type === "OptionalMemberExpression") {
+    if (typed.computed === true) {
+      collectBareIdentifierReferencePaths(typed.property, out);
+    }
+    return;
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    collectBareIdentifierReferencePaths((node as Record<string, unknown>)[key], out);
+  }
 }
 
 function memberExpressionPath(node: unknown): string | null {
@@ -80,7 +114,7 @@ function memberExpressionPath(node: unknown): string | null {
   if (typed.type === "Identifier" && typed.name) {
     return typed.name;
   }
-  if (typed.type !== "MemberExpression") {
+  if (typed.type !== "MemberExpression" && typed.type !== "OptionalMemberExpression") {
     return null;
   }
   const propertyName = memberPropertyName(typed.property, typed.computed === true);

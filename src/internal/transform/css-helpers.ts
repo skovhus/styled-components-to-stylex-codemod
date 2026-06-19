@@ -16,7 +16,7 @@ import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 import { isMemberExpression } from "../lower-rules/utils.js";
 import {
-  collectMemberExpressionPaths,
+  collectReferencePaths,
   expressionsReferenceAnyPath,
 } from "../utilities/member-expression-paths.js";
 
@@ -45,6 +45,18 @@ type CssHelperTemplateReplacement = {
 type PendingCssHelperRemoval = {
   path: any;
   localName: string;
+};
+
+type PendingCssHelperObjectRemoval = {
+  path: any;
+  objectExpr: { properties?: unknown[] };
+  memberMap: Map<string, StyledDecl>;
+  cssHelperPropNames: Set<string>;
+};
+
+type CssHelperSourcePreservationPlan = {
+  sourcePreservedHelperReferences: Set<string>;
+  preserveUniversalSelectorHelpers: boolean;
 };
 
 export function removeInlinedCssHelperFunctions(args: {
@@ -299,19 +311,177 @@ function preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls: Styled
       }
       universalCssHelperNames.add(decl.localName);
       decl.hasUniversalSelector = true;
-      decl.preserveCssHelperDeclaration = true;
-      decl.suppressCssHelperStyleEmission = true;
+      preserveCssHelperSourceOnly(decl);
       changed = true;
     }
   }
 }
 
-function collectTemplateMemberExpressionPaths(
-  expressions: readonly unknown[],
-  out: Set<string>,
-): void {
+function collectTemplateReferencePaths(expressions: readonly unknown[], out: Set<string>): void {
   for (const expression of expressions) {
-    collectMemberExpressionPaths(expression, out);
+    collectReferencePaths(expression, out);
+  }
+}
+
+function createCssHelperSourcePreservationPlan(args: {
+  root: any;
+  j: JSCodeshift;
+  styledLocalNames: Set<string>;
+  preserveDeclarationOnlyNames: Set<string> | undefined;
+  preserveUniversalSelectorHelpers: boolean;
+  noteUniversalSelector: (template: TemplateLiteral, rawCss: string) => void;
+}): CssHelperSourcePreservationPlan {
+  const {
+    root,
+    j,
+    styledLocalNames,
+    preserveDeclarationOnlyNames,
+    preserveUniversalSelectorHelpers,
+    noteUniversalSelector,
+  } = args;
+  const sourcePreservedHelperReferences = new Set(preserveDeclarationOnlyNames ?? []);
+  if (preserveUniversalSelectorHelpers) {
+    const universalStyledTemplateReferences = collectCssHelpersUsedByUniversalStyledTemplates({
+      root,
+      j,
+      styledLocalNames,
+      noteUniversalSelector,
+    });
+    for (const helperName of universalStyledTemplateReferences) {
+      sourcePreservedHelperReferences.add(helperName);
+    }
+  }
+  return {
+    sourcePreservedHelperReferences,
+    preserveUniversalSelectorHelpers,
+  };
+}
+
+function hasExportedCssHelperDeclarations(args: {
+  root: any;
+  j: JSCodeshift;
+  cssLocal: string;
+  exportedLocalNames: ReadonlySet<string>;
+}): boolean {
+  const { root, j, cssLocal, exportedLocalNames } = args;
+  let found = false;
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "TaggedTemplateExpression" },
+    })
+    .forEach((path: any) => {
+      if (
+        found ||
+        path.node.id.type !== "Identifier" ||
+        !exportedLocalNames.has(path.node.id.name)
+      ) {
+        return;
+      }
+      const init = path.node.init as any;
+      found = init?.tag?.type === "Identifier" && init.tag.name === cssLocal;
+    });
+  return found;
+}
+
+function collectCssHelpersUsedByUniversalStyledTemplates(args: {
+  root: any;
+  j: JSCodeshift;
+  styledLocalNames: Set<string>;
+  noteUniversalSelector: (template: TemplateLiteral, rawCss: string) => void;
+}): Set<string> {
+  const { root, j, styledLocalNames, noteUniversalSelector } = args;
+  const helperNames = new Set<string>();
+  root.find(j.TaggedTemplateExpression).forEach((path: any) => {
+    if (!isStyledTag(styledLocalNames, path.node.tag)) {
+      return;
+    }
+    const template = path.node.quasi as TemplateLiteral;
+    const parsed = parseStyledTemplateLiteral(template);
+    const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+      rawCss: parsed.rawCss,
+    });
+    if (!hasUniversalSelectorInRules(rules)) {
+      return;
+    }
+    noteUniversalSelector(template, parsed.rawCss);
+    collectTemplateReferencePaths(
+      parsed.slots.map((slot) => slot.expression),
+      helperNames,
+    );
+  });
+  return helperNames;
+}
+
+function shouldPreserveCssHelperSourceOnly(
+  plan: CssHelperSourcePreservationPlan,
+  helperPath: string,
+  hasUniversalSelector: boolean,
+): boolean {
+  return (
+    plan.sourcePreservedHelperReferences.has(helperPath) ||
+    (plan.preserveUniversalSelectorHelpers && hasUniversalSelector)
+  );
+}
+
+function preserveCssHelperSourceOnly(decl: StyledDecl): void {
+  decl.preserveCssHelperDeclaration = true;
+  decl.suppressCssHelperStyleEmission = true;
+}
+
+function cssHelperSourceMustStay(
+  decl: StyledDecl,
+  plan: CssHelperSourcePreservationPlan,
+  sourcePreservedHelperNames: ReadonlySet<string>,
+): boolean {
+  return (
+    decl.isExported === true ||
+    decl.preserveCssHelperDeclaration === true ||
+    sourcePreservedHelperNames.has(decl.localName) ||
+    (plan.preserveUniversalSelectorHelpers && decl.hasUniversalSelector === true)
+  );
+}
+
+function expandCssHelperSourcePreservationReferences(
+  cssHelperDecls: StyledDecl[],
+  plan: CssHelperSourcePreservationPlan,
+): void {
+  const sourcePreservedHelperNames = new Set(plan.sourcePreservedHelperReferences);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const decl of cssHelperDecls) {
+      if (!decl.isCssHelper) {
+        continue;
+      }
+      if (!cssHelperSourceMustStay(decl, plan, sourcePreservedHelperNames)) {
+        continue;
+      }
+      const references = new Set<string>();
+      collectTemplateReferencePaths(decl.templateExpressions, references);
+      for (const reference of references) {
+        if (!sourcePreservedHelperNames.has(reference)) {
+          sourcePreservedHelperNames.add(reference);
+          changed = true;
+        }
+      }
+    }
+  }
+  plan.sourcePreservedHelperReferences = sourcePreservedHelperNames;
+}
+
+function applyCssHelperSourcePreservationPlan(
+  cssHelperDecls: StyledDecl[],
+  plan: CssHelperSourcePreservationPlan,
+): void {
+  expandCssHelperSourcePreservationReferences(cssHelperDecls, plan);
+  for (const decl of cssHelperDecls) {
+    if (
+      decl.isCssHelper &&
+      !decl.isExported &&
+      shouldPreserveCssHelperSourceOnly(plan, decl.localName, decl.hasUniversalSelector === true)
+    ) {
+      preserveCssHelperSourceOnly(decl);
+    }
   }
 }
 
@@ -330,6 +500,33 @@ function removeCssHelperDeclarator(j: JSCodeshift, path: any): void {
   } else {
     j(path).closest(j.VariableDeclaration).remove();
   }
+}
+
+function removeUnpreservedCssHelperObjectMembers(
+  j: JSCodeshift,
+  removal: PendingCssHelperObjectRemoval,
+): void {
+  const { path, objectExpr, memberMap, cssHelperPropNames } = removal;
+  const remainingProps = (objectExpr.properties ?? []).filter((prop: any) => {
+    if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+      return true;
+    }
+    if (prop.key?.type !== "Identifier") {
+      return true;
+    }
+    const propName = prop.key.name;
+    if (!cssHelperPropNames.has(propName)) {
+      return true;
+    }
+    return memberMap.get(propName)?.preserveCssHelperDeclaration === true;
+  });
+
+  if (remainingProps.length === 0) {
+    removeCssHelperDeclarator(j, path);
+    return;
+  }
+
+  objectExpr.properties = remainingProps;
 }
 
 function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boolean {
@@ -1060,7 +1257,7 @@ export function extractAndRemoveCssHelpers(args: {
   const cssHelperTemplateReplacements: CssHelperTemplateReplacement[] = [];
   const closureVariableUsages: UnsupportedCssUsage[] = [];
   const pendingCssHelperRemovals: PendingCssHelperRemoval[] = [];
-  const preservedCssVariableHelperMemberReferences = new Set<string>();
+  const pendingCssHelperObjectRemovals: PendingCssHelperObjectRemoval[] = [];
   let cssHelperHasUniversalSelectors = false;
   let cssHelperUniversalSelectorLoc: Loc = null;
   let changed = false;
@@ -1108,6 +1305,30 @@ export function extractAndRemoveCssHelpers(args: {
     }
     cssHelperUniversalSelectorLoc = computeUniversalSelectorLoc(getNodeLocStart(template), rawCss);
   };
+  const preservationPlan = createCssHelperSourcePreservationPlan({
+    root,
+    j,
+    styledLocalNames,
+    preserveDeclarationOnlyNames,
+    preserveUniversalSelectorHelpers,
+    noteUniversalSelector: noteCssHelperUniversalSelector,
+  });
+  const shouldDeferCssHelperRemovals =
+    preserveUniversalSelectorHelpers ||
+    preservationPlan.sourcePreservedHelperReferences.size > 0 ||
+    hasExportedCssHelperDeclarations({
+      root,
+      j,
+      cssLocal,
+      exportedLocalNames,
+    });
+
+  const recordSourcePreservedCssHelperReferences = (expressions: readonly unknown[]): void => {
+    collectTemplateReferencePaths(expressions, preservationPlan.sourcePreservedHelperReferences);
+  };
+
+  const shouldPreserveSourceOnly = (helperPath: string, hasUniversalSelector: boolean): boolean =>
+    shouldPreserveCssHelperSourceOnly(preservationPlan, helperPath, hasUniversalSelector);
 
   const isStillReferenced = (): boolean =>
     root
@@ -1155,20 +1376,12 @@ export function extractAndRemoveCssHelpers(args: {
       const referencesPreservedStyledComponentSelector =
         isExported && templateReferencesStyledComponentSelector(template, preservedSelectorNames);
       if (referencesPreservedStyledComponentSelector) {
-        collectTemplateMemberExpressionPaths(
-          templateExpressions,
-          preservedCssVariableHelperMemberReferences,
-        );
+        recordSourcePreservedCssHelperReferences(templateExpressions);
         return;
       }
-      const preserveDeclarationOnly =
-        (preserveDeclarationOnlyNames?.has(localName) ?? false) ||
-        (preserveUniversalSelectorHelpers && hasUniversalSelector);
+      const preserveDeclarationOnly = shouldPreserveSourceOnly(localName, hasUniversalSelector);
       if (isExported || preserveDeclarationOnly) {
-        collectTemplateMemberExpressionPaths(
-          templateExpressions,
-          preservedCssVariableHelperMemberReferences,
-        );
+        recordSourcePreservedCssHelperReferences(templateExpressions);
       }
 
       cssHelperDecls.push({
@@ -1202,7 +1415,7 @@ export function extractAndRemoveCssHelpers(args: {
         }
       }
       if (!isExported && !usedOutsideStyledTemplates && !preserveDeclarationOnly) {
-        if (preserveUniversalSelectorHelpers) {
+        if (shouldDeferCssHelperRemovals) {
           pendingCssHelperRemovals.push({ path: p, localName });
         } else {
           removeCssHelperDeclarator(j, p);
@@ -1295,6 +1508,8 @@ export function extractAndRemoveCssHelpers(args: {
       });
     });
 
+  expandCssHelperSourcePreservationReferences(cssHelperDecls, preservationPlan);
+
   // Collect CSS helpers defined as object properties:
   //   const buttonStyles = { rootCss: css`...`, sizeCss: css`...` }
   root
@@ -1371,10 +1586,7 @@ export function extractAndRemoveCssHelpers(args: {
         const styleKey = toStyleKey(
           `${objectName}${propName.charAt(0).toUpperCase()}${propName.slice(1)}`,
         );
-        const preserveMember =
-          (preserveDeclarationOnlyNames?.has(qualifiedName) ?? false) ||
-          preservedCssVariableHelperMemberReferences.has(qualifiedName) ||
-          (preserveUniversalSelectorHelpers && hasUniversalSelector);
+        const preserveMember = shouldPreserveSourceOnly(qualifiedName, hasUniversalSelector);
 
         const decl: StyledDecl = {
           localName: qualifiedName,
@@ -1423,44 +1635,14 @@ export function extractAndRemoveCssHelpers(args: {
 
         cssHelperObjectMembers.set(objectName, memberMap);
 
-        // Remove the CSS helper properties from the object (unless exported, or
-        // unless the qualified path is in `preserveDeclarationOnlyNames` because a
-        // skipped imported-root template still interpolates `${objectName.propName}`).
         const isExported = exportedLocalNames.has(objectName);
         if (!isExported) {
-          // Filter out the CSS helper properties
-          const remainingProps = objectExpr.properties.filter((prop: any) => {
-            if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
-              return true; // Keep non-property items like spread
-            }
-            if (prop.key?.type !== "Identifier") {
-              return true; // Keep computed or non-identifier keys
-            }
-            const propName = prop.key.name;
-            if (!cssHelperPropNames.has(propName)) {
-              return true;
-            }
-            return memberMap.get(propName)?.preserveCssHelperDeclaration === true;
+          pendingCssHelperObjectRemovals.push({
+            path: p,
+            objectExpr,
+            memberMap,
+            cssHelperPropNames,
           });
-
-          if (remainingProps.length === 0) {
-            // All properties were CSS helpers - remove the entire declaration
-            const decl = p.parentPath?.node;
-            if (decl?.type === "VariableDeclaration") {
-              decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
-              if (decl.declarations.length === 0) {
-                const exportDecl = p.parentPath?.parentPath?.node;
-                if (exportDecl?.type === "ExportNamedDeclaration") {
-                  j(p).closest(j.ExportNamedDeclaration).remove();
-                } else {
-                  j(p).closest(j.VariableDeclaration).remove();
-                }
-              }
-            }
-          } else {
-            // Some properties remain - just remove the CSS helper properties
-            objectExpr.properties = remainingProps;
-          }
         }
         changed = true;
       }
@@ -1469,7 +1651,11 @@ export function extractAndRemoveCssHelpers(args: {
   if (preserveUniversalSelectorHelpers) {
     preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
   }
-  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
+  applyCssHelperSourcePreservationPlan(cssHelperDecls, preservationPlan);
+  for (const removal of pendingCssHelperObjectRemovals) {
+    removeUnpreservedCssHelperObjectMembers(j, removal);
+  }
+  if (pendingCssHelperRemovals.length > 0) {
     for (const removal of pendingCssHelperRemovals) {
       const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
       if (helperDecl?.preserveCssHelperDeclaration) {

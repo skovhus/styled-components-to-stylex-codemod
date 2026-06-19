@@ -6,9 +6,8 @@ import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { extractAndRemoveCssHelpers } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { buildUnsupportedCssWarnings, toStyleKey } from "../transform/helpers.js";
-import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import { isImportedComponentIdent } from "../utilities/partial-migration.js";
-import { collectMemberExpressionPaths } from "../utilities/member-expression-paths.js";
+import { collectReferencePaths } from "../utilities/member-expression-paths.js";
 
 /**
  * Extracts css helper blocks into style objects and validates supported usage.
@@ -108,8 +107,7 @@ function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set
       return;
     }
     for (const expression of path.node.quasi.expressions ?? []) {
-      collectIdentifiers(expression, names);
-      collectMemberExpressionPaths(expression, names);
+      collectReferencePaths(expression, names);
     }
   });
   return names;
