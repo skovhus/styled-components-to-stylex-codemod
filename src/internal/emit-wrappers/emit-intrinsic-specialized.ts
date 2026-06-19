@@ -234,24 +234,17 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const aw = d.attrWrapper!;
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-      ...buildGuardedStyleEntries(j, stylesIdentifier, [
-        {
-          key: aw.checkboxKey,
-          guard: j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
-        },
-        {
-          key: aw.radioKey,
-          guard: j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
-        },
-        { key: aw.readonlyKey, guard: j.identifier("readOnly") },
-      ]),
-    ];
+    const styleArgs = buildAttrWrapperStyleArgs(emitter, j, stylesIdentifier, d, [
+      {
+        key: aw.checkboxKey,
+        guard: j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
+      },
+      {
+        key: aw.radioKey,
+        guard: j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
+      },
+      { key: aw.readonlyKey, guard: j.identifier("readOnly") },
+    ]);
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier, undefined);
 
@@ -330,18 +323,11 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const aw = d.attrWrapper!;
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-      ...buildGuardedStyleEntries(j, stylesIdentifier, [
-        { key: aw.externalKey, guard: j.identifier("isExternal") },
-        { key: aw.httpsKey, guard: j.identifier("isHttps") },
-        { key: aw.pdfKey, guard: j.identifier("isPdf") },
-      ]),
-    ];
+    const styleArgs = buildAttrWrapperStyleArgs(emitter, j, stylesIdentifier, d, [
+      { key: aw.externalKey, guard: j.identifier("isExternal") },
+      { key: aw.httpsKey, guard: j.identifier("isHttps") },
+      { key: aw.pdfKey, guard: j.identifier("isPdf") },
+    ]);
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier, undefined);
 
@@ -639,6 +625,29 @@ function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]
  * skipping entries whose `key` is undefined. Used by the input and link attr
  * wrappers to fold their per-state pseudo-keys into the style arg list.
  */
+/**
+ * Build the `stylex.props()` args for an attr-wrapper element: the interleaved
+ * extra style args around the base style, followed by the type/state-guarded
+ * style entries unique to the wrapper (e.g. checkbox/radio for inputs,
+ * external/https for links).
+ */
+function buildAttrWrapperStyleArgs(
+  emitter: EmitIntrinsicContext["emitter"],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+  guardEntries: Array<{ key: string | undefined; guard: ExpressionKind }>,
+): ExpressionKind[] {
+  const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+    emitter.splitExtraStyleArgs(d);
+  return [
+    ...extraStyleArgs,
+    ...emitter.baseStyleExpr(d),
+    ...extraStyleArgsAfterBase,
+    ...buildGuardedStyleEntries(j, stylesIdentifier, guardEntries),
+  ];
+}
+
 function buildGuardedStyleEntries(
   j: JSCodeshift,
   stylesIdentifier: string,
