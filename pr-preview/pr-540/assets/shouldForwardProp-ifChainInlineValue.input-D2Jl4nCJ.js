@@ -1,7 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,u as n}from"./index-eLuVcEw5.js";t();var r=e(),i=n.div.withConfig({shouldForwardProp:e=>![`column`,`reverse`].includes(e)})`
-  display: flex;
-  flex-direction: ${({column:e,reverse:t})=>e?t?`column-reverse`:`column`:t?`row-reverse`:`row`};
-  gap: 8px;
-  padding: 16px;
-  background-color: #f0f0f0;
-`,a=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:16,padding:16},children:[(0,r.jsxs)(i,{children:[(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Row`}),(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Default`})]}),(0,r.jsxs)(i,{column:!0,children:[(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Column`}),(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Down`})]}),(0,r.jsxs)(i,{reverse:!0,children:[(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Row`}),(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Reverse`})]}),(0,r.jsxs)(i,{column:!0,reverse:!0,children:[(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Column`}),(0,r.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Reverse`})]})]});export{a as App};
