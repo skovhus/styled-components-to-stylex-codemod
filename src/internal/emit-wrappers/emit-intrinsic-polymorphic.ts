@@ -15,7 +15,6 @@ import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-in
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   buildAllVariantAndStyleExprs,
-  buildInitialStyleArgs,
   buildUseThemeDeclaration,
 } from "./style-expr-builders.js";
 
@@ -137,26 +136,10 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Track default values for props (for destructuring defaults)
       const propDefaults: WrapperPropDefaults = new Map();
 
-      // Build propsArg expressions first (may be needed for interleaving)
-      const propsArgExprs = d.extraStylexPropsArgs
-        ? emitter.buildExtraStylexPropsExprEntries({
-            entries: d.extraStylexPropsArgs,
-            destructureProps,
-          })
-        : [];
-
-      // Build interleaved before/after-base args using mixinOrder
-      const {
-        beforeBase: extraStyleArgs,
-        afterBase: extraStyleArgsAfterBase,
-        afterVariants: afterVariantStyleArgs,
-      } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-      const styleArgs = buildInitialStyleArgs(
-        j,
-        stylesIdentifier,
+      // Build interleaved base + after-variant style args using mixinOrder
+      const { styleArgs, afterVariantStyleArgs } = emitter.buildStyleArgsWithExtras(
         d,
-        extraStyleArgs,
-        extraStyleArgsAfterBase,
+        destructureProps,
       );
 
       const needsUseTheme = buildAllVariantAndStyleExprs({

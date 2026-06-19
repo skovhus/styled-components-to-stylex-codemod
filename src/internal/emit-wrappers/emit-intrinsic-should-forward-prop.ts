@@ -23,7 +23,6 @@ import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
-  buildInitialStyleArgs,
   buildUseThemeDeclaration,
   buildVariantStyleExprs,
   collectKnownConditionPropNames,
@@ -360,26 +359,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Track default values for props (for destructuring defaults)
     const propDefaults: WrapperPropDefaults = new Map();
 
-    // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprEntries({
-          entries: d.extraStylexPropsArgs,
-        })
-      : [];
-
-    // Build interleaved before/after-base args using mixinOrder
-    const {
-      beforeBase: extraStyleArgs,
-      afterBase: extraStyleArgsAfterBase,
-      afterVariants: afterVariantStyleArgs,
-    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-    const styleArgs = buildInitialStyleArgs(
-      j,
-      stylesIdentifier,
-      d,
-      extraStyleArgs,
-      extraStyleArgsAfterBase,
-    );
+    // Build interleaved base + after-variant style args using mixinOrder
+    const { styleArgs, afterVariantStyleArgs } = emitter.buildStyleArgsWithExtras(d);
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
     const booleanProps = collectBooleanPropNames(d);
