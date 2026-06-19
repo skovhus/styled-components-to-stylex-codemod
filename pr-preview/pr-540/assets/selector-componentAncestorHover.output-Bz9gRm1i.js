@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{className:`x1tamke2 x1nt9cj2 x18d090y x-default-marker`,children:[(0,t.jsx)(`span`,{children:`Hover card`}),(0,t.jsx)(`button`,{className:`x1krc00x xg01cxk x5b7970 x1ni14s7 x1dquxsn`,children:`Action`})]});export{n as App};
