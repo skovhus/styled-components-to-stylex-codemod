@@ -31,10 +31,7 @@ import {
   resolveMediaAtRulePlaceholders,
   tryResolveAdapterCall,
 } from "./utils.js";
-import {
-  tryExpandInterpolatedAnimation,
-  expandStaticAnimationShorthand,
-} from "../keyframes.js";
+import { tryExpandInterpolatedAnimation, expandStaticAnimationShorthand } from "../keyframes.js";
 import { styleValueToExpression } from "./css-conditional-ast-utils.js";
 import type {
   InlineMapPseudoAliases,

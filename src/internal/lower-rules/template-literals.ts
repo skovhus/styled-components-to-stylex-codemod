@@ -50,10 +50,7 @@ import {
   registerImports,
   resolveMediaAtRulePlaceholders,
 } from "./utils.js";
-import {
-  tryExpandInterpolatedAnimation,
-  expandStaticAnimationShorthand,
-} from "../keyframes.js";
+import { tryExpandInterpolatedAnimation, expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 

@@ -36,10 +36,7 @@ import { wrapExprWithStaticParts } from "./interpolations.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
-import {
-  tryExpandInterpolatedAnimation,
-  expandStaticAnimationShorthand,
-} from "../keyframes.js";
+import { tryExpandInterpolatedAnimation, expandStaticAnimationShorthand } from "../keyframes.js";
 import {
   findInAst,
   findSupportedAtRule,
