@@ -1335,6 +1335,51 @@ export const App = () => (
     );
   });
 
+  it("preserves a universal-selector css helper and skips only its consumers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const typographyReset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  color: navy;
+  \${typographyReset}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+typographyReset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["Typography"],
+          convertedDeclarations: ["Icon"],
+        }),
+      }),
+    );
+  });
+
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
     // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
     // must survive the re-emit. Emitting only the alias would produce

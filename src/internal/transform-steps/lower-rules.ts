@@ -85,7 +85,8 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     const unsafeSkip = ctx.styledDecls.find(
       (d) =>
         d.skipTransform &&
-        (d.isCssHelper || skippedDeclReferencesHelper(d, removedHelperLocalNames)),
+        ((d.isCssHelper && !isSafelyPreservedSkippedCssHelper(d)) ||
+          skippedDeclReferencesHelper(d, removedHelperLocalNames)),
     );
     if (unsafeSkip) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
@@ -109,6 +110,10 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function isSafelyPreservedSkippedCssHelper(decl: StyledDecl): boolean {
+  return decl.hasUniversalSelector === true && decl.preserveCssHelperDeclaration === true;
 }
 
 // --- Non-exported helpers ---

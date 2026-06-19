@@ -925,6 +925,7 @@ export function extractAndRemoveCssHelpers(args: {
   toStyleKey: (name: string) => string;
   preserveDeclarationOnlyNames?: Set<string>;
   preservedStyledComponentSelectorNames?: Set<string>;
+  preserveUniversalSelectorHelpers?: boolean;
 }): {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
@@ -945,6 +946,7 @@ export function extractAndRemoveCssHelpers(args: {
     toStyleKey,
     preserveDeclarationOnlyNames,
     preservedStyledComponentSelectorNames,
+    preserveUniversalSelectorHelpers = false,
   } = args;
 
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
@@ -1058,7 +1060,9 @@ export function extractAndRemoveCssHelpers(args: {
       if (referencesPreservedStyledComponentSelector) {
         return;
       }
-      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
+      const preserveDeclarationOnly =
+        (preserveDeclarationOnlyNames?.has(localName) ?? false) ||
+        (preserveUniversalSelectorHelpers && hasUniversalSelector);
 
       cssHelperDecls.push({
         ...placementHints,
@@ -1267,7 +1271,9 @@ export function extractAndRemoveCssHelpers(args: {
         const styleKey = toStyleKey(
           `${objectName}${propName.charAt(0).toUpperCase()}${propName.slice(1)}`,
         );
-        const preserveMember = preserveDeclarationOnlyNames?.has(qualifiedName) ?? false;
+        const preserveMember =
+          (preserveDeclarationOnlyNames?.has(qualifiedName) ?? false) ||
+          (preserveUniversalSelectorHelpers && hasUniversalSelector);
 
         const decl: StyledDecl = {
           localName: qualifiedName,

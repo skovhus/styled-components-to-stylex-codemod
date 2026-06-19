@@ -8,6 +8,7 @@ import { TransformContext } from "../transform-context.js";
 import { buildUnsupportedCssWarnings, toStyleKey } from "../transform/helpers.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import { isImportedComponentIdent } from "../utilities/partial-migration.js";
+import { collectMemberExpressionPaths } from "../utilities/member-expression-paths.js";
 
 /**
  * Extracts css helper blocks into style objects and validates supported usage.
@@ -39,6 +40,8 @@ export function extractCssHelpersStep(ctx: TransformContext): StepResult {
     toStyleKey,
     preserveDeclarationOnlyNames: collectCssHelpersUsedBySkippedImportedRoots(ctx),
     preservedStyledComponentSelectorNames: collectSkippedImportedRootStyledComponentNames(ctx),
+    preserveUniversalSelectorHelpers:
+      ctx.options.allowPartialMigration === true && ctx.options.transformMode !== "leavesOnly",
   });
 
   if (cssHelpers.unsupportedCssUsages.length > 0) {
@@ -110,84 +113,6 @@ function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set
     }
   });
   return names;
-}
-
-/**
- * Collects qualified dot paths from `MemberExpression` nodes (e.g. `mixins.root`
- * yields the string `"mixins.root"`). Lets the css-helper extractor recognize
- * object-member helpers that a skipped imported-root template still references.
- */
-function collectMemberExpressionPaths(node: unknown, out: Set<string>): void {
-  if (!node || typeof node !== "object") {
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      collectMemberExpressionPaths(child, out);
-    }
-    return;
-  }
-  const typed = node as {
-    type?: string;
-    object?: unknown;
-    property?: { type?: string; name?: string; value?: unknown };
-    computed?: boolean;
-  };
-  if (typed.type === "MemberExpression") {
-    const propertyName = memberPropertyName(typed.property, typed.computed === true);
-    const objectPath = memberExpressionRoot(typed.object);
-    if (objectPath && propertyName) {
-      out.add(`${objectPath}.${propertyName}`);
-    }
-  }
-  for (const key of Object.keys(node as Record<string, unknown>)) {
-    if (key === "loc" || key === "comments") {
-      continue;
-    }
-    collectMemberExpressionPaths((node as Record<string, unknown>)[key], out);
-  }
-}
-
-function memberExpressionRoot(node: unknown): string | null {
-  if (!node || typeof node !== "object") {
-    return null;
-  }
-  const typed = node as {
-    type?: string;
-    name?: string;
-    object?: unknown;
-    property?: { type?: string; name?: string; value?: unknown };
-    computed?: boolean;
-  };
-  if (typed.type === "Identifier" && typed.name) {
-    return typed.name;
-  }
-  if (typed.type === "MemberExpression") {
-    const propertyName = memberPropertyName(typed.property, typed.computed === true);
-    if (!propertyName) {
-      return null;
-    }
-    const inner = memberExpressionRoot(typed.object);
-    return inner ? `${inner}.${propertyName}` : null;
-  }
-  return null;
-}
-
-function memberPropertyName(
-  property: { type?: string; name?: string; value?: unknown } | undefined,
-  computed: boolean,
-): string | null {
-  if (!computed && property?.type === "Identifier" && property.name) {
-    return property.name;
-  }
-  if (
-    computed &&
-    (property?.type === "StringLiteral" || property?.type === "Literal") &&
-    typeof property.value === "string"
-  ) {
-    return property.value;
-  }
-  return null;
 }
 
 function tagWrapsImportedComponent(ctx: TransformContext, tag: unknown): boolean {

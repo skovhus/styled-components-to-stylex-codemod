@@ -11,6 +11,8 @@ import { UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING } from "../logger.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
+import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { collectMemberExpressionPaths } from "../utilities/member-expression-paths.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -165,9 +167,14 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
       loc: universalSelectorLoc,
     });
     if (ctx.options.allowPartialMigration === true) {
+      markUniversalSelectorCssHelperConsumersSkipped(styledDecls);
       for (const decl of styledDecls) {
         if (decl.hasUniversalSelector) {
           decl.skipTransform = true;
+          if (decl.isCssHelper) {
+            decl.preserveCssHelperDeclaration = true;
+            decl.suppressCssHelperStyleEmission = true;
+          }
         }
       }
       return CONTINUE;
@@ -176,4 +183,45 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function markUniversalSelectorCssHelperConsumersSkipped(
+  styledDecls: NonNullable<TransformContext["styledDecls"]>,
+): void {
+  const universalCssHelperNames = new Set(
+    styledDecls
+      .filter((decl) => decl.isCssHelper && decl.hasUniversalSelector)
+      .map((decl) => decl.localName),
+  );
+  if (universalCssHelperNames.size === 0) {
+    return;
+  }
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper || decl.skipTransform) {
+      continue;
+    }
+    if (declReferencesAnyHelper(decl.templateExpressions, universalCssHelperNames)) {
+      decl.skipTransform = true;
+    }
+  }
+}
+
+function declReferencesAnyHelper(expressions: unknown[], helperNames: Set<string>): boolean {
+  for (const expression of expressions) {
+    const identifiers = new Set<string>();
+    collectIdentifiers(expression, identifiers);
+    for (const name of identifiers) {
+      if (helperNames.has(name)) {
+        return true;
+      }
+    }
+    const memberPaths = new Set<string>();
+    collectMemberExpressionPaths(expression, memberPaths);
+    for (const path of memberPaths) {
+      if (helperNames.has(path)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
