@@ -1685,6 +1685,92 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
+  it("preserves selector targets referenced by source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const childRules = css\`
+  \${Child} {
+    color: tomato;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${childRules}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><Child>Text</Child></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperSelectorTarget.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+childRules\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("allows source-kept css helpers with unsupported selectors to skip locally", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const linkStyles = css\`
+  & a.active {
+    color: gold;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${linkStyles}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><a className="active">Text</a></Typography>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorHelperUnsupportedSelector.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+linkStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
   it("does not treat member properties as standalone helper identifiers", () => {
     const source = `
 import styled, { css } from "styled-components";

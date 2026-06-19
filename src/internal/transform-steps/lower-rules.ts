@@ -114,7 +114,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
 }
 
 function isSafelyPreservedSkippedCssHelper(decl: StyledDecl): boolean {
-  return decl.hasUniversalSelector === true && decl.preserveCssHelperDeclaration === true;
+  return decl.preserveCssHelperDeclaration === true && decl.suppressCssHelperStyleEmission === true;
 }
 
 // --- Non-exported helpers ---
@@ -699,6 +699,12 @@ function collectCssHelperFunctionSelectorIdentifiers(
   cssLocal: string | undefined,
 ): Map<string, Set<string>> {
   const selectorIdentifiers = new Map<string, Set<string>>();
+  for (const decl of state.styledDecls) {
+    if (!decl.isCssHelper || (!decl.isExported && !decl.preserveCssHelperDeclaration)) {
+      continue;
+    }
+    selectorIdentifiers.set(decl.localName, collectTemplateSelectorIdentifiers(decl));
+  }
   for (const [name, helperFn] of state.cssHelperFunctions as Map<
     string,
     { rawCss?: string; templateExpressions?: unknown[] }
