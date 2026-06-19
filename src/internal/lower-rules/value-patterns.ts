@@ -79,10 +79,8 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
   const avoidNames = new Set(importMap.keys());
 
   /** Parse an indexed member expression like `resolvedExpr[paramName]` into an AST node. */
-  const parseIndexedExprAst = (
-    resolvedExprStr: string,
-    paramName: string,
-  ): ExpressionKind | null => parseExpr(`(${resolvedExprStr})[${paramName}]`);
+  const parseIndexedExprAst = (resolvedExprStr: string, paramName: string): ExpressionKind | null =>
+    parseExpr(`(${resolvedExprStr})[${paramName}]`);
 
   const tryHandleMappedFunctionColor = (d: any): boolean => {
     // Handle: background: ${(props) => getColor(props.variant)}

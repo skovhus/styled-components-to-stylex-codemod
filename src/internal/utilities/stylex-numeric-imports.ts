@@ -207,9 +207,7 @@ function isStylexDefineConstsCall(callee: unknown): boolean {
  * (not nested inside a function or class), i.e. a binding safe to treat as
  * immutable for static resolution.
  */
-export function isImmutableTopLevelVariableDeclaratorPath(path: {
-  parentPath?: unknown;
-}): boolean {
+export function isImmutableTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
   const declaration = (path.parentPath as { node?: { type?: string; kind?: string } } | undefined)
     ?.node;
   if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {

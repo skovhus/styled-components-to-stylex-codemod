@@ -228,9 +228,7 @@ function buildExportedLocalNames(root: any, j: JSCodeshift): Set<string> {
   return exportedLocalNames;
 }
 
-export function collectStyledDefaultImportLocalNames(
-  styledImports: Collection<any>,
-): Set<string> {
+export function collectStyledDefaultImportLocalNames(styledImports: Collection<any>): Set<string> {
   const styledLocalNames = new Set<string>();
   styledImports.forEach((imp) => {
     const specs = imp.node.specifiers ?? [];

@@ -13,10 +13,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { VOID_TAGS } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import {
-  buildAllVariantAndStyleExprs,
-  buildUseThemeDeclaration,
-} from "./style-expr-builders.js";
+import { buildAllVariantAndStyleExprs, buildUseThemeDeclaration } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
