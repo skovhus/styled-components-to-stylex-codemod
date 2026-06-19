@@ -37,7 +37,7 @@ import type { ExpressionKind } from "./decl-types.js";
 import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import {
-  expandInterpolatedAnimationShorthand,
+  tryExpandInterpolatedAnimation,
   expandStaticAnimationShorthand,
 } from "../keyframes.js";
 import {
@@ -647,30 +647,23 @@ export function createCssHelperResolver(args: {
         }
 
         // Resolve interpolated animation declarations referencing keyframes identifiers
-        if (
-          (d.property === "animation" || d.property === "animation-name") &&
-          args.keyframesNames &&
-          args.keyframesNames.size > 0 &&
-          args.j
-        ) {
-          const expanded = expandInterpolatedAnimationShorthand({
-            property: d.property,
-            valueRaw: d.valueRaw,
-            slotExprById,
-            keyframesNames: args.keyframesNames,
-            j: args.j,
-            inlineKeyframeNameMap: args.inlineKeyframeNameMap,
-          });
-          if (expanded) {
-            for (const [prop, value] of Object.entries(expanded)) {
-              setStyleObjectValue(
-                target as Record<string, unknown>,
-                prop,
-                mergeIntoContext(value, prop, target as any),
-              );
-            }
-            continue;
+        const expandedAnimation = tryExpandInterpolatedAnimation({
+          property: d.property,
+          valueRaw: d.valueRaw,
+          slotExprById,
+          keyframesNames: args.keyframesNames,
+          j: args.j,
+          inlineKeyframeNameMap: args.inlineKeyframeNameMap,
+        });
+        if (expandedAnimation) {
+          for (const [prop, value] of Object.entries(expandedAnimation)) {
+            setStyleObjectValue(
+              target as Record<string, unknown>,
+              prop,
+              mergeIntoContext(value, prop, target as any),
+            );
           }
+          continue;
         }
 
         const parts = d.value.parts ?? [];

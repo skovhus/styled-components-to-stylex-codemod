@@ -1193,7 +1193,30 @@ function assignAnimationLonghand(
  * Bails (returns null) on comma-separated multi-animation shorthands,
  * which the single-tuple parser cannot correctly model.
  */
-export function expandInterpolatedAnimationShorthand(args: {
+/**
+ * Guard + delegate for resolving an interpolated `animation`/`animation-name`
+ * declaration. Returns `null` (so callers fall through to their normal handling)
+ * unless the property is animation-related and keyframes names are available.
+ */
+export function tryExpandInterpolatedAnimation(args: {
+  property?: string;
+  valueRaw: string;
+  slotExprById: Map<number, unknown>;
+  keyframesNames?: Set<string>;
+  j?: JSCodeshift;
+  inlineKeyframeNameMap?: Map<string, string>;
+}): Record<string, unknown> | null {
+  const { property, keyframesNames, j } = args;
+  if (property !== "animation" && property !== "animation-name") {
+    return null;
+  }
+  if (!keyframesNames || keyframesNames.size === 0 || !j) {
+    return null;
+  }
+  return expandInterpolatedAnimationShorthand({ ...args, keyframesNames, j });
+}
+
+function expandInterpolatedAnimationShorthand(args: {
   property?: string;
   valueRaw: string;
   slotExprById: Map<number, unknown>;

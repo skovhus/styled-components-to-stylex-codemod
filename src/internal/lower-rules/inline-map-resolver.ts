@@ -32,7 +32,7 @@ import {
   tryResolveAdapterCall,
 } from "./utils.js";
 import {
-  expandInterpolatedAnimationShorthand,
+  tryExpandInterpolatedAnimation,
   expandStaticAnimationShorthand,
 } from "../keyframes.js";
 import { styleValueToExpression } from "./css-conditional-ast-utils.js";
@@ -443,25 +443,19 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
           return null;
         }
         // Resolve interpolated animation declarations referencing keyframes identifiers
-        if (
-          (d.property === "animation" || d.property === "animation-name") &&
-          keyframesNames &&
-          keyframesNames.size > 0
-        ) {
-          const expanded = expandInterpolatedAnimationShorthand({
-            property: d.property,
-            valueRaw: d.valueRaw,
-            slotExprById,
-            keyframesNames: keyframesNames,
-            j,
-            inlineKeyframeNameMap: inlineKeyframeNameMap,
-          });
-          if (expanded) {
-            if (!applyExpandedAnimation(expanded)) {
-              return null;
-            }
-            continue;
+        const expandedAnimation = tryExpandInterpolatedAnimation({
+          property: d.property,
+          valueRaw: d.valueRaw,
+          slotExprById,
+          keyframesNames,
+          j,
+          inlineKeyframeNameMap,
+        });
+        if (expandedAnimation) {
+          if (!applyExpandedAnimation(expandedAnimation)) {
+            return null;
           }
+          continue;
         }
         const parts = d.value.parts ?? [];
         const slotParts = parts.filter(
