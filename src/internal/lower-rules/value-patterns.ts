@@ -29,7 +29,6 @@ import { registerImports } from "./utils.js";
 
 type ValuePatternContext = Pick<
   LowerRulesState,
-  | "api"
   | "j"
   | "filePath"
   | "warnings"
@@ -54,7 +53,6 @@ type ValuePatternContext = Pick<
 
 export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
   const {
-    api,
     j,
     filePath,
     decl,
@@ -84,28 +82,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
   const parseIndexedExprAst = (
     resolvedExprStr: string,
     paramName: string,
-  ): ExpressionKind | null => {
-    const exprSource = `(${resolvedExprStr})[${paramName}]`;
-    try {
-      const jParse = api.jscodeshift.withParser("tsx");
-      const program = jParse(`(${exprSource});`);
-      const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
-      let expr = stmt?.expression ?? null;
-      while (expr?.type === "ParenthesizedExpression") {
-        expr = expr.expression;
-      }
-      const exprWithExtra = expr as ExpressionKind & {
-        extra?: { parenthesized?: boolean; parenStart?: number };
-      };
-      if (exprWithExtra?.extra?.parenthesized) {
-        delete exprWithExtra.extra.parenthesized;
-        delete exprWithExtra.extra.parenStart;
-      }
-      return expr;
-    } catch {
-      return null;
-    }
-  };
+  ): ExpressionKind | null => parseExpr(`(${resolvedExprStr})[${paramName}]`);
 
   const tryHandleMappedFunctionColor = (d: any): boolean => {
     // Handle: background: ${(props) => getColor(props.variant)}

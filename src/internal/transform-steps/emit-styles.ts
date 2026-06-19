@@ -15,6 +15,7 @@ import { isNumericTsType } from "../utilities/jscodeshift-utils.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import {
   collectNumericStylexImportBindings,
+  isImmutableTopLevelVariableDeclaratorPath,
   type StylexImportBinding,
 } from "../utilities/stylex-numeric-imports.js";
 import {
@@ -177,32 +178,6 @@ function importSpecifierExportName(specifier: unknown): string | null {
     return null;
   }
   return node.imported?.name ?? node.imported?.value ?? null;
-}
-
-function isImmutableTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
-  const declaration = (path.parentPath as { node?: { type?: string; kind?: string } } | undefined)
-    ?.node;
-  if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {
-    return false;
-  }
-  let current: unknown = path.parentPath;
-  while (current && typeof current === "object") {
-    const node = (current as { node?: { type?: string } }).node;
-    if (node?.type === "Program") {
-      return true;
-    }
-    if (
-      node?.type === "FunctionDeclaration" ||
-      node?.type === "FunctionExpression" ||
-      node?.type === "ArrowFunctionExpression" ||
-      node?.type === "ClassDeclaration" ||
-      node?.type === "ClassExpression"
-    ) {
-      return false;
-    }
-    current = (current as { parentPath?: unknown }).parentPath;
-  }
-  return false;
 }
 
 function collectIdentifierPatternNames(pattern: unknown, names: Set<string>): void {
