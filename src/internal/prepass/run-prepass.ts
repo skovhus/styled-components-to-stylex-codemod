@@ -1424,11 +1424,12 @@ function getJsxAttributeName(name: AstNode | undefined): string | null {
 }
 
 /**
- * Use ripgrep to find files containing `className` or `style` props.
- * Searches for the prop keywords (not component names) to keep the pattern
- * small and fast — the full component-name regex narrows results down.
+ * Run `rg -l <pattern>` over the parent directories of `files`, returning the
+ * matching files as a Set of absolute paths. Returns an empty set when ripgrep
+ * exits 1 (no matches), or `undefined` when there is nothing to search or
+ * ripgrep is unavailable (callers then fall back to reading all files).
  */
-function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefined {
+function rgListFiles(files: readonly string[], pattern: string): Set<string> | undefined {
   const dirs = deduplicateParentDirs(files);
   if (dirs.length === 0) {
     return undefined;
@@ -1438,7 +1439,7 @@ function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefin
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
-    const cmd = `rg -l ${shellQuote(String.raw`\b(className|style)\s*[={]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const cmd = `rg -l ${shellQuote(pattern)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
     const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     return new Set(
       output
@@ -1448,39 +1449,27 @@ function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefin
         .map((f) => pathResolve(f)),
     );
   } catch (err: unknown) {
+    // rg exit code 1 = no matches (valid result: empty set)
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
       return new Set();
     }
+    // rg not installed or other error — fall back to reading all files
     return undefined;
   }
 }
 
+/**
+ * Use ripgrep to find files containing `className` or `style` props.
+ * Searches for the prop keywords (not component names) to keep the pattern
+ * small and fast — the full component-name regex narrows results down.
+ */
+function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefined {
+  return rgListFiles(files, String.raw`\b(className|style)\s*[={]`);
+}
+
 /** Use ripgrep to find files with PascalCase or namespace JSX tags. */
 function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined {
-  const dirs = deduplicateParentDirs(files);
-  if (dirs.length === 0) {
-    return undefined;
-  }
-
-  try {
-    const globArgs = ["*.tsx", "*.jsx", "*.ts", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
-      .map((glob) => `--glob ${shellQuote(glob)}`)
-      .join(" ");
-    const cmd = `rg -l ${shellQuote(String.raw`<([A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
-    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-    return new Set(
-      output
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((f) => pathResolve(f)),
-    );
-  } catch (err: unknown) {
-    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
-      return new Set();
-    }
-    return undefined;
-  }
+  return rgListFiles(files, String.raw`<([A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)`);
 }
 
 /** Scan a single file for cross-file selector usages using AST parsing. */
@@ -1603,33 +1592,10 @@ function scanFileForSelectorsAst(
  * Returns a Set of absolute file paths, or undefined if rg is not available.
  */
 function rgPreFilter(files: readonly string[]): Set<string> | undefined {
-  const dirs = deduplicateParentDirs(files);
-  if (dirs.length === 0) {
-    return undefined;
-  }
-
-  try {
-    const pattern = String.raw`(styled-components|@stylexjs/stylex|\.stylex["']|\bas[={]|\bref[={])`;
-    const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
-      .map((glob) => `--glob ${shellQuote(glob)}`)
-      .join(" ");
-    const cmd = `rg -l ${shellQuote(pattern)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
-    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-    return new Set(
-      output
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((f) => pathResolve(f)),
-    );
-  } catch (err: unknown) {
-    // rg exit code 1 = no matches (valid result: empty set)
-    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
-      return new Set();
-    }
-    // rg not installed or other error — fall back to reading all files
-    return undefined;
-  }
+  return rgListFiles(
+    files,
+    String.raw`(styled-components|@stylexjs/stylex|\.stylex["']|\bas[={]|\bref[={])`,
+  );
 }
 
 function shellQuote(s: string): string {

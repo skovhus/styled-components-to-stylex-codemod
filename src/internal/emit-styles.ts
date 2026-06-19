@@ -1329,7 +1329,7 @@ function groupLocalStylexVars(vars: LocalStylexVarRef[]): Map<string, LocalStyle
   return groups;
 }
 
-function isStylexKeyframesInit(init: unknown): boolean {
+function isStylexMemberCallInit(init: unknown, methodName: string): boolean {
   if (!init || typeof init !== "object" || !("type" in init)) {
     return false;
   }
@@ -1347,30 +1347,16 @@ function isStylexKeyframesInit(init: unknown): boolean {
     call.callee.object?.type === "Identifier" &&
     call.callee.object.name === "stylex" &&
     call.callee.property?.type === "Identifier" &&
-    call.callee.property.name === "keyframes"
+    call.callee.property.name === methodName
   );
 }
 
+function isStylexKeyframesInit(init: unknown): boolean {
+  return isStylexMemberCallInit(init, "keyframes");
+}
+
 function isStylexCreateInit(init: unknown): boolean {
-  if (!init || typeof init !== "object" || !("type" in init)) {
-    return false;
-  }
-  const call = init as {
-    type?: string;
-    callee?: {
-      type?: string;
-      object?: { type?: string; name?: string };
-      property?: { type?: string; name?: string };
-    };
-  };
-  return (
-    call.type === "CallExpression" &&
-    call.callee?.type === "MemberExpression" &&
-    call.callee.object?.type === "Identifier" &&
-    call.callee.object.name === "stylex" &&
-    call.callee.property?.type === "Identifier" &&
-    call.callee.property.name === "create"
-  );
+  return isStylexMemberCallInit(init, "create");
 }
 
 type VariableDeclarationLike = {

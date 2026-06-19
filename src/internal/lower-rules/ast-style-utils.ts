@@ -4,6 +4,7 @@
  * shape keys, and property-name collection.
  */
 import { literalToAst, objectToAst } from "../transform/helpers.js";
+import { createAstSafeJsonReplacer } from "../utilities/ast-safety.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 
 export type ASTProperty = { key?: { name?: string; value?: string }; value?: unknown };
@@ -145,25 +146,7 @@ export function astShapeKey(node: unknown): string {
   if (node === undefined) {
     return "";
   }
-  const seen = new WeakSet<object>();
-  return JSON.stringify(node, (key, value) => {
-    if (
-      key === "loc" ||
-      key === "tokens" ||
-      key === "comments" ||
-      key === "start" ||
-      key === "end"
-    ) {
-      return undefined;
-    }
-    if (value && typeof value === "object") {
-      if (seen.has(value)) {
-        return "[Circular]";
-      }
-      seen.add(value);
-    }
-    return value;
-  });
+  return JSON.stringify(node, createAstSafeJsonReplacer());
 }
 
 /** Recursively renames all Identifier nodes with `oldName` to `newName` in an AST subtree.

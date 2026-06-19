@@ -3,6 +3,7 @@
  * Core concepts: severity classification and source context reporting.
  */
 import { readFileSync } from "node:fs";
+import { createAstSafeJsonReplacer } from "./utilities/ast-safety.js";
 
 type Severity = "info" | "warning" | "error";
 
@@ -334,31 +335,10 @@ export class Logger {
     if (typeof context === "undefined") {
       return null;
     }
-    return JSON.stringify(context, createContextReplacer(), 2);
+    return JSON.stringify(context, createAstSafeJsonReplacer(), 2);
   }
 }
 
-function createContextReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet<object>();
-  return (key, value) => {
-    if (
-      key === "loc" ||
-      key === "tokens" ||
-      key === "comments" ||
-      key === "start" ||
-      key === "end"
-    ) {
-      return undefined;
-    }
-    if (value && typeof value === "object") {
-      if (seen.has(value)) {
-        return "[Circular]";
-      }
-      seen.add(value);
-    }
-    return value;
-  };
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // LoggerReport - formats and prints grouped warning reports
