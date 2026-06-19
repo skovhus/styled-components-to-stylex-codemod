@@ -23,6 +23,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
 import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
 import { shouldSkipPartialImportedComponentRoot } from "../utilities/partial-migration.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
@@ -85,7 +86,8 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     const unsafeSkip = ctx.styledDecls.find(
       (d) =>
         d.skipTransform &&
-        (d.isCssHelper || skippedDeclReferencesHelper(d, removedHelperLocalNames)),
+        ((d.isCssHelper && !isSafelyPreservedSkippedCssHelper(d)) ||
+          skippedDeclReferencesHelper(d, removedHelperLocalNames)),
     );
     if (unsafeSkip) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
@@ -109,6 +111,10 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function isSafelyPreservedSkippedCssHelper(decl: StyledDecl): boolean {
+  return decl.preserveCssHelperDeclaration === true && decl.suppressCssHelperStyleEmission === true;
 }
 
 // --- Non-exported helpers ---
@@ -486,6 +492,22 @@ function collectPreservedReferencedStyledDecls(
     styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
   );
   const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
+  const addReferencedComponentNames = (referencedNames: Iterable<string>): boolean => {
+    let added = false;
+    for (const name of referencedNames) {
+      if (componentNames.has(name) && !preservedNames.has(name)) {
+        preservedNames.add(name);
+        added = true;
+      }
+    }
+    return added;
+  };
+  for (const decl of styledDecls) {
+    if (!decl.isCssHelper || (!decl.isExported && !decl.preserveCssHelperDeclaration)) {
+      continue;
+    }
+    addReferencedComponentNames(helperSelectorIdentifiers.get(decl.localName) ?? []);
+  }
   let changed = true;
   while (changed) {
     changed = false;
@@ -499,12 +521,7 @@ function collectPreservedReferencedStyledDecls(
           referencedNames.add(selectorName);
         }
       }
-      for (const name of referencedNames) {
-        if (componentNames.has(name) && !preservedNames.has(name)) {
-          preservedNames.add(name);
-          changed = true;
-        }
-      }
+      changed = addReferencedComponentNames(referencedNames) || changed;
     }
   }
   return preservedNames;
@@ -646,19 +663,7 @@ function skippedDeclReferencesHelper(
   decl: { templateExpressions?: unknown[] },
   helperLocalNames: Set<string>,
 ): boolean {
-  if (helperLocalNames.size === 0) {
-    return false;
-  }
-  const identifiers = new Set<string>();
-  for (const expr of decl.templateExpressions ?? []) {
-    collectIdentifiers(expr, identifiers);
-  }
-  for (const name of identifiers) {
-    if (helperLocalNames.has(name)) {
-      return true;
-    }
-  }
-  return false;
+  return expressionsReferenceAnyPath(decl.templateExpressions, helperLocalNames);
 }
 
 function collectRemovableCssHelperFunctions(
@@ -671,7 +676,11 @@ function collectRemovableCssHelperFunctions(
   }
 
   for (const decl of styledDecls) {
-    if (!decl.skipTransform) {
+    const keepsSource =
+      decl.skipTransform ||
+      (decl.isCssHelper &&
+        (decl.isExported === true || decl.preserveCssHelperDeclaration === true));
+    if (!keepsSource) {
       continue;
     }
     for (const name of collectTemplateExpressionIdentifiers(decl)) {
@@ -705,6 +714,14 @@ function collectCssHelperFunctionSelectorIdentifiers(
   cssLocal: string | undefined,
 ): Map<string, Set<string>> {
   const selectorIdentifiers = new Map<string, Set<string>>();
+  const helperReferences = new Map<string, Set<string>>();
+  for (const decl of state.styledDecls) {
+    if (!decl.isCssHelper || (!decl.isExported && !decl.preserveCssHelperDeclaration)) {
+      continue;
+    }
+    selectorIdentifiers.set(decl.localName, collectTemplateSelectorIdentifiers(decl));
+    helperReferences.set(decl.localName, collectTemplateExpressionIdentifiers(decl));
+  }
   for (const [name, helperFn] of state.cssHelperFunctions as Map<
     string,
     { rawCss?: string; templateExpressions?: unknown[] }
@@ -713,9 +730,11 @@ function collectCssHelperFunctionSelectorIdentifiers(
       name,
       collectTemplateSelectorIdentifiersFromParts(helperFn.rawCss, helperFn.templateExpressions),
     );
+    helperReferences.set(name, collectExpressionIdentifiers(helperFn.templateExpressions));
   }
 
   if (!cssLocal) {
+    expandCssHelperSelectorIdentifiers(selectorIdentifiers, helperReferences);
     return selectorIdentifiers;
   }
 
@@ -740,17 +759,52 @@ function collectCssHelperFunctionSelectorIdentifiers(
         path.node.id.name,
         collectTemplateSelectorIdentifiersFromTemplate(body.quasi),
       );
+      helperReferences.set(path.node.id.name, collectExpressionIdentifiers(body.quasi.expressions));
     });
 
+  expandCssHelperSelectorIdentifiers(selectorIdentifiers, helperReferences);
   return selectorIdentifiers;
 }
 
 function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {
+  return collectExpressionIdentifiers(decl.templateExpressions);
+}
+
+function collectExpressionIdentifiers(expressions: readonly unknown[] | undefined): Set<string> {
   const identifiers = new Set<string>();
-  for (const expr of decl.templateExpressions ?? []) {
+  for (const expr of expressions ?? []) {
     collectIdentifiers(expr, identifiers);
   }
   return identifiers;
+}
+
+function expandCssHelperSelectorIdentifiers(
+  selectorIdentifiers: Map<string, Set<string>>,
+  helperReferences: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [helperName, references] of helperReferences) {
+      const selectors = selectorIdentifiers.get(helperName);
+      if (!selectors) {
+        continue;
+      }
+      for (const reference of references) {
+        const referencedSelectors = selectorIdentifiers.get(reference);
+        if (!referencedSelectors) {
+          continue;
+        }
+        for (const selectorName of referencedSelectors) {
+          if (selectors.has(selectorName)) {
+            continue;
+          }
+          selectors.add(selectorName);
+          changed = true;
+        }
+      }
+    }
+  }
 }
 
 function collectTemplateSelectorIdentifiersFromTemplate(template: {

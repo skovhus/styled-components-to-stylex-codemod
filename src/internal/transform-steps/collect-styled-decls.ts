@@ -11,6 +11,7 @@ import { UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING } from "../logger.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
+import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -156,15 +157,50 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   ctx.universalSelectorLoc = universalSelectorLoc;
 
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
-  // Skip transforming the entire file to avoid producing incorrect output.
+  // With partial migration enabled, preserve only the declarations that contain them; otherwise keep
+  // the legacy whole-file bail.
   if (hasUniversalSelectors && ctx.options.transformMode !== "leavesOnly") {
     ctx.warnings.push({
       severity: "warning",
       type: "Universal selectors (`*`) are currently unsupported",
       loc: universalSelectorLoc,
     });
+    if (ctx.options.allowPartialMigration === true) {
+      markUniversalSelectorCssHelperConsumersSkipped(styledDecls);
+      for (const decl of styledDecls) {
+        if (decl.hasUniversalSelector) {
+          decl.skipTransform = true;
+          if (decl.isCssHelper) {
+            decl.preserveCssHelperDeclaration = true;
+            decl.suppressCssHelperStyleEmission = true;
+          }
+        }
+      }
+      return CONTINUE;
+    }
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
   return CONTINUE;
+}
+
+function markUniversalSelectorCssHelperConsumersSkipped(
+  styledDecls: NonNullable<TransformContext["styledDecls"]>,
+): void {
+  const universalCssHelperNames = new Set(
+    styledDecls
+      .filter((decl) => decl.isCssHelper && decl.hasUniversalSelector)
+      .map((decl) => decl.localName),
+  );
+  if (universalCssHelperNames.size === 0) {
+    return;
+  }
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper || decl.skipTransform) {
+      continue;
+    }
+    if (expressionsReferenceAnyPath(decl.templateExpressions, universalCssHelperNames)) {
+      decl.skipTransform = true;
+    }
+  }
 }

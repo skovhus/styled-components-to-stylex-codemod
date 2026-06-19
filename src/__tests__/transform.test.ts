@@ -1286,6 +1286,802 @@ export const App = () => (
     );
   });
 
+  it.each([
+    ["universal descendant selector", "& *"],
+    ["universal child selector", "& > *"],
+  ])("skips only the declaration with a %s", (_label, selector) => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  color: navy;
+
+  ${selector} {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelector.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: "Universal selectors (`*`) are currently unsupported",
+      }),
+    );
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["Typography"],
+          convertedDeclarations: ["Icon"],
+        }),
+      }),
+    );
+  });
+
+  it("preserves a universal-selector css helper and skips only its consumers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const typographyReset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  color: navy;
+  \${typographyReset}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+typographyReset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["Typography"],
+          convertedDeclarations: ["Icon"],
+        }),
+      }),
+    );
+  });
+
+  it("preserves universal-selector object-member css helpers for skipped consumers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    & * {
+      margin: 0;
+    }
+  \`,
+};
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  color: navy;
+  \${mixins.typographyReset}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorObjectHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("propagates universal-selector skips through composed css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const typographyReset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const mixins = {
+  typographyColor: css\`
+    color: navy;
+  \`,
+};
+
+const typographyStyles = css\`
+  \${typographyReset}
+  \${mixins.typographyColor}
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorComposedHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+typographyReset\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/typographyColor:\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("propagates universal-selector skips from object-member helpers through composed css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    & * {
+      margin: 0;
+    }
+  \`,
+};
+
+const typographyStyles = css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorObjectComposedHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toMatch(/const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("preserves object-member css helpers referenced by untransformed css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    margin: 0;
+  \`,
+};
+
+const getTypographyStyles = () => css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-objectHelperUntransformedCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toContain("${mixins.typographyReset}");
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves object-member css helpers referenced by exported css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    margin: 0;
+  \`,
+};
+
+export const typographyStyles = css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-objectHelperExportedCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toContain("${mixins.typographyReset}");
+    expect(result.code).toMatch(/export\s+const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves universal-selector standalone css templates instead of rewriting them", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const baseColor = css\`
+  color: navy;
+\`;
+
+const resets = [
+  css\`
+    \${baseColor}
+
+    & * {
+      margin: 0;
+    }
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-universalSelectorStandaloneCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toContain("css`");
+    expect(result.code).toContain("& *");
+    expect(result.code).not.toContain("styles.standaloneCssHelper");
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves standalone css templates composed from universal helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const reset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const rules = [
+  css\`
+    \${reset}
+    color: red;
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorComposedStandaloneCssTemplate.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+rules\s*=\s*\[/);
+    expect(result.code).toMatch(/\$\{reset\}/);
+    expect(result.code).not.toMatch(/standaloneCssHelper/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves selector targets in universal standalone css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const rules = [
+  css\`
+    \${Child} {
+      color: tomato;
+    }
+
+    & * {
+      margin: 0;
+    }
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorStandaloneTemplateSelectorTarget.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+rules\s*=\s*\[/);
+    expect(result.code).toMatch(/\$\{Child\}/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("propagates universal-selector skips through exported composed css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+export const typographyReset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const typographyStyles = css\`
+  \${typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorExportedComposedHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/export\s+const\s+typographyReset\s*=\s*css`/);
+    expect(result.code).toMatch(/export\s+const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("preserves css helpers interpolated by skipped universal-selector declarations", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const baseColor = css\`
+  color: navy;
+\`;
+
+const typographyColor = css\`
+  \${baseColor}
+  font-weight: 600;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyColor}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorTemplateHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+typographyColor\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("preserves css helpers used by universal styled-call css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const baseColor = css\`
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div(() => css\`
+  \${baseColor}
+
+  & * {
+    margin: 0;
+  }
+\`);
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorStyledCallHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div\(/);
+  });
+
+  it("preserves selector targets referenced through source-kept helper chains", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const childRules = css\`
+  \${Child} {
+    color: tomato;
+  }
+\`;
+
+const parentRules = css\`
+  \${childRules}
+  color: inherit;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${parentRules}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><Child>Text</Child></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperSelectorTarget.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+childRules\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+parentRules\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("preserves selector targets referenced only by source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const childRules = css\`
+  \${Child} {
+    color: tomato;
+  }
+\`;
+
+export const reset = css\`
+  \${childRules}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorExportedHelperSelectorTarget.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+childRules\s*=\s*css`/);
+    expect(result.code).toMatch(/export\s+const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves direct selector targets in source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+export const reset = css\`
+  \${Child} {
+    color: tomato;
+  }
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperDirectSelector.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/export\s+const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves css helper functions referenced by source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const toneStyles = (tone: "danger" | "safe") => css\`
+  font-weight: 700;
+  \${() => {
+    switch (tone) {
+      case "danger":
+        return css\`
+          color: tomato;
+        \`;
+      default:
+        return css\`
+          color: navy;
+        \`;
+    }
+  }}
+\`;
+
+const baseColor = css\`
+  \${(props) => toneStyles(props.tone)}
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div<{ tone: "danger" | "safe" }>\`
+  \${baseColor}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography tone="danger"><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperFunction.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /const\s+toneStyles\s*=\s*\(\s*tone:\s*"danger"\s*\|\s*"safe"\s*\)\s*=>\s*css`/,
+    );
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div/);
+  });
+
+  it("allows source-kept css helpers with unsupported selectors to skip locally", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const linkStyles = css\`
+  & a.active {
+    color: gold;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${linkStyles}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><a className="active">Text</a></Typography>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorHelperUnsupportedSelector.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+linkStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+  });
+
+  it("does not treat member properties as standalone helper identifiers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const reset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+const mixins = {
+  reset: css\`
+    color: navy;
+  \`,
+};
+
+const card = css\`
+  \${mixins.reset}
+  background-color: green;
+\`;
+
+const Box = styled.div\`
+  \${card}
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+    const result = runPartial(source, "partial-universalSelectorMemberPropertyName.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=/);
+    expect(result.code).not.toMatch(/const\s+Box\s*=\s*styled\.div`/);
+  });
+
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
     // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
     // must survive the re-emit. Emitting only the alias would produce
@@ -3813,6 +4609,38 @@ export const App = () => <Title>Imported root with object-member helper</Title>;
     expect(result).toMatch(/root:\s*css`/);
     // The skipped `styled(Text)` template still uses `mixins.root`.
     expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("${mixins.root}");
+  });
+
+  it("does not preserve standalone helpers from imported-root member property names", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const root = css\`
+  background-color: hotpink;
+\`;
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins.root}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with object-member helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).not.toContain("const root = css");
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
     expect(result).toContain("${mixins.root}");
   });
 

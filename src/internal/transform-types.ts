@@ -709,6 +709,8 @@ export type StyledDecl = {
   rules: CssRuleIR[];
   templateExpressions: Expression[];
   rawCss?: string;
+  /** True when the source template contains a universal selector (`*`). */
+  hasUniversalSelector?: boolean;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
   preserveCssHelperDeclaration?: boolean;

@@ -7,6 +7,7 @@ import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
   normalizeStylisAstToIR,
+  type CssRuleIR,
 } from "./css-ir.js";
 import {
   cloneAstNode,
@@ -60,12 +61,23 @@ function collectStyledDeclsImpl(args: {
   let hasUniversalSelectors = false;
   let universalSelectorLoc: { line: number; column: number } | null = null;
 
-  const noteUniversalSelector = (template: any, rawCss: string): void => {
+  const noteUniversalSelector = (template: unknown, rawCss: string): void => {
     hasUniversalSelectors = true;
     if (universalSelectorLoc) {
       return;
     }
     universalSelectorLoc = computeUniversalSelectorLoc(getNodeLocStart(template), rawCss);
+  };
+  const noteUniversalSelectorIfPresent = (
+    template: unknown,
+    rawCss: string,
+    rules: CssRuleIR[],
+  ) => {
+    const hasUniversalSelector = hasUniversalSelectorInRules(rules);
+    if (hasUniversalSelector) {
+      noteUniversalSelector(template, rawCss);
+    }
+    return hasUniversalSelector;
   };
 
   /**
@@ -855,9 +867,7 @@ function collectStyledDeclsImpl(args: {
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
         });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
+        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
 
         styledDecls.push({
           ...placementHints,
@@ -867,6 +877,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -889,9 +900,11 @@ function collectStyledDeclsImpl(args: {
           const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
             rawCss: parsed.rawCss,
           });
-          if (hasUniversalSelectorInRules(rules)) {
-            noteUniversalSelector(template, parsed.rawCss);
-          }
+          const hasUniversalSelector = noteUniversalSelectorIfPresent(
+            template,
+            parsed.rawCss,
+            rules,
+          );
 
           const attrsInfo = peeled.attrsArg != null ? parseAttrsArg(peeled.attrsArg) : undefined;
           const sfpResult =
@@ -910,6 +923,7 @@ function collectStyledDeclsImpl(args: {
             rules,
             templateExpressions: parsed.slots.map((s) => s.expression),
             rawCss: parsed.rawCss,
+            ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
             ...(templateLoc ? { loc: templateLoc } : {}),
             ...(attrsInfo ? { attrsInfo } : {}),
             ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
@@ -941,9 +955,7 @@ function collectStyledDeclsImpl(args: {
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
         });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
+        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
 
         styledDecls.push({
           ...placementHints,
@@ -953,6 +965,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -978,9 +991,7 @@ function collectStyledDeclsImpl(args: {
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
         });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
+        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
 
         styledDecls.push({
           ...placementHints,
@@ -990,6 +1001,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -1015,9 +1027,7 @@ function collectStyledDeclsImpl(args: {
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
         });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
+        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
 
         styledDecls.push({
           ...placementHints,
@@ -1027,6 +1037,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -1325,9 +1336,11 @@ function collectStyledDeclsImpl(args: {
           const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
             rawCss: parsed.rawCss,
           });
-          if (hasUniversalSelectorInRules(rules)) {
-            noteUniversalSelector(cssTemplate, parsed.rawCss);
-          }
+          const hasUniversalSelector = noteUniversalSelectorIfPresent(
+            cssTemplate,
+            parsed.rawCss,
+            rules,
+          );
 
           // Extract destructured params and transform expressions
           const destructuredParams = extractDestructuredParams(arg0);
@@ -1365,6 +1378,7 @@ function collectStyledDeclsImpl(args: {
             rules,
             templateExpressions: transformedExpressions,
             rawCss: parsed.rawCss,
+            ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
             ...(templateLoc ? { loc: templateLoc } : {}),
             ...(propsType ? { propsType } : {}),
             ...(leadingComments ? { leadingComments } : {}),
