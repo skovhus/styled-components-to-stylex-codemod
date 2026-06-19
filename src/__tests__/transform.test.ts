@@ -1502,6 +1502,66 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
+  it("preserves object-member css helpers referenced by untransformed css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    margin: 0;
+  \`,
+};
+
+const getTypographyStyles = () => css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-objectHelperUntransformedCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toContain("${mixins.typographyReset}");
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves universal-selector standalone css templates instead of rewriting them", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const resets = [
+  css\`
+    & * {
+      margin: 0;
+    }
+  \`,
+];
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-universalSelectorStandaloneCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("css`");
+    expect(result.code).toContain("& *");
+    expect(result.code).not.toContain("styles.standaloneCssHelper");
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
     // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
     // must survive the re-emit. Emitting only the alias would produce

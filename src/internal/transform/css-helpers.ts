@@ -376,7 +376,8 @@ function isNodeInsideStyledTemplate(
 }
 
 /**
- * Check if all usages of specific object member CSS helpers are inside styled or css templates.
+ * Check if all usages of specific object member CSS helpers are inside styled templates or css
+ * variable helpers that this pass extracts.
  * Returns true if all usages are safe, false if any usage is outside transformable templates.
  */
 function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
@@ -414,13 +415,43 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
     ) {
       return;
     }
-    // Check if this usage is inside a styled/css template
-    if (!isNodeInsideStyledTemplate(p, styledLocalNames, cssLocal)) {
+    if (
+      !isNodeInsideStyledTemplate(p, styledLocalNames) &&
+      !isNodeInsideExtractableCssVariableTemplate(p, cssLocal)
+    ) {
       allSafe = false;
     }
   });
 
   return allSafe;
+}
+
+function isNodeInsideExtractableCssVariableTemplate(nodePath: any, cssLocal?: string): boolean {
+  if (!cssLocal) {
+    return false;
+  }
+  let cur: any = nodePath;
+  while (cur && cur.parentPath) {
+    cur = cur.parentPath;
+    const node = cur?.node;
+    if (!node) {
+      break;
+    }
+    if (
+      node.type !== "TaggedTemplateExpression" ||
+      node.tag?.type !== "Identifier" ||
+      node.tag.name !== cssLocal
+    ) {
+      continue;
+    }
+    const parent = cur.parentPath?.node;
+    return (
+      parent?.type === "VariableDeclarator" &&
+      parent.init === node &&
+      parent.id?.type === "Identifier"
+    );
+  }
+  return false;
 }
 
 function isIdentifierUsedOutsideStyledTemplates(args: {
@@ -1527,6 +1558,11 @@ export function extractAndRemoveCssHelpers(args: {
         template,
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
+
+      if (preserveUniversalSelectorHelpers && hasUniversalSelector) {
+        seenStandaloneTemplates.add(p.node);
+        return;
+      }
 
       cssHelperDecls.push({
         localName,
