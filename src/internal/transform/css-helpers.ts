@@ -1508,9 +1508,11 @@ export function extractAndRemoveCssHelpers(args: {
         template,
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
+      const preserveDeclarationOnly = shouldPreserveSourceOnly(localName, hasUniversalSelector);
       if (
         isExported &&
-        templateReferencesStyledComponentSelector(template, rewrittenStyledComponentLocalNames)
+        templateReferencesStyledComponentSelector(template, rewrittenStyledComponentLocalNames) &&
+        !preserveDeclarationOnly
       ) {
         unsupportedCssUsages.push({
           loc: getNodeLocStart(template),
@@ -1524,7 +1526,6 @@ export function extractAndRemoveCssHelpers(args: {
         recordSourcePreservedCssHelperReferences(templateExpressions);
         return;
       }
-      const preserveDeclarationOnly = shouldPreserveSourceOnly(localName, hasUniversalSelector);
       if (isExported || preserveDeclarationOnly) {
         recordSourcePreservedCssHelperReferences(templateExpressions);
       }

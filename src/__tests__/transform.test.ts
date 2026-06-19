@@ -1909,6 +1909,101 @@ export const App = () => (
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
   });
 
+  it("preserves direct selector targets in source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+export const reset = css\`
+  \${Child} {
+    color: tomato;
+  }
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperDirectSelector.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/export\s+const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("preserves css helper functions referenced by source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const toneStyles = (tone: "danger" | "safe") => css\`
+  font-weight: 700;
+  \${() => {
+    switch (tone) {
+      case "danger":
+        return css\`
+          color: tomato;
+        \`;
+      default:
+        return css\`
+          color: navy;
+        \`;
+    }
+  }}
+\`;
+
+const baseColor = css\`
+  \${(props) => toneStyles(props.tone)}
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div<{ tone: "danger" | "safe" }>\`
+  \${baseColor}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography tone="danger"><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorHelperFunction.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /const\s+toneStyles\s*=\s*\(\s*tone:\s*"danger"\s*\|\s*"safe"\s*\)\s*=>\s*css`/,
+    );
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div/);
+  });
+
   it("allows source-kept css helpers with unsupported selectors to skip locally", () => {
     const source = `
 import styled, { css } from "styled-components";

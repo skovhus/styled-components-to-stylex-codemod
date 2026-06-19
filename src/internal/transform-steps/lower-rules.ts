@@ -676,7 +676,11 @@ function collectRemovableCssHelperFunctions(
   }
 
   for (const decl of styledDecls) {
-    if (!decl.skipTransform) {
+    const keepsSource =
+      decl.skipTransform ||
+      (decl.isCssHelper &&
+        (decl.isExported === true || decl.preserveCssHelperDeclaration === true));
+    if (!keepsSource) {
       continue;
     }
     for (const name of collectTemplateExpressionIdentifiers(decl)) {
