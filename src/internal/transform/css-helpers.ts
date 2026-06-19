@@ -6,7 +6,7 @@ import type { Collection, Expression, JSCodeshift, TemplateLiteral } from "jscod
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import { collectIdentifiers, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
@@ -15,6 +15,7 @@ import {
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 import { isMemberExpression } from "../lower-rules/utils.js";
+import { collectMemberExpressionPaths } from "../utilities/member-expression-paths.js";
 
 type Loc = { line: number; column: number } | null;
 
@@ -36,6 +37,11 @@ type CssHelperReplacement = {
 type CssHelperTemplateReplacement = {
   node: any;
   styleKey: string;
+};
+
+type PendingCssHelperRemoval = {
+  path: any;
+  localName: string;
 };
 
 export function removeInlinedCssHelperFunctions(args: {
@@ -267,6 +273,76 @@ function parseCssHelperTemplate(args: {
     templateExpressions: parsed.slots.map((s) => s.expression),
     hasUniversalSelector,
   };
+}
+
+function preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls: StyledDecl[]): void {
+  const universalCssHelperNames = new Set(
+    cssHelperDecls
+      .filter((decl) => decl.isCssHelper && decl.hasUniversalSelector)
+      .map((decl) => decl.localName),
+  );
+  if (universalCssHelperNames.size === 0) {
+    return;
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const decl of cssHelperDecls) {
+      if (!decl.isCssHelper || universalCssHelperNames.has(decl.localName)) {
+        continue;
+      }
+      if (
+        !templateExpressionsReferenceAnyHelper(decl.templateExpressions, universalCssHelperNames)
+      ) {
+        continue;
+      }
+      universalCssHelperNames.add(decl.localName);
+      decl.hasUniversalSelector = true;
+      decl.preserveCssHelperDeclaration = true;
+      decl.suppressCssHelperStyleEmission = true;
+      changed = true;
+    }
+  }
+}
+
+function templateExpressionsReferenceAnyHelper(
+  expressions: unknown[],
+  helperNames: Set<string>,
+): boolean {
+  for (const expression of expressions) {
+    const identifiers = new Set<string>();
+    collectIdentifiers(expression, identifiers);
+    for (const name of identifiers) {
+      if (helperNames.has(name)) {
+        return true;
+      }
+    }
+    const memberPaths = new Set<string>();
+    collectMemberExpressionPaths(expression, memberPaths);
+    for (const path of memberPaths) {
+      if (helperNames.has(path)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function removeCssHelperDeclarator(j: JSCodeshift, path: any): void {
+  const decl = path.parentPath?.node;
+  if (decl?.type !== "VariableDeclaration") {
+    return;
+  }
+  decl.declarations = decl.declarations.filter((dcl: any) => dcl !== path.node);
+  if (decl.declarations.length > 0) {
+    return;
+  }
+  const exportDecl = path.parentPath?.parentPath?.node;
+  if (exportDecl?.type === "ExportNamedDeclaration") {
+    j(path).closest(j.ExportNamedDeclaration).remove();
+  } else {
+    j(path).closest(j.VariableDeclaration).remove();
+  }
 }
 
 function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boolean {
@@ -964,6 +1040,7 @@ export function extractAndRemoveCssHelpers(args: {
   const cssHelperReplacements: CssHelperReplacement[] = [];
   const cssHelperTemplateReplacements: CssHelperTemplateReplacement[] = [];
   const closureVariableUsages: UnsupportedCssUsage[] = [];
+  const pendingCssHelperRemovals: PendingCssHelperRemoval[] = [];
   let cssHelperHasUniversalSelectors = false;
   let cssHelperUniversalSelectorLoc: Loc = null;
   let changed = false;
@@ -1095,21 +1172,25 @@ export function extractAndRemoveCssHelpers(args: {
         }
       }
       if (!isExported && !usedOutsideStyledTemplates && !preserveDeclarationOnly) {
-        const decl = p.parentPath?.node;
-        if (decl?.type === "VariableDeclaration") {
-          decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
-          if (decl.declarations.length === 0) {
-            const exportDecl = p.parentPath?.parentPath?.node;
-            if (exportDecl?.type === "ExportNamedDeclaration") {
-              j(p).closest(j.ExportNamedDeclaration).remove();
-            } else {
-              j(p).closest(j.VariableDeclaration).remove();
-            }
-          }
+        if (preserveUniversalSelectorHelpers) {
+          pendingCssHelperRemovals.push({ path: p, localName });
+        } else {
+          removeCssHelperDeclarator(j, p);
         }
       }
       changed = true;
     });
+
+  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
+    preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
+    for (const removal of pendingCssHelperRemovals) {
+      const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
+      if (helperDecl?.preserveCssHelperDeclaration) {
+        continue;
+      }
+      removeCssHelperDeclarator(j, removal.path);
+    }
+  }
 
   if (unsupportedCssUsages.length > 0) {
     return {
@@ -1338,7 +1419,7 @@ export function extractAndRemoveCssHelpers(args: {
             if (!cssHelperPropNames.has(propName)) {
               return true;
             }
-            return preserveDeclarationOnlyNames?.has(`${objectName}.${propName}`) ?? false;
+            return memberMap.get(propName)?.preserveCssHelperDeclaration === true;
           });
 
           if (remainingProps.length === 0) {
