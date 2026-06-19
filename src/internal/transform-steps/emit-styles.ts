@@ -11,6 +11,7 @@ import {
   maybeOmitPxUnitFromStylexStyleValue,
   maybeOmitPxUnitFromStylexValue,
 } from "../utilities/stylex-numeric-values.js";
+import { isNumericTsType } from "../utilities/jscodeshift-utils.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import {
   collectNumericStylexImportBindings,
@@ -428,31 +429,9 @@ function isNumericOrOptionalTsTypeAnnotation(typeAnnotation: unknown): boolean {
     return false;
   }
   const node = typeAnnotation as { type?: string; typeAnnotation?: unknown };
-  return isNumericOrOptionalTsType(node.type === "TSTypeAnnotation" ? node.typeAnnotation : node);
-}
-
-function isNumericOrOptionalTsType(typeNode: unknown): boolean {
-  if (!typeNode || typeof typeNode !== "object") {
-    return false;
-  }
-  const node = typeNode as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
-  if (node.type === "TSNumberKeyword") {
-    return true;
-  }
-  if (node.type === "TSLiteralType") {
-    return typeof node.literal?.value === "number";
-  }
-  if (node.type === "TSUnionType" && Array.isArray(node.types)) {
-    return node.types.every((member) => {
-      const memberType = (member as { type?: string } | null)?.type;
-      return (
-        memberType === "TSUndefinedKeyword" ||
-        memberType === "TSNullKeyword" ||
-        isNumericOrOptionalTsType(member)
-      );
-    });
-  }
-  return false;
+  return isNumericTsType(node.type === "TSTypeAnnotation" ? node.typeAnnotation : node, {
+    allowOptional: true,
+  });
 }
 
 function readPropertyKey(key: unknown): string | null {

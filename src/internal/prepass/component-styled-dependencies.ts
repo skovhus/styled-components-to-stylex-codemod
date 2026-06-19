@@ -2,6 +2,7 @@
  * Utilities for relating exported components to local styled-component definitions.
  * Core concepts: export bindings, local declaration lookup, and conservative dependency checks.
  */
+import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import { getReExportedSourceName } from "./extract-external-interface.js";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 
@@ -577,13 +578,6 @@ function fallbackLocalNamesForExport(
   }
 
   return [...candidates];
-}
-
-function findDefaultExportedLocalName(source: string): string | undefined {
-  return (
-    source.match(/\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/)?.[1] ??
-    source.match(/\bexport\s*\{[^}]*\b([A-Z][A-Za-z0-9]*)\s+as\s+default\b[^}]*\}/)?.[1]
-  );
 }
 
 function programBody(program: AstNode): AstNode[] {

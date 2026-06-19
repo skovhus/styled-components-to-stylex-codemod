@@ -297,6 +297,117 @@ export function isFunctionNode(node: unknown): boolean {
 }
 
 /**
+ * Returns true when a destructuring/binding pattern (or nested pattern) binds
+ * any of the given names. Handles Identifier, Rest/Assignment patterns, object
+ * and array patterns, and Property/ObjectProperty nodes.
+ */
+export function patternBindsAnyName(node: unknown, names: ReadonlySet<string>): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const record = node as Record<string, unknown>;
+  if (record.type === "Identifier") {
+    return typeof record.name === "string" && names.has(record.name);
+  }
+  if (record.type === "RestElement") {
+    return patternBindsAnyName(record.argument, names);
+  }
+  if (record.type === "AssignmentPattern") {
+    return patternBindsAnyName(record.left, names);
+  }
+  if (record.type === "ObjectPattern") {
+    return (
+      Array.isArray(record.properties) &&
+      record.properties.some((prop) => patternBindsAnyName(prop, names))
+    );
+  }
+  if (record.type === "ObjectProperty" || record.type === "Property") {
+    return patternBindsAnyName(record.value, names);
+  }
+  if (record.type === "ArrayPattern") {
+    return (
+      Array.isArray(record.elements) &&
+      record.elements.some((element) => patternBindsAnyName(element, names))
+    );
+  }
+  return false;
+}
+
+/**
+ * Returns true when `name` is one of React's `ComponentProps` utility-type
+ * names (`ComponentProps`, `ComponentPropsWithRef`, `ComponentPropsWithoutRef`).
+ */
+export function isReactComponentPropsUtilityName(name: string): boolean {
+  return (
+    name === "ComponentProps" ||
+    name === "ComponentPropsWithRef" ||
+    name === "ComponentPropsWithoutRef"
+  );
+}
+
+/**
+ * Returns true when a TS type node is numeric (`number`, numeric literal, or a
+ * union of such). When `allowOptional` is true, union members may also be
+ * `undefined`/`null` (matching an optional numeric prop); otherwise the union
+ * must be non-empty and every member must itself be numeric.
+ */
+export function isNumericTsType(
+  tsType: unknown,
+  options: { allowOptional?: boolean } = {},
+): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const allowOptional = options.allowOptional ?? false;
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "number";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    if (allowOptional) {
+      return type.types.every((member) => {
+        const memberType = (member as { type?: string } | null)?.type;
+        return (
+          memberType === "TSUndefinedKeyword" ||
+          memberType === "TSNullKeyword" ||
+          isNumericTsType(member, options)
+        );
+      });
+    }
+    return type.types.length > 0 && type.types.every((member) => isNumericTsType(member, options));
+  }
+  return false;
+}
+
+/**
+ * Extracts the name of an Identifier node, or null when the node is not a
+ * (named) Identifier. Accepts any value for convenient optional-chaining use.
+ */
+export function identifierName(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const typed = node as { type?: unknown; name?: unknown };
+  return typed.type === "Identifier" && typeof typed.name === "string" ? typed.name : null;
+}
+
+/** Returns true when `node` is an Identifier whose name equals `name`. */
+export function isIdentifierNamed(node: unknown, name: string): boolean {
+  const typed = node as { type?: string; name?: string } | null | undefined;
+  return typed?.type === "Identifier" && typed.name === name;
+}
+
+/** Type guard for the `undefined` identifier literal. */
+export function isUndefinedIdentifier(
+  node: unknown,
+): node is { type: "Identifier"; name: "undefined" } {
+  return isIdentifierNamed(node, "undefined");
+}
+
+/**
  * Type guard for ArrowFunctionExpression nodes.
  */
 export function isArrowFunctionExpression(node: unknown): node is ArrowFunctionExpression {

@@ -166,3 +166,4 @@ scripts/bench-prepass*.json
 
 # Local agent workflow skills
 .claude/skills/*improvement-loop/
+.claude/worktrees/

@@ -18,6 +18,7 @@ import {
   type TransformOptions,
 } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import { toRealPath } from "../utilities/path-utils.js";
 
 export function applyLeavesOnlyPolicyStep(ctx: TransformContext): StepResult {
@@ -173,11 +174,4 @@ function importedLeafKeyExists(
   }
   const defaultName = findDefaultExportedLocalName(cachedRead(defFile));
   return defaultName ? globalLeafKeys.has(`${defFile}:${defaultName}`) : false;
-}
-
-function findDefaultExportedLocalName(source: string): string | undefined {
-  return (
-    source.match(/\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/)?.[1] ??
-    source.match(/\bexport\s*\{[^}]*\b([A-Z][A-Za-z0-9]*)\s+as\s+default\b[^}]*\}/)?.[1]
-  );
 }
