@@ -1576,8 +1576,14 @@ export const App = () => <Icon />;
     const source = `
 import styled, { css } from "styled-components";
 
+const baseColor = css\`
+  color: navy;
+\`;
+
 const resets = [
   css\`
+    \${baseColor}
+
     & * {
       margin: 0;
     }
@@ -1595,6 +1601,7 @@ export const App = () => <Icon />;
     const result = runPartial(source, "partial-universalSelectorStandaloneCssTemplate.input.tsx");
 
     expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
     expect(result.code).toContain("css`");
     expect(result.code).toContain("& *");
     expect(result.code).not.toContain("styles.standaloneCssHelper");
@@ -1685,7 +1692,7 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
-  it("preserves selector targets referenced by source-kept css helpers", () => {
+  it("preserves selector targets referenced through source-kept helper chains", () => {
     const source = `
 import styled, { css } from "styled-components";
 
@@ -1699,6 +1706,11 @@ const childRules = css\`
   }
 \`;
 
+const parentRules = css\`
+  \${childRules}
+  color: inherit;
+\`;
+
 const Icon = styled.div\`
   width: 16px;
   height: 16px;
@@ -1706,7 +1718,7 @@ const Icon = styled.div\`
 \`;
 
 const Typography = styled.div\`
-  \${childRules}
+  \${parentRules}
 
   & * {
     margin: 0;
@@ -1725,6 +1737,7 @@ export const App = () => (
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
     expect(result.code).toMatch(/const\s+childRules\s*=\s*css`/);
+    expect(result.code).toMatch(/const\s+parentRules\s*=\s*css`/);
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });

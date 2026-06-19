@@ -699,11 +699,13 @@ function collectCssHelperFunctionSelectorIdentifiers(
   cssLocal: string | undefined,
 ): Map<string, Set<string>> {
   const selectorIdentifiers = new Map<string, Set<string>>();
+  const helperReferences = new Map<string, Set<string>>();
   for (const decl of state.styledDecls) {
     if (!decl.isCssHelper || (!decl.isExported && !decl.preserveCssHelperDeclaration)) {
       continue;
     }
     selectorIdentifiers.set(decl.localName, collectTemplateSelectorIdentifiers(decl));
+    helperReferences.set(decl.localName, collectTemplateExpressionIdentifiers(decl));
   }
   for (const [name, helperFn] of state.cssHelperFunctions as Map<
     string,
@@ -713,9 +715,11 @@ function collectCssHelperFunctionSelectorIdentifiers(
       name,
       collectTemplateSelectorIdentifiersFromParts(helperFn.rawCss, helperFn.templateExpressions),
     );
+    helperReferences.set(name, collectExpressionIdentifiers(helperFn.templateExpressions));
   }
 
   if (!cssLocal) {
+    expandCssHelperSelectorIdentifiers(selectorIdentifiers, helperReferences);
     return selectorIdentifiers;
   }
 
@@ -740,17 +744,52 @@ function collectCssHelperFunctionSelectorIdentifiers(
         path.node.id.name,
         collectTemplateSelectorIdentifiersFromTemplate(body.quasi),
       );
+      helperReferences.set(path.node.id.name, collectExpressionIdentifiers(body.quasi.expressions));
     });
 
+  expandCssHelperSelectorIdentifiers(selectorIdentifiers, helperReferences);
   return selectorIdentifiers;
 }
 
 function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {
+  return collectExpressionIdentifiers(decl.templateExpressions);
+}
+
+function collectExpressionIdentifiers(expressions: readonly unknown[] | undefined): Set<string> {
   const identifiers = new Set<string>();
-  for (const expr of decl.templateExpressions ?? []) {
+  for (const expr of expressions ?? []) {
     collectIdentifiers(expr, identifiers);
   }
   return identifiers;
+}
+
+function expandCssHelperSelectorIdentifiers(
+  selectorIdentifiers: Map<string, Set<string>>,
+  helperReferences: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [helperName, references] of helperReferences) {
+      const selectors = selectorIdentifiers.get(helperName);
+      if (!selectors) {
+        continue;
+      }
+      for (const reference of references) {
+        const referencedSelectors = selectorIdentifiers.get(reference);
+        if (!referencedSelectors) {
+          continue;
+        }
+        for (const selectorName of referencedSelectors) {
+          if (selectors.has(selectorName)) {
+            continue;
+          }
+          selectors.add(selectorName);
+          changed = true;
+        }
+      }
+    }
+  }
 }
 
 function collectTemplateSelectorIdentifiersFromTemplate(template: {

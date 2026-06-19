@@ -326,6 +326,7 @@ function collectTemplateReferencePaths(expressions: readonly unknown[], out: Set
 function createCssHelperSourcePreservationPlan(args: {
   root: any;
   j: JSCodeshift;
+  cssLocal: string | undefined;
   styledLocalNames: Set<string>;
   preserveDeclarationOnlyNames: Set<string> | undefined;
   preserveUniversalSelectorHelpers: boolean;
@@ -334,6 +335,7 @@ function createCssHelperSourcePreservationPlan(args: {
   const {
     root,
     j,
+    cssLocal,
     styledLocalNames,
     preserveDeclarationOnlyNames,
     preserveUniversalSelectorHelpers,
@@ -348,6 +350,17 @@ function createCssHelperSourcePreservationPlan(args: {
       noteUniversalSelector,
     });
     for (const helperName of universalStyledTemplateReferences) {
+      sourcePreservedHelperReferences.add(helperName);
+    }
+    const universalStandaloneTemplateReferences =
+      collectCssHelpersUsedByUniversalStandaloneCssTemplates({
+        root,
+        j,
+        cssLocal,
+        styledLocalNames,
+        noteUniversalSelector,
+      });
+    for (const helperName of universalStandaloneTemplateReferences) {
       sourcePreservedHelperReferences.add(helperName);
     }
   }
@@ -381,6 +394,39 @@ function hasExportedCssHelperDeclarations(args: {
       found = init?.tag?.type === "Identifier" && init.tag.name === cssLocal;
     });
   return found;
+}
+
+function collectCssHelpersUsedByUniversalStandaloneCssTemplates(args: {
+  root: any;
+  j: JSCodeshift;
+  cssLocal: string | undefined;
+  styledLocalNames: Set<string>;
+  noteUniversalSelector: (template: TemplateLiteral, rawCss: string) => void;
+}): Set<string> {
+  const { root, j, cssLocal, styledLocalNames, noteUniversalSelector } = args;
+  const helperNames = new Set<string>();
+  if (!cssLocal) {
+    return helperNames;
+  }
+  root
+    .find(j.TaggedTemplateExpression, {
+      tag: { type: "Identifier", name: cssLocal },
+    } as any)
+    .forEach((path: any) => {
+      if (!isStandaloneCssTemplatePath(path, styledLocalNames, cssLocal)) {
+        return;
+      }
+      const template = path.node.quasi as TemplateLiteral;
+      const { templateExpressions, hasUniversalSelector } = parseCssHelperTemplate({
+        template,
+        noteUniversalSelector,
+      });
+      if (!hasUniversalSelector) {
+        return;
+      }
+      collectTemplateReferencePaths(templateExpressions, helperNames);
+    });
+  return helperNames;
 }
 
 function collectCssHelpersUsedByUniversalStyledTemplates(args: {
@@ -582,6 +628,24 @@ function isNodeInsideStyledTemplate(
     }
   }
   return false;
+}
+
+function isStandaloneCssTemplatePath(
+  path: any,
+  styledLocalNames: Set<string>,
+  cssLocal: string,
+): boolean {
+  const parent = path.parentPath?.node;
+  if (parent?.type === "VariableDeclarator" && parent.init === path.node) {
+    return false;
+  }
+  if (
+    (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+    parent.value === path.node
+  ) {
+    return false;
+  }
+  return !isNodeInsideStyledTemplate(path, styledLocalNames, cssLocal);
 }
 
 /**
@@ -1308,6 +1372,7 @@ export function extractAndRemoveCssHelpers(args: {
   const preservationPlan = createCssHelperSourcePreservationPlan({
     root,
     j,
+    cssLocal,
     styledLocalNames,
     preserveDeclarationOnlyNames,
     preserveUniversalSelectorHelpers,
@@ -1729,17 +1794,7 @@ export function extractAndRemoveCssHelpers(args: {
       if (seenStandaloneTemplates.has(p.node)) {
         return;
       }
-      const parent = p.parentPath?.node;
-      if (parent?.type === "VariableDeclarator" && parent.init === p.node) {
-        return;
-      }
-      if (
-        (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
-        parent.value === p.node
-      ) {
-        return;
-      }
-      if (isNodeInsideStyledTemplate(p, styledLocalNames, cssLocal)) {
+      if (!isStandaloneCssTemplatePath(p, styledLocalNames, cssLocal)) {
         return;
       }
       if (isInsideArrowFunction(p)) {
