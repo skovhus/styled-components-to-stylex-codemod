@@ -1742,6 +1742,53 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
+  it("preserves selector targets referenced only by source-kept css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+\`;
+
+const childRules = css\`
+  \${Child} {
+    color: tomato;
+  }
+\`;
+
+export const reset = css\`
+  \${childRules}
+
+  & * {
+    margin: 0;
+  }
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Child>Text</Child>
+  </div>
+);
+`;
+    const result = runPartial(
+      source,
+      "partial-universalSelectorExportedHelperSelectorTarget.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\.span`/);
+    expect(result.code).toMatch(/const\s+childRules\s*=\s*css`/);
+    expect(result.code).toMatch(/export\s+const\s+reset\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
   it("allows source-kept css helpers with unsupported selectors to skip locally", () => {
     const source = `
 import styled, { css } from "styled-components";

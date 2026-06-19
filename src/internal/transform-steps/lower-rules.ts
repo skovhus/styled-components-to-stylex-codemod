@@ -492,6 +492,22 @@ function collectPreservedReferencedStyledDecls(
     styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
   );
   const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
+  const addReferencedComponentNames = (referencedNames: Iterable<string>): boolean => {
+    let added = false;
+    for (const name of referencedNames) {
+      if (componentNames.has(name) && !preservedNames.has(name)) {
+        preservedNames.add(name);
+        added = true;
+      }
+    }
+    return added;
+  };
+  for (const decl of styledDecls) {
+    if (!decl.isCssHelper || (!decl.isExported && !decl.preserveCssHelperDeclaration)) {
+      continue;
+    }
+    addReferencedComponentNames(helperSelectorIdentifiers.get(decl.localName) ?? []);
+  }
   let changed = true;
   while (changed) {
     changed = false;
@@ -505,12 +521,7 @@ function collectPreservedReferencedStyledDecls(
           referencedNames.add(selectorName);
         }
       }
-      for (const name of referencedNames) {
-        if (componentNames.has(name) && !preservedNames.has(name)) {
-          preservedNames.add(name);
-          changed = true;
-        }
-      }
+      changed = addReferencedComponentNames(referencedNames) || changed;
     }
   }
   return preservedNames;
