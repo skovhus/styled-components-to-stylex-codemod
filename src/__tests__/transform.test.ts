@@ -1533,6 +1533,38 @@ export const App = () => <Icon />;
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
   });
 
+  it("preserves object-member css helpers referenced by exported css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const mixins = {
+  typographyReset: css\`
+    margin: 0;
+  \`,
+};
+
+export const typographyStyles = css\`
+  \${mixins.typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+export const App = () => <Icon />;
+`;
+    const result = runPartial(source, "partial-objectHelperExportedCssTemplate.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/typographyReset:\s*css`/);
+    expect(result.code).toContain("${mixins.typographyReset}");
+    expect(result.code).toMatch(/export\s+const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
   it("preserves universal-selector standalone css templates instead of rewriting them", () => {
     const source = `
 import styled, { css } from "styled-components";
@@ -1560,6 +1592,47 @@ export const App = () => <Icon />;
     expect(result.code).toContain("& *");
     expect(result.code).not.toContain("styles.standaloneCssHelper");
     expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+  });
+
+  it("propagates universal-selector skips through exported composed css helpers", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+export const typographyReset = css\`
+  & * {
+    margin: 0;
+  }
+\`;
+
+export const typographyStyles = css\`
+  \${typographyReset}
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  \${typographyStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorExportedComposedHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/export\s+const\s+typographyReset\s*=\s*css`/);
+    expect(result.code).toMatch(/export\s+const\s+typographyStyles\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {

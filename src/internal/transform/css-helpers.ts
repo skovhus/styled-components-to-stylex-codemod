@@ -15,7 +15,10 @@ import {
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 import { isMemberExpression } from "../lower-rules/utils.js";
-import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
+import {
+  collectMemberExpressionPaths,
+  expressionsReferenceAnyPath,
+} from "../utilities/member-expression-paths.js";
 
 type Loc = { line: number; column: number } | null;
 
@@ -303,6 +306,15 @@ function preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls: Styled
   }
 }
 
+function collectTemplateMemberExpressionPaths(
+  expressions: readonly unknown[],
+  out: Set<string>,
+): void {
+  for (const expression of expressions) {
+    collectMemberExpressionPaths(expression, out);
+  }
+}
+
 function removeCssHelperDeclarator(j: JSCodeshift, path: any): void {
   const decl = path.parentPath?.node;
   if (decl?.type !== "VariableDeclaration") {
@@ -417,7 +429,7 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
     }
     if (
       !isNodeInsideStyledTemplate(p, styledLocalNames) &&
-      !isNodeInsideExtractableCssVariableTemplate(p, cssLocal)
+      !isNodeInsideCssVariableTemplate(p, cssLocal)
     ) {
       allSafe = false;
     }
@@ -426,7 +438,7 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
   return allSafe;
 }
 
-function isNodeInsideExtractableCssVariableTemplate(nodePath: any, cssLocal?: string): boolean {
+function isNodeInsideCssVariableTemplate(nodePath: any, cssLocal?: string): boolean {
   if (!cssLocal) {
     return false;
   }
@@ -1048,6 +1060,7 @@ export function extractAndRemoveCssHelpers(args: {
   const cssHelperTemplateReplacements: CssHelperTemplateReplacement[] = [];
   const closureVariableUsages: UnsupportedCssUsage[] = [];
   const pendingCssHelperRemovals: PendingCssHelperRemoval[] = [];
+  const preservedCssVariableHelperMemberReferences = new Set<string>();
   let cssHelperHasUniversalSelectors = false;
   let cssHelperUniversalSelectorLoc: Loc = null;
   let changed = false;
@@ -1142,11 +1155,21 @@ export function extractAndRemoveCssHelpers(args: {
       const referencesPreservedStyledComponentSelector =
         isExported && templateReferencesStyledComponentSelector(template, preservedSelectorNames);
       if (referencesPreservedStyledComponentSelector) {
+        collectTemplateMemberExpressionPaths(
+          templateExpressions,
+          preservedCssVariableHelperMemberReferences,
+        );
         return;
       }
       const preserveDeclarationOnly =
         (preserveDeclarationOnlyNames?.has(localName) ?? false) ||
         (preserveUniversalSelectorHelpers && hasUniversalSelector);
+      if (isExported || preserveDeclarationOnly) {
+        collectTemplateMemberExpressionPaths(
+          templateExpressions,
+          preservedCssVariableHelperMemberReferences,
+        );
+      }
 
       cssHelperDecls.push({
         ...placementHints,
@@ -1350,6 +1373,7 @@ export function extractAndRemoveCssHelpers(args: {
         );
         const preserveMember =
           (preserveDeclarationOnlyNames?.has(qualifiedName) ?? false) ||
+          preservedCssVariableHelperMemberReferences.has(qualifiedName) ||
           (preserveUniversalSelectorHelpers && hasUniversalSelector);
 
         const decl: StyledDecl = {
@@ -1442,8 +1466,10 @@ export function extractAndRemoveCssHelpers(args: {
       }
     });
 
-  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
+  if (preserveUniversalSelectorHelpers) {
     preserveCssHelpersComposedFromUniversalSelectors(cssHelperDecls);
+  }
+  if (preserveUniversalSelectorHelpers && pendingCssHelperRemovals.length > 0) {
     for (const removal of pendingCssHelperRemovals) {
       const helperDecl = cssHelperDecls.find((decl) => decl.localName === removal.localName);
       if (helperDecl?.preserveCssHelperDeclaration) {
