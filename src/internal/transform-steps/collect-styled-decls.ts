@@ -156,13 +156,22 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   ctx.universalSelectorLoc = universalSelectorLoc;
 
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
-  // Skip transforming the entire file to avoid producing incorrect output.
+  // With partial migration enabled, preserve only the declarations that contain them; otherwise keep
+  // the legacy whole-file bail.
   if (hasUniversalSelectors && ctx.options.transformMode !== "leavesOnly") {
     ctx.warnings.push({
       severity: "warning",
       type: "Universal selectors (`*`) are currently unsupported",
       loc: universalSelectorLoc,
     });
+    if (ctx.options.allowPartialMigration === true) {
+      for (const decl of styledDecls) {
+        if (decl.hasUniversalSelector) {
+          decl.skipTransform = true;
+        }
+      }
+      return CONTINUE;
+    }
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 

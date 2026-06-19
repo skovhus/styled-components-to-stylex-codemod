@@ -1286,6 +1286,55 @@ export const App = () => (
     );
   });
 
+  it.each([
+    ["universal descendant selector", "& *"],
+    ["universal child selector", "& > *"],
+  ])("skips only the declaration with a %s", (_label, selector) => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div\`
+  color: navy;
+
+  ${selector} {
+    margin: 0;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelector.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: "Universal selectors (`*`) are currently unsupported",
+      }),
+    );
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: PARTIAL_MIGRATION_INCOMPLETE_WARNING,
+        context: expect.objectContaining({
+          skippedDeclarations: ["Typography"],
+          convertedDeclarations: ["Icon"],
+        }),
+      }),
+    );
+  });
+
   it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
     // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
     // must survive the re-emit. Emitting only the alias would produce

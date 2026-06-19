@@ -250,19 +250,22 @@ function parseCssHelperTemplate(args: {
   rules: CssRuleIR[];
   rawCss: string;
   templateExpressions: Expression[];
+  hasUniversalSelector: boolean;
 } {
   const { template, noteUniversalSelector } = args;
   const parsed = parseStyledTemplateLiteral(template);
   const rawCss = `& { ${parsed.rawCss} }`;
   const stylisAst = compile(rawCss);
   const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
-  if (hasUniversalSelectorInRules(rules)) {
+  const hasUniversalSelector = hasUniversalSelectorInRules(rules);
+  if (hasUniversalSelector) {
     noteUniversalSelector(template, parsed.rawCss);
   }
   return {
     rules,
     rawCss,
     templateExpressions: parsed.slots.map((s) => s.expression),
+    hasUniversalSelector,
   };
 }
 
@@ -1036,7 +1039,7 @@ export function extractAndRemoveCssHelpers(args: {
       const isExported = exportedLocalNames.has(localName);
 
       const template = init.quasi as TemplateLiteral;
-      const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
+      const { rules, rawCss, templateExpressions, hasUniversalSelector } = parseCssHelperTemplate({
         template,
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
@@ -1066,6 +1069,7 @@ export function extractAndRemoveCssHelpers(args: {
         rules,
         templateExpressions,
         rawCss,
+        ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
         isExported,
         preserveCssHelperDeclaration: preserveDeclarationOnly,
         suppressCssHelperStyleEmission: preserveDeclarationOnly,
@@ -1253,7 +1257,8 @@ export function extractAndRemoveCssHelpers(args: {
         const stylisAst = compile(rawCss);
         const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
 
-        if (hasUniversalSelectorInRules(rules)) {
+        const hasUniversalSelector = hasUniversalSelectorInRules(rules);
+        if (hasUniversalSelector) {
           noteCssHelperUniversalSelector(template, parsed.rawCss);
         }
 
@@ -1272,6 +1277,7 @@ export function extractAndRemoveCssHelpers(args: {
           rules,
           templateExpressions: [],
           rawCss,
+          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
           preserveCssHelperDeclaration: preserveMember,
           suppressCssHelperStyleEmission: preserveMember,
         };
@@ -1453,7 +1459,7 @@ export function extractAndRemoveCssHelpers(args: {
       const localName = getStandaloneCssHelperName(p);
       const styleKey = toStyleKey(localName);
       const template = p.node.quasi as TemplateLiteral;
-      const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
+      const { rules, rawCss, templateExpressions, hasUniversalSelector } = parseCssHelperTemplate({
         template,
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
@@ -1466,6 +1472,7 @@ export function extractAndRemoveCssHelpers(args: {
         rules,
         templateExpressions,
         rawCss,
+        ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
       });
       cssHelperTemplateReplacements.push({ node: p.node, styleKey });
       seenStandaloneTemplates.add(p.node);
