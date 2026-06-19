@@ -1775,6 +1775,43 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div`/);
   });
 
+  it("preserves css helpers used by universal styled-call css templates", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const baseColor = css\`
+  color: navy;
+\`;
+
+const Icon = styled.div\`
+  width: 16px;
+  height: 16px;
+  background-color: green;
+\`;
+
+const Typography = styled.div(() => css\`
+  \${baseColor}
+
+  & * {
+    margin: 0;
+  }
+\`);
+
+export const App = () => (
+  <div>
+    <Icon />
+    <Typography><span>Text</span></Typography>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-universalSelectorStyledCallHelper.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+baseColor\s*=\s*css`/);
+    expect(result.code).toMatch(/sx=\{styles\.icon\}/);
+    expect(result.code).toMatch(/const\s+Typography\s*=\s*styled\.div\(/);
+  });
+
   it("preserves selector targets referenced through source-kept helper chains", () => {
     const source = `
 import styled, { css } from "styled-components";

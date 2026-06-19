@@ -64,6 +64,20 @@ type CssHelperSourcePreservationPlan = {
   preserveUniversalSelectorHelpers: boolean;
 };
 
+type MaybeCssTemplateBody = {
+  type?: string;
+  tag?: { type?: string; name?: string };
+  quasi?: TemplateLiteral;
+  body?: Array<{
+    type?: string;
+    argument?: {
+      type?: string;
+      tag?: { type?: string; name?: string };
+      quasi?: TemplateLiteral;
+    };
+  }>;
+};
+
 export function removeInlinedCssHelperFunctions(args: {
   root: any;
   j: JSCodeshift;
@@ -352,6 +366,7 @@ function createCssHelperSourcePreservationPlan(args: {
       root,
       j,
       styledLocalNames,
+      cssLocal,
       noteUniversalSelector,
     });
     for (const helperName of universalStyledTemplateReferences) {
@@ -438,9 +453,10 @@ function collectCssHelpersUsedByUniversalStyledTemplates(args: {
   root: any;
   j: JSCodeshift;
   styledLocalNames: Set<string>;
+  cssLocal: string | undefined;
   noteUniversalSelector: (template: TemplateLiteral, rawCss: string) => void;
 }): Set<string> {
-  const { root, j, styledLocalNames, noteUniversalSelector } = args;
+  const { root, j, styledLocalNames, cssLocal, noteUniversalSelector } = args;
   const helperNames = new Set<string>();
   root.find(j.TaggedTemplateExpression).forEach((path: any) => {
     if (!isStyledTag(styledLocalNames, path.node.tag)) {
@@ -460,7 +476,66 @@ function collectCssHelpersUsedByUniversalStyledTemplates(args: {
       helperNames,
     );
   });
+  if (!cssLocal) {
+    return helperNames;
+  }
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "CallExpression" },
+    } as any)
+    .forEach((path: any) => {
+      const init = path.node.init;
+      if (
+        init?.callee?.type !== "MemberExpression" ||
+        init.callee.object?.type !== "Identifier" ||
+        !styledLocalNames.has(init.callee.object.name)
+      ) {
+        return;
+      }
+      const firstArg = init.arguments?.[0];
+      if (firstArg?.type !== "ArrowFunctionExpression") {
+        return;
+      }
+      const template = extractCssTemplateFromArrowBody(firstArg.body, cssLocal);
+      if (!template) {
+        return;
+      }
+      const { templateExpressions, hasUniversalSelector } = parseCssHelperTemplate({
+        template,
+        noteUniversalSelector,
+      });
+      if (!hasUniversalSelector) {
+        return;
+      }
+      collectTemplateReferencePaths(templateExpressions, helperNames);
+    });
   return helperNames;
+}
+
+function extractCssTemplateFromArrowBody(
+  body: MaybeCssTemplateBody | null | undefined,
+  cssLocal: string,
+): TemplateLiteral | null {
+  if (
+    body?.type === "TaggedTemplateExpression" &&
+    body.tag?.type === "Identifier" &&
+    body.tag.name === cssLocal
+  ) {
+    return body.quasi ?? null;
+  }
+  if (body?.type !== "BlockStatement") {
+    return null;
+  }
+  const returnStatement = body.body?.find((stmt) => stmt.type === "ReturnStatement");
+  const argument = returnStatement?.argument;
+  if (
+    argument?.type === "TaggedTemplateExpression" &&
+    argument.tag?.type === "Identifier" &&
+    argument.tag.name === cssLocal
+  ) {
+    return argument.quasi ?? null;
+  }
+  return null;
 }
 
 function shouldPreserveCssHelperSourceOnly(
