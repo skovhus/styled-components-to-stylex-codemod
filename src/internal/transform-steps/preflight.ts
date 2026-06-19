@@ -4,7 +4,10 @@
  */
 import type { ASTPath, ImportDeclaration } from "jscodeshift";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
-import { isStyledTag as isStyledTagImpl } from "../transform/css-helpers.js";
+import {
+  collectStyledDefaultImportLocalNames,
+  isStyledTag as isStyledTagImpl,
+} from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
 
 /**
@@ -48,24 +51,7 @@ export function preflight(ctx: TransformContext): StepResult {
 
   // Identify local names that refer to the styled-components default import (e.g. `styled`)
   // for template ancestry checks.
-  const styledLocalNames = new Set<string>();
-  styledImports.forEach((imp: any) => {
-    const specs = imp.node.specifiers ?? [];
-    for (const spec of specs) {
-      if (spec.type === "ImportDefaultSpecifier" && spec.local?.type === "Identifier") {
-        styledLocalNames.add(spec.local.name);
-        continue;
-      }
-      if (
-        spec.type === "ImportSpecifier" &&
-        spec.imported?.type === "Identifier" &&
-        spec.imported.name === "styled" &&
-        spec.local?.type === "Identifier"
-      ) {
-        styledLocalNames.add(spec.local.name);
-      }
-    }
-  });
+  const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
   ctx.styledLocalNames = styledLocalNames;
   ctx.isStyledTag = (tag: any): boolean => isStyledTagImpl(styledLocalNames, tag);
 
