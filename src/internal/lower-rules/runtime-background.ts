@@ -3,6 +3,7 @@
  * Keep behavior identical to the original inline definitions.
  */
 import {
+  borderLonghandProps,
   cssPropertyToStylexProp,
   isCssShorthandProperty,
   parseBorderShorthandParts,
@@ -35,38 +36,24 @@ export function applyThemeBooleanValue(
       : null;
 
   // Border shorthand → expand to width/style/color
-  const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
-  if (borderMatch) {
+  const borderLonghand = borderLonghandProps(cssProp);
+  if (borderLonghand) {
     if (strValue === null) {
       return false;
     }
-    const direction = borderMatch[1]
-      ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
-      : "";
+    const { widthProp, styleProp, colorProp } = borderLonghand;
     const parsed = parseBorderShorthandParts(strValue);
     if (!parsed) {
       return false;
     }
     if (parsed.width) {
-      target[`border${direction}Width`] = appendImportantToStyleValue(
-        j,
-        j.literal(parsed.width),
-        important,
-      );
+      target[widthProp] = appendImportantToStyleValue(j, j.literal(parsed.width), important);
     }
     if (parsed.style) {
-      target[`border${direction}Style`] = appendImportantToStyleValue(
-        j,
-        j.literal(parsed.style),
-        important,
-      );
+      target[styleProp] = appendImportantToStyleValue(j, j.literal(parsed.style), important);
     }
     if (parsed.color) {
-      target[`border${direction}Color`] = appendImportantToStyleValue(
-        j,
-        j.literal(parsed.color),
-        important,
-      );
+      target[colorProp] = appendImportantToStyleValue(j, j.literal(parsed.color), important);
     }
     return true;
   }

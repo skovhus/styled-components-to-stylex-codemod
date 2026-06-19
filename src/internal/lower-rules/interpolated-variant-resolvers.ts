@@ -8,6 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { LowerRulesState } from "./state.js";
 import {
   BORDER_STYLES,
+  borderLonghandProps,
   cssPropertyToStylexProp,
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
@@ -311,11 +312,9 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     };
 
     // Special handling for border shorthand (including directional borders)
-    const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
-    if (borderMatch) {
-      const direction = borderMatch[1]
-        ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
-        : "";
+    const borderLonghand = borderLonghandProps(cssProp);
+    if (borderLonghand) {
+      const { direction } = borderLonghand;
       const tempBucket: Record<string, unknown> = {};
       if (expandBorderShorthand(tempBucket, parsed.exprAst, direction)) {
         for (const [prop, val] of Object.entries(tempBucket)) {
