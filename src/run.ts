@@ -151,6 +151,15 @@ export interface RunTransformOptions {
   allowPartialMigration?: boolean;
 
   /**
+   * Experimental "migration adapter mode" (requires `allowPartialMigration`).
+   * Allows a StyleX leaf to restyle a styled-components base when their declared
+   * CSS property sets are provably disjoint. See `TransformOptions` for details.
+   *
+   * @default false
+   */
+  allowStyleXOverStyledComponents?: boolean;
+
+  /**
    * Also collect per-file outcomes as if each file were transformed by itself,
    * while reusing the same prepass. Useful for candidate finders that recommend
    * files to run individually.
@@ -719,6 +728,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformedFileSources,
     transientPropRenames,
     allowPartialMigration: options.allowPartialMigration ?? (leavesOnly ? true : false),
+    allowStyleXOverStyledComponents: options.allowStyleXOverStyledComponents ?? false,
     transformMode: leavesOnly ? "leavesOnly" : (options.transformMode ?? "all"),
     globalLeafKeys: crossFilePrepassResult.globalLeafKeys,
     resolveModule: (fromFile: string, specifier: string) =>

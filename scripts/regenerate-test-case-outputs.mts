@@ -112,6 +112,7 @@ async function updateFixture(name: string, ext: string) {
       crossFilePrepassResult,
       sidecarFiles,
       allowPartialMigration: name.startsWith("partial-"),
+      allowStyleXOverStyledComponents: name.includes("forwardRestyle"),
     },
     { source: input, path: inputPath },
     { parser },

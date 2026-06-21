@@ -21,6 +21,7 @@
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
+import { styledDeclsHaveDisjointStyleProps } from "../utilities/cascade-disjoint.js";
 
 export function detectPartialCascadeConflictStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
@@ -47,6 +48,18 @@ export function detectPartialCascadeConflictStep(ctx: TransformContext): StepRes
     }
     const baseDecl = declByLocalName.get(derived.base.ident);
     if (!baseDecl || !baseDecl.skipTransform) {
+      continue;
+    }
+    // Experimental migration adapter mode: allow the StyleX leaf to restyle the
+    // styled-components base when their declared property sets are provably
+    // disjoint, so no property conflict can cross the boundary. Restricted to a
+    // base that does not itself extend another component, whose full styling we
+    // cannot see from this step.
+    if (
+      ctx.options.allowStyleXOverStyledComponents &&
+      baseDecl.base.kind === "intrinsic" &&
+      styledDeclsHaveDisjointStyleProps(derived, baseDecl)
+    ) {
       continue;
     }
     ctx.warnings.push({

@@ -48,6 +48,15 @@ function isPartialFixture(name: string): boolean {
   return name.startsWith("partial-") || PRESERVED_FIXTURES.has(name);
 }
 
+/**
+ * Fixtures exercising the experimental "migration adapter mode": a StyleX leaf
+ * may restyle a styled-components base when their declared property sets are
+ * disjoint. These also need `allowPartialMigration` (they are `partial-*`).
+ */
+function isForwardRestyleFixture(name: string): boolean {
+  return name.includes("forwardRestyle");
+}
+
 function styledComponentsDisallowedImports(name: string): string[] {
   const disallowed = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
     ? ["styled", "keyframes", "createGlobalStyle"]
@@ -563,13 +572,67 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter, allowPartialMigration, crossFileInfo },
+      {
+        adapter: fixtureAdapter,
+        allowPartialMigration,
+        // Exercise the cascade guard with the experimental mode enabled too: the
+        // `_unsupported.partial-*` cascade fixtures have overlapping property
+        // sets, so they must still bail even when the mode is on.
+        allowStyleXOverStyledComponents: allowPartialMigration,
+        crossFileInfo,
+      },
     );
     // With per-decl skips, other decls in the fixture may transform successfully while
     // the one carrying the unsupported pattern is preserved. Require the expected
     // warning to be present rather than forcing the whole file to bail.
     expect(result.warnings.length).toBeGreaterThanOrEqual(1);
     expect(result.warnings.map((w) => w.type)).toContain(expectedWarning);
+  });
+});
+
+describe("migration adapter mode (allowStyleXOverStyledComponents)", () => {
+  // Base stays styled-components (unsupported descendant selector); the leaf
+  // only sets properties the base never sets.
+  const disjointSource = [
+    "import styled from 'styled-components';",
+    "const Base = styled.div`color: navy; & a.active { color: tomato; }`;",
+    "const Derived = styled(Base)`padding: 16px; font-size: 18px;`;",
+    "export const App = () => (<div><Base><a className='active'>b</a></Base><Derived>d</Derived></div>);",
+  ].join("\n");
+  // The leaf overrides `color`, which the base also sets — overlapping props.
+  const overlappingSource = [
+    "import styled from 'styled-components';",
+    "const Base = styled.div`color: navy; & a.active { color: tomato; }`;",
+    "const Derived = styled(Base)`color: red; padding: 16px;`;",
+    "export const App = () => (<div><Base><a className='active'>b</a></Base><Derived>d</Derived></div>);",
+  ].join("\n");
+
+  const cascadeBailWarning = (warnings: { type: string }[]): boolean =>
+    warnings.some((w) => w.type.includes("StyleX leaf wrap a styled-components base"));
+
+  it("is opt-in: disjoint props still bail when the mode is off", () => {
+    const result = runTransformWithDiagnostics(disjointSource, { allowPartialMigration: true });
+    expect(cascadeBailWarning(result.warnings)).toBe(true);
+  });
+
+  it("converts the leaf over a styled-components base when props are disjoint", () => {
+    const result = runTransformWithDiagnostics(disjointSource, {
+      allowPartialMigration: true,
+      allowStyleXOverStyledComponents: true,
+    });
+    expect(cascadeBailWarning(result.warnings)).toBe(false);
+    expect(result.code).toContain("stylex.create");
+    // Leaf converted to StyleX; base preserved as styled-components.
+    expect(result.code).toContain("const Base = styled.div");
+    expect(result.code).not.toContain("styled(Base)");
+  });
+
+  it("still bails when the leaf and base share a property, even with the mode on", () => {
+    const result = runTransformWithDiagnostics(overlappingSource, {
+      allowPartialMigration: true,
+      allowStyleXOverStyledComponents: true,
+    });
+    expect(cascadeBailWarning(result.warnings)).toBe(true);
   });
 });
 
@@ -4676,7 +4739,11 @@ export const App = () => <Title>Imported root with computed helper</Title>;
     const crossFileInfo = getCrossFileInfo(inputPath, parser);
     const diagnostics = runTransformWithDiagnostics(
       input,
-      { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
+      {
+        crossFileInfo,
+        allowPartialMigration: isPartialFixture(name),
+        allowStyleXOverStyledComponents: isForwardRestyleFixture(name),
+      },
       inputPath,
       parser,
     );

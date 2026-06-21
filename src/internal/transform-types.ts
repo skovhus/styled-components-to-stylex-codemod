@@ -128,6 +128,24 @@ export interface TransformOptions extends Options {
   transformMode?: TransformMode;
 
   /**
+   * Experimental "migration adapter mode". Only meaningful together with
+   * `allowPartialMigration` (otherwise a skipped base already escalates to a
+   * whole-file bail).
+   *
+   * Normally the codemod refuses the unsafe cascade direction — a StyleX leaf
+   * (`styled(Base)` converted to StyleX) wrapping a styled-components base —
+   * because styled-components CSS is injected at runtime after StyleX's layered
+   * atomic CSS and would win any property conflict. When this flag is true, the
+   * codemod is allowed to convert such a leaf anyway, but ONLY when the leaf's
+   * declared CSS property set is provably disjoint from the base's. Disjoint
+   * property sets mean there is no conflict to lose, so the forward (top-down)
+   * conversion stays lossless.
+   *
+   * @default false
+   */
+  allowStyleXOverStyledComponents?: boolean;
+
+  /**
    * From prepass when leaves-only mode is on: keys `${realpath}:${bindingName}` for leaf
    * styled definitions. An empty set means no leaf bindings were found (per-decl policy
    * treats all `styled(Component)` bases like missing keys). Used internally by the runner.
