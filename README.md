@@ -37,6 +37,8 @@ The adapter maps your project's `props.theme.*` access, CSS variables, and helpe
 
 When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
 
+To find out exactly which files are blocking the rest of the migration, run the analysis-only **migration plan** (`analyzeMigrationPlan` / `formatMigrationPlan`, see [Planning manual conversions](#planning-manual-conversions)). It lists the files the codemod cannot convert on its own, ordered bottom-up, with how many consumers each has, which exports to convert, and the bail reasons — so you know where to focus to unblock the most automatic migration.
+
 ### 4. Verify, iterate, clean up
 
 Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
@@ -379,6 +381,32 @@ await runTransform({
 ```
 
 </details>
+
+### Planning manual conversions
+
+Some files use patterns the codemod cannot convert automatically (unsupported selectors, `createGlobalStyle`, etc.). Until those are converted by hand, every file that depends on them stays blocked too. `analyzeMigrationPlan` runs the codemod in analysis-only mode (it never writes files) and returns the ordered list of files you should convert manually to unblock the most automatic migration:
+
+```ts
+import { analyzeMigrationPlan, formatMigrationPlan } from "styled-components-to-stylex-codemod";
+
+const plan = await analyzeMigrationPlan({
+  files: "src/**/*.tsx",
+  consumerPaths: "src/**/*.tsx",
+  adapter, // the same adapter you pass to runTransform
+});
+
+console.log(formatMigrationPlan(plan));
+```
+
+It only lists **genuine blockers** — files the codemod truly can't convert — not files that merely bail because a dependency hasn't been converted yet (those resolve on their own once the blocker is fixed). For each blocker it reports:
+
+- how many files it **unblocks** for automatic migration and how many **consumers** import it,
+- which **exports** consumers depend on (so you know which components to convert first),
+- the **bail reasons** with source locations.
+
+`formatMigrationPlan` renders a human-readable report (high-impact files first, in dependency order; the standalone long tail grouped by reason). The structured `MigrationPlan` object is also available if you want to build your own tooling.
+
+You can try it against this repo's own fixtures with `node scripts/migration-plan.mts`.
 
 ### Adapter
 

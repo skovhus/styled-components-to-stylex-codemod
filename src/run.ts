@@ -173,6 +173,8 @@ export interface RunTransformResult {
   timeElapsed: number;
   /** Warnings emitted during transformation */
   warnings: CollectedWarning[];
+  /** Per-file outcomes from the dependency-ordered run. */
+  fileResults: TransformFileResult[];
   /** Per-file outcomes from isolated transforms, populated when requested. */
   standaloneFileResults?: TransformFileResult[];
   /** Warnings from isolated transforms, populated when requested. */
@@ -181,6 +183,17 @@ export interface RunTransformResult {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/** Expand glob pattern(s) into file paths relative to `cwd`. */
+export async function expandGlobFiles(patterns: readonly string[], cwd: string): Promise<string[]> {
+  const filePaths: string[] = [];
+  for (const pattern of patterns) {
+    for await (const file of glob(pattern, { cwd })) {
+      filePaths.push(file);
+    }
+  }
+  return filePaths;
+}
 
 /**
  * Run the styled-components to StyleX transform on files matching the glob pattern.
@@ -400,14 +413,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
-  let filePaths: string[] = [];
-
   const cwd = process.cwd();
-  for (const pattern of patterns) {
-    for await (const file of glob(pattern, { cwd })) {
-      filePaths.push(file);
-    }
-  }
+  let filePaths: string[] = await expandGlobFiles(patterns, cwd);
 
   if (filePaths.length === 0) {
     Logger.warn("No files matched the provided glob pattern(s)");
@@ -418,6 +425,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       transformed: 0,
       timeElapsed: 0,
       warnings: [],
+      fileResults: [],
     };
   }
 
@@ -429,12 +437,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ? consumerPathsOption
       : [consumerPathsOption]
     : [];
-  const consumerFilePaths: string[] = [];
-  for (const pattern of consumerPatterns) {
-    for await (const file of glob(pattern, { cwd })) {
-      consumerFilePaths.push(file);
-    }
-  }
+  const consumerFilePaths = await expandGlobFiles(consumerPatterns, cwd);
 
   if (consumerPatterns.length > 0 && consumerFilePaths.length === 0) {
     throw new Error(
@@ -862,7 +865,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   const report = Logger.createReport();
-  report.print();
+  if (!(options.silent ?? false)) {
+    report.print();
+  }
 
   return {
     errors: result.error,
@@ -871,6 +876,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformed: result.ok,
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
+    fileResults: result.files,
     standaloneFileResults: standaloneResult?.files,
     standaloneWarnings,
   };

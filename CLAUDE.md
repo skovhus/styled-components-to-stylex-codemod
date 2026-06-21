@@ -96,6 +96,7 @@ Static styles produce atomic CSS classes that can be shared and cached, while dy
 
 Run repo scripts directly with `node`, see `scripts` folder
 
+- `scripts/migration-plan.mts` - Analysis-only mode: prints the ordered list of files that must be converted by hand to unblock more automatic migration (bottom-up dependency order), with per-file consumer counts, the exports to convert, and the bail reasons. Defaults to the repo's own `test-cases` with the fixture adapter; pass `--files <glob>` / `--consumers <glob>` to target other code. Backed by the public `analyzeMigrationPlan()` / `formatMigrationPlan()` API.
 - `scripts/debug-test.mts` - Generates `.actual.tsx` files for failing test cases to compare against expected `.output.tsx` files. Run with `node scripts/debug-test.mts`.
 - `scripts/regenerate-test-case-outputs.mts` - Updates test case output files.
   - All supported test cases: `node scripts/regenerate-test-case-outputs.mts`
