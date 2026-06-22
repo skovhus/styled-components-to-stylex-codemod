@@ -194,6 +194,43 @@ describe("analyzeMigrationPlan", () => {
     expect(report.indexOf("token.tsx")).toBeLessThan(report.indexOf("Base.tsx"));
   });
 
+  it("reveals a blocker masked by a cascade conflict via fixpoint passes", async () => {
+    // Token is a blocker. Base = styled(Token) ALSO has its own unsupported
+    // selector, but a single pass only surfaces Base's cascade bail. The fixpoint
+    // must assume Token converted, re-run, and reveal Base as a blocker too —
+    // and must NOT count Base as auto-unlocked by Token.
+    const tmp = await writeProject({
+      "src/token.tsx": [
+        'import styled from "styled-components";',
+        "export const Token = styled.span`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        'import { Token } from "./token";',
+        "export const Base = styled(Token)`",
+        "  & > div { color: blue; }",
+        "`;",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    const order = plan.manualConversionFiles.map((f) => f.filePath);
+    expect(order).toHaveLength(2);
+    expect(order[0]!.endsWith("token.tsx")).toBe(true);
+    expect(order[1]!.endsWith("Base.tsx")).toBe(true);
+    // Base is itself a blocker, so converting Token does not "unlock" it.
+    expect(plan.unlocksFileCount).toBe(0);
+    const token = plan.manualConversionFiles.find((f) => f.filePath.endsWith("token.tsx"))!;
+    expect(token.unlocksFileCount).toBe(0);
+  });
+
   it("ignores type-only imports when counting consumers", async () => {
     // Base is a blocker; Consumer only imports a type from it, so Base has no
     // runtime consumer and the type import must not inflate its consumer count.

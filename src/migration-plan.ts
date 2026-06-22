@@ -12,7 +12,12 @@ import { readFileSync } from "node:fs";
 
 import type { AdapterInput } from "./adapter.js";
 import { expandGlobFiles, runTransform, type TransformFileResult } from "./run.js";
-import { CASCADE_CONFLICT_WARNING, type CollectedWarning, Logger } from "./internal/logger.js";
+import {
+  CASCADE_CONFLICT_WARNING,
+  getCascadeDependedFilePath,
+  type CollectedWarning,
+  Logger,
+} from "./internal/logger.js";
 import { createModuleResolver } from "./internal/prepass/resolve-imports.js";
 import {
   createPrepassParser,
@@ -103,79 +108,52 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
 
   const parser = options.parser ?? "tsx";
 
-  // 1. Run the codemod in dependency order (dry, silent) to discover what it
-  //    cannot convert. The dependency-ordered run resolves transient
-  //    "dependency not converted yet" bails on its own, so whatever remains
-  //    unconverted with a non-cascade reason is a genuine blocker.
-  //    `Logger` is process-global, so snapshot the pre-existing warnings: keep
-  //    only the ones this run produced, and restore the snapshot afterward so an
-  //    analysis-only dry run never leaks blocker warnings into a later transform
-  //    in the same process.
-  const warningsSnapshot = Logger.createReport().getWarnings();
-  const priorWarnings = new Set(warningsSnapshot);
-  let result: Awaited<ReturnType<typeof runTransform>>;
-  try {
-    result = await runTransform({
-      files: options.files,
-      consumerPaths: options.consumerPaths,
-      adapter: options.adapter,
-      parser,
-      dryRun: true,
-      silent: true,
-    });
-  } finally {
-    Logger.restoreWarnings(warningsSnapshot);
-  }
-  const warnings = result.warnings.filter((warning) => !priorWarnings.has(warning));
+  // First pass with no assumptions establishes the real cascade relationships:
+  // which files bail only because they wrap an unconverted styled import.
+  const firstPass = await runAnalysisPass(options, parser, []);
+  const cascadeUnblocks = collectCascadeUnblocks(firstPass.warnings, cwd);
 
-  const blockerReasons = collectGenuineBlockers(warnings, result.fileResults, cwd);
+  // Fixpoint: a cascade conflict bails a file before rule lowering, so a file
+  // that wraps a blocker AND has its own unsupported pattern only shows the
+  // cascade warning at first. Assume the blockers found so far are converted and
+  // re-run; consumers whose own issues were masked now surface. Repeat until no
+  // new blockers appear.
+  let blockerReasons = collectGenuineBlockers(firstPass.warnings, firstPass.fileResults, cwd);
+  const assumedConverted = new Set<string>();
+  for (let pass = 0; pass < MAX_ANALYSIS_PASSES; pass++) {
+    const newlyFound = [...blockerReasons.keys()].filter((file) => !assumedConverted.has(file));
+    if (newlyFound.length === 0) {
+      break;
+    }
+    for (const file of newlyFound) {
+      assumedConverted.add(file);
+    }
+    const nextPass = await runAnalysisPass(options, parser, [...assumedConverted]);
+    blockerReasons = collectGenuineBlockers(nextPass.warnings, nextPass.fileResults, cwd);
+  }
+
   if (blockerReasons.size === 0) {
     return { manualConversionFiles: [], totalFiles: runFiles.length, unlocksFileCount: 0 };
   }
 
-  // 2. Build the import graph across every scanned file so we can attribute
-  //    consumers and imported exports to each blocker, and order blockers
-  //    bottom-up (a blocker imported by another blocker is converted first).
+  // Build the import graph across every scanned file, then attribute consumers,
+  // dependencies, and impact weights to each blocker (precomputed once).
   const graph = buildImportGraph(scanFiles, cwd, parser);
-  const cascadeUnblocks = collectCascadeUnblocks(warnings, cwd);
   const displayByNorm = buildDisplayMap(scanFiles, cwd);
-
   const blockerSet = new Set(blockerReasons.keys());
-  const consumersByBlocker = new Map<string, Map<string, Set<string>>>(); // blocker -> export -> consumers
-  const depsByBlocker = new Map<string, Set<string>>(); // blocker -> blocker deps
-  for (const blocker of blockerSet) {
-    consumersByBlocker.set(blocker, new Map());
-    depsByBlocker.set(blocker, new Set());
-  }
+  const {
+    consumersByBlocker,
+    depsByBlocker,
+    consumerCountByBlocker,
+    unlockedByBlocker,
+    weightByBlocker,
+  } = buildBlockerGraph(blockerSet, graph, cascadeUnblocks);
 
-  for (const [consumer, edges] of graph) {
-    for (const edge of edges) {
-      if (!blockerSet.has(edge.dep) || edge.dep === consumer) {
-        continue;
-      }
-      addConsumer(consumersByBlocker.get(edge.dep)!, edge.exportName, consumer);
-      if (blockerSet.has(consumer)) {
-        depsByBlocker.get(consumer)!.add(edge.dep);
-      }
-    }
-  }
-
-  const consumerCount = (blocker: string): number => {
-    const consumers = new Set<string>();
-    for (const set of consumersByBlocker.get(blocker)?.values() ?? []) {
-      for (const c of set) {
-        consumers.add(c);
-      }
-    }
-    return consumers.size;
-  };
-  const unlocksCount = (blocker: string): number => cascadeUnblocks.get(blocker)?.size ?? 0;
-  // Prioritize files that unblock the most automatic migration; consumer count
-  // breaks ties. Dependency order is still enforced by orderBottomUp.
-  const weight = (blocker: string): number =>
-    unlocksCount(blocker) * 1_000_000 + consumerCount(blocker);
-
-  const orderedBlockers = orderBottomUp([...blockerSet], depsByBlocker, weight);
+  const orderedBlockers = orderBottomUp(
+    [...blockerSet],
+    depsByBlocker,
+    (blocker) => weightByBlocker.get(blocker) ?? 0,
+  );
 
   const manualConversionFiles: ManualConversionFile[] = orderedBlockers.map((blocker, index) => {
     const exportUsage = consumersByBlocker.get(blocker) ?? new Map<string, Set<string>>();
@@ -192,8 +170,8 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
     return {
       filePath: displayByNorm.get(blocker) ?? blocker,
       order: index + 1,
-      consumerCount: consumerCount(blocker),
-      unlocksFileCount: unlocksCount(blocker),
+      consumerCount: consumerCountByBlocker.get(blocker) ?? 0,
+      unlocksFileCount: unlockedByBlocker.get(blocker)?.length ?? 0,
       importedExports,
       reasons: blockerReasons.get(blocker) ?? [],
       dependsOn,
@@ -201,8 +179,8 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   });
 
   const unlockedFiles = new Set<string>();
-  for (const blocker of blockerSet) {
-    for (const consumer of cascadeUnblocks.get(blocker) ?? []) {
+  for (const unlocked of unlockedByBlocker.values()) {
+    for (const consumer of unlocked) {
       unlockedFiles.add(consumer);
     }
   }
@@ -257,6 +235,114 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
 }
 
 // --- Non-exported helpers ---
+
+interface AnalysisPassResult {
+  warnings: CollectedWarning[];
+  fileResults: readonly TransformFileResult[];
+}
+
+/**
+ * Run one dry analysis pass and return only the warnings it produced. `Logger`
+ * is process-global, so snapshot the pre-existing warnings, keep only this run's,
+ * and restore the snapshot afterward so analysis never leaks blocker warnings
+ * into a later transform in the same process.
+ */
+async function runAnalysisPass(
+  options: MigrationPlanOptions,
+  parser: NonNullable<MigrationPlanOptions["parser"]>,
+  assumeConvertedFiles: string[],
+): Promise<AnalysisPassResult> {
+  const snapshot = Logger.createReport().getWarnings();
+  const priorWarnings = new Set(snapshot);
+  let result: Awaited<ReturnType<typeof runTransform>>;
+  try {
+    result = await runTransform({
+      files: options.files,
+      consumerPaths: options.consumerPaths,
+      adapter: options.adapter,
+      parser,
+      dryRun: true,
+      silent: true,
+      assumeConvertedFiles,
+    });
+  } finally {
+    Logger.restoreWarnings(snapshot);
+  }
+  return {
+    warnings: result.warnings.filter((warning) => !priorWarnings.has(warning)),
+    fileResults: result.fileResults,
+  };
+}
+
+interface BlockerGraph {
+  /** blocker -> imported export name -> consumer files importing it. */
+  consumersByBlocker: Map<string, Map<string, Set<string>>>;
+  /** blocker -> other in-plan blockers it imports (must convert first). */
+  depsByBlocker: Map<string, Set<string>>;
+  /** blocker -> number of distinct files importing it. */
+  consumerCountByBlocker: Map<string, number>;
+  /** blocker -> files that cascade-bail on it and aren't blockers themselves. */
+  unlockedByBlocker: Map<string, string[]>;
+  /** blocker -> ordering weight (unlock impact, consumer count as tiebreak). */
+  weightByBlocker: Map<string, number>;
+}
+
+/** Attribute consumers, in-plan dependencies, and impact weights to each blocker. */
+function buildBlockerGraph(
+  blockerSet: ReadonlySet<string>,
+  graph: ReadonlyMap<string, ImportEdge[]>,
+  cascadeUnblocks: ReadonlyMap<string, Set<string>>,
+): BlockerGraph {
+  const consumersByBlocker = new Map<string, Map<string, Set<string>>>();
+  const depsByBlocker = new Map<string, Set<string>>();
+  for (const blocker of blockerSet) {
+    consumersByBlocker.set(blocker, new Map());
+    depsByBlocker.set(blocker, new Set());
+  }
+
+  for (const [consumer, edges] of graph) {
+    for (const edge of edges) {
+      if (!blockerSet.has(edge.dep) || edge.dep === consumer) {
+        continue;
+      }
+      addConsumer(consumersByBlocker.get(edge.dep)!, edge.exportName, consumer);
+      if (blockerSet.has(consumer)) {
+        depsByBlocker.get(consumer)!.add(edge.dep);
+      }
+    }
+  }
+
+  const consumerCountByBlocker = new Map<string, number>();
+  const unlockedByBlocker = new Map<string, string[]>();
+  const weightByBlocker = new Map<string, number>();
+  for (const blocker of blockerSet) {
+    const consumers = new Set<string>();
+    for (const set of consumersByBlocker.get(blocker)!.values()) {
+      for (const consumer of set) {
+        consumers.add(consumer);
+      }
+    }
+    // A blocker "unlocks" files that cascade-bail on it but aren't blockers
+    // themselves — those auto-convert once it is hand-converted. Files that are
+    // also blockers still need their own manual work, so they don't count.
+    const unlocked = [...(cascadeUnblocks.get(blocker) ?? [])].filter(
+      (consumer) => !blockerSet.has(consumer),
+    );
+    consumerCountByBlocker.set(blocker, consumers.size);
+    unlockedByBlocker.set(blocker, unlocked);
+    // Prioritize files that unblock the most automatic migration; consumer count
+    // breaks ties. Dependency order is still enforced by orderBottomUp.
+    weightByBlocker.set(blocker, unlocked.length * 1_000_000 + consumers.size);
+  }
+
+  return {
+    consumersByBlocker,
+    depsByBlocker,
+    consumerCountByBlocker,
+    unlockedByBlocker,
+    weightByBlocker,
+  };
+}
 
 /**
  * Files to surface in the ordered focus list: any file that unblocks automatic
@@ -361,6 +447,8 @@ interface ImportEdge {
 
 const MAX_REASON_LOCATIONS = 3;
 const MAX_STANDALONE_FILES_PER_REASON = 5;
+/** Safety cap on fixpoint passes; each pass reveals at least one new blocker until stable. */
+const MAX_ANALYSIS_PASSES = 50;
 
 /**
  * A file is a genuine blocker when the codemod did not convert it and the reason
@@ -438,7 +526,7 @@ function collectCascadeUnblocks(
     if (warning.type !== CASCADE_CONFLICT_WARNING) {
       continue;
     }
-    const target = cascadeTargetPath(warning);
+    const target = getCascadeDependedFilePath(warning);
     if (!target) {
       continue;
     }
@@ -451,18 +539,6 @@ function collectCascadeUnblocks(
     consumers.add(norm(warning.filePath, cwd));
   }
   return unblocks;
-}
-
-function cascadeTargetPath(warning: CollectedWarning): string | undefined {
-  const context = warning.context;
-  if (!context || typeof context !== "object") {
-    return undefined;
-  }
-  const record = context as Record<string, unknown>;
-  if (typeof record.definitionPath === "string") {
-    return record.definitionPath;
-  }
-  return typeof record.importedPath === "string" ? record.importedPath : undefined;
 }
 
 /** Build a `consumer -> [{ dep, exportName }]` import graph over all scanned files. */

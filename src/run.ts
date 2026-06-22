@@ -120,7 +120,8 @@ export interface RunTransformOptions {
   maxExamples?: number;
 
   /**
-   * Suppress jscodeshift runner output.
+   * Suppress console output: both the per-file runner messages and the final
+   * warning summary report. Warnings are still collected and returned.
    * @default false
    */
   silent?: boolean;
@@ -158,6 +159,14 @@ export interface RunTransformOptions {
    * @default false
    */
   collectStandaloneFileResults?: boolean;
+
+  /**
+   * Absolute paths of files to treat as already converted to StyleX, even though
+   * they are not. Cascade-conflict checks then "see past" these files so a
+   * consumer's own unsupported patterns surface instead of being masked by the
+   * cascade bail. Intended for analysis-only/dry runs (e.g. the migration plan).
+   */
+  assumeConvertedFiles?: string[];
 }
 
 export interface RunTransformResult {
@@ -508,6 +517,28 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const transformedFiles = new Set<string>();
   const transformedComponents = new Map<string, Set<string>>();
   const transformedFileSources = new Map<string, string>();
+
+  // Seed files the caller asks us to treat as already converted (analysis-only:
+  // lets cascade-conflict and wrapped-component-surface checks "see past" a manual
+  // blocker so a consumer's own unsupported patterns surface instead of being
+  // masked). Seeding transformedFileSources makes wrappers assume the hand-
+  // converted base will expose the styling surface (className/sx).
+  for (const assumedFile of options.assumeConvertedFiles ?? []) {
+    const realPath = toRealPath(resolve(assumedFile));
+    transformedFiles.add(realPath);
+    if (!transformedComponents.has(realPath)) {
+      const extracted: StyledDefBasesMap = new Map();
+      let source = "";
+      try {
+        source = readFileSync(realPath, "utf-8");
+        extractStyledDefBasesFromSource(realPath, source, extracted);
+      } catch {
+        // Unreadable file — seed it as converted with no known component names.
+      }
+      transformedComponents.set(realPath, new Set(extracted.get(realPath)?.keys() ?? []));
+      transformedFileSources.set(realPath, source);
+    }
+  }
 
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
