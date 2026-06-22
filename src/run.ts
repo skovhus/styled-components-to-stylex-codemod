@@ -352,6 +352,19 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapterInput = options.adapter;
   assertValidAdapterInput(adapterInput, "runTransform(options)");
 
+  // `assumeConvertedFiles` seeds files as already converted so cascade-conflict
+  // checks "see past" a manual blocker. That is only safe for dry-run analysis
+  // (the migration planner). On a writing run it would let wrappers emit against
+  // a base that is still styled-components, bypassing the cascade safety bail —
+  // so reject it instead of silently corrupting output.
+  if ((options.assumeConvertedFiles?.length ?? 0) > 0 && !dryRun) {
+    throw new Error(
+      "runTransform(options): `assumeConvertedFiles` is only supported with `dryRun: true` " +
+        "(it is used by the migration planner's analysis passes). Seeding assumed conversions " +
+        "on a writing run would bypass the cascade-conflict safety bail.",
+    );
+  }
+
   // externalInterface: "auto" requires consumerPaths to know where to scan
   if (adapterInput.externalInterface === "auto" && consumerPathsOption === null) {
     throw new Error(
@@ -523,7 +536,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // lets cascade-conflict and wrapped-component-surface checks "see past" a manual
   // blocker so a consumer's own unsupported patterns surface instead of being
   // masked). Seeding transformedFileSources makes wrappers assume the hand-
-  // converted base will expose the styling surface (className/sx).
+  // converted base will expose the styling surface (className/sx). Guarded above
+  // to dry runs so a writing run can't bypass the cascade-conflict safety bail.
   const seedParser = createPrepassParser(parser);
   for (const assumedFile of options.assumeConvertedFiles ?? []) {
     const realPath = toRealPath(resolve(assumedFile));
