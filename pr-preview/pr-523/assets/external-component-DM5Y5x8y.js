@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-BO-NS-aI.js";t();var n=e();function r(e){let{className:t,children:r,isOpen:i,...a}=e;return(0,n.jsx)(`div`,{className:t,...a,children:r??`ExternalComponent`})}export{r as t};
