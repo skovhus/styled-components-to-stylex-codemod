@@ -268,6 +268,36 @@ describe("analyzeMigrationPlan", () => {
     expect(token.blockedFileCount).toBe(1);
   });
 
+  it("throws instead of returning a partial plan when analysis exceeds the pass cap", async () => {
+    // Base = styled(Token) needs a second pass to reveal its own blocker once
+    // Token is assumed converted. With a cap of 1 the fixpoint cannot stabilize,
+    // so analysis must fail loudly rather than omit Base from the plan.
+    const tmp = await writeProject({
+      "src/token.tsx": [
+        'import styled from "styled-components";',
+        "export const Token = styled.span`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        'import { Token } from "./token";',
+        "export const Base = styled(Token)`",
+        "  & > div { color: blue; }",
+        "`;",
+      ].join("\n"),
+    });
+
+    await expect(
+      analyzeMigrationPlan({
+        files: join(tmp, "src/**/*.tsx"),
+        consumerPaths: join(tmp, "src/**/*.tsx"),
+        adapter,
+        maxAnalysisPasses: 1,
+      }),
+    ).rejects.toThrow(/did not stabilize within 1 passes/);
+  });
+
   it("does not claim a sole unlock for files with multiple independent blockers", async () => {
     // Consumer wraps two separate genuine blockers, so converting either one
     // alone does not auto-convert it. It must count in each blocker's raw chain

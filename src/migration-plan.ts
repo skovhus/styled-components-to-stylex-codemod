@@ -40,6 +40,12 @@ export interface MigrationPlanOptions {
   adapter: AdapterInput;
   /** jscodeshift parser to use. @default "tsx" */
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
+  /**
+   * Safety cap on fixpoint analysis passes used to reveal cascade-masked
+   * blockers. Analysis throws if it doesn't stabilize within this many passes
+   * (rather than returning a partial plan). @default 50
+   */
+  maxAnalysisPasses?: number;
 }
 
 export interface ImportedExportUsage {
@@ -135,18 +141,31 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   // warning at first. Assume the blockers found so far (plus external bases) are
   // converted and re-run; consumers whose own issues were masked now surface.
   // Repeat until no new in-scope blockers appear.
+  const maxPasses = options.maxAnalysisPasses ?? MAX_ANALYSIS_PASSES;
   const assumedConverted = new Set<string>(externalBlockerSet);
   let blockerReasons = new Map<string, ManualConversionReason[]>();
-  for (let pass = 0; pass < MAX_ANALYSIS_PASSES; pass++) {
+  let stabilized = false;
+  for (let pass = 0; pass < maxPasses; pass++) {
     const passResult = await runAnalysisPass(options, parser, [...assumedConverted]);
     blockerReasons = collectGenuineBlockers(passResult.warnings, passResult.fileResults, cwd);
     const newlyFound = [...blockerReasons.keys()].filter((file) => !assumedConverted.has(file));
     if (newlyFound.length === 0) {
+      stabilized = true;
       break;
     }
     for (const file of newlyFound) {
       assumedConverted.add(file);
     }
+  }
+  // If the loop exhausted the cap while still finding new blockers, the cascade
+  // chain is deeper than the cap and the plan would be incomplete (later blockers
+  // omitted, their consumers miscounted as auto-unlocked). Fail loudly instead.
+  if (!stabilized) {
+    throw new Error(
+      `Migration plan analysis did not stabilize within ${maxPasses} passes — the ` +
+        `cascade blocker chain is deeper than the analysis cap, so the plan would be ` +
+        `incomplete. Raise \`maxAnalysisPasses\` if this is a legitimately deep chain.`,
+    );
   }
 
   // External prerequisites only matter if they actually block an in-scope file.
