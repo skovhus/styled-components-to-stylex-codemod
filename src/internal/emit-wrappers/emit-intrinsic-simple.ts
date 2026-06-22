@@ -1419,16 +1419,107 @@ function typeTextIncludesStylexSxProp(
   ctx: EmitIntrinsicContext,
   typeText: string | undefined,
 ): boolean {
-  if (!typeText || !/\bsx\??\s*:/.test(typeText)) {
+  const sxType = topLevelSxTypeAnnotation(ctx, typeText);
+  return sxType ? isStylexStylesType(ctx, sxType) : false;
+}
+
+function topLevelSxTypeAnnotation(
+  ctx: EmitIntrinsicContext,
+  typeText: string | undefined,
+): unknown {
+  if (!typeText) {
+    return null;
+  }
+  let typeNode: unknown;
+  try {
+    typeNode = ctx.j(`type __Props = ${typeText};`).get().node.program.body[0].typeAnnotation;
+  } catch {
+    return null;
+  }
+  return findTopLevelSxTypeAnnotation(typeNode);
+}
+
+function findTopLevelSxTypeAnnotation(typeNode: unknown): unknown {
+  const node = typeNode as {
+    type?: string;
+    members?: unknown[];
+    types?: unknown[];
+    typeAnnotation?: unknown;
+  } | null;
+  if (!node) {
+    return null;
+  }
+  if (node.type === "TSParenthesizedType") {
+    return findTopLevelSxTypeAnnotation(node.typeAnnotation);
+  }
+  if (node.type === "TSIntersectionType") {
+    for (const part of node.types ?? []) {
+      const found = findTopLevelSxTypeAnnotation(part);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+  if (node.type !== "TSTypeLiteral") {
+    return null;
+  }
+  for (const member of node.members ?? []) {
+    const typedMember = member as {
+      type?: string;
+      key?: { type?: string; name?: string; value?: string };
+      typeAnnotation?: { typeAnnotation?: unknown };
+    };
+    const key = typedMember.key;
+    const keyName =
+      key?.type === "Identifier" ? key.name : key?.type === "StringLiteral" ? key.value : null;
+    if (typedMember.type === "TSPropertySignature" && keyName === "sx") {
+      return typedMember.typeAnnotation?.typeAnnotation ?? null;
+    }
+  }
+  return null;
+}
+
+function isStylexStylesType(ctx: EmitIntrinsicContext, typeNode: unknown): boolean {
+  const node = typeNode as {
+    type?: string;
+    typeName?: unknown;
+    types?: unknown[];
+    typeAnnotation?: unknown;
+  } | null;
+  if (!node) {
     return false;
   }
-  if (/\bsx\??\s*:\s*stylex\.StyleXStyles\b/.test(typeText)) {
-    return true;
+  if (node.type === "TSParenthesizedType") {
+    return isStylexStylesType(ctx, node.typeAnnotation);
   }
-  if (!/\bsx\??\s*:\s*StyleXStyles\b/.test(typeText)) {
+  if (node.type === "TSUnionType") {
+    return (node.types ?? []).some((part) => isStylexStylesType(ctx, part));
+  }
+  if (node.type !== "TSTypeReference") {
     return false;
   }
-  return hasStyleXStylesImport(ctx);
+  const typeName = node.typeName as
+    | { type?: string; name?: string; left?: unknown; right?: unknown }
+    | null
+    | undefined;
+  if (!typeName) {
+    return false;
+  }
+  if (typeName.type === "Identifier") {
+    return typeName.name === "StyleXStyles" && hasStyleXStylesImport(ctx);
+  }
+  if (typeName.type !== "TSQualifiedName") {
+    return false;
+  }
+  const left = typeName.left as { type?: string; name?: string } | null | undefined;
+  const right = typeName.right as { type?: string; name?: string } | null | undefined;
+  return (
+    left?.type === "Identifier" &&
+    left.name === "stylex" &&
+    right?.type === "Identifier" &&
+    right.name === "StyleXStyles"
+  );
 }
 
 function hasStyleXStylesImport(ctx: EmitIntrinsicContext): boolean {
