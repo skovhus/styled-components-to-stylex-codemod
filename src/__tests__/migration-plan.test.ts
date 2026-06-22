@@ -89,7 +89,8 @@ describe("analyzeMigrationPlan", () => {
     expect(base.filePath.endsWith("Base.tsx")).toBe(true);
     expect(base.order).toBe(1);
     expect(base.consumerCount).toBe(2);
-    expect(base.unlocksFileCount).toBe(2);
+    expect(base.soleBlockerFileCount).toBe(2);
+    expect(base.blockedFileCount).toBe(2);
     expect(base.importedExports).toEqual([{ exportName: "Base", consumerCount: 2 }]);
     expect(base.reasons.some((r) => r.message.includes("element selector"))).toBe(true);
 
@@ -146,7 +147,7 @@ describe("analyzeMigrationPlan", () => {
 
     const base = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Base.tsx"))!;
     expect(base.dependsOn.some((dep) => dep.endsWith("token.tsx"))).toBe(true);
-    expect(base.unlocksFileCount).toBe(1);
+    expect(base.soleBlockerFileCount).toBe(1);
 
     // The human-readable report must not contradict the dependency order: token
     // (zero-unlock dependency) appears in the focus list before Base, not demoted
@@ -186,7 +187,7 @@ describe("analyzeMigrationPlan", () => {
     const base = plan.manualConversionFiles[0]!;
     expect(base.filePath.endsWith("components/Base.tsx")).toBe(true);
     expect(base.reasons[0]!.message).toContain("Outside the analyzed files");
-    expect(base.unlocksFileCount).toBe(1);
+    expect(base.soleBlockerFileCount).toBe(1);
     expect(formatMigrationPlan(plan)).not.toContain("No manual conversion");
   });
 
@@ -262,7 +263,57 @@ describe("analyzeMigrationPlan", () => {
     // Base is itself a blocker, so converting Token does not "unlock" it.
     expect(plan.unlocksFileCount).toBe(0);
     const token = plan.manualConversionFiles.find((f) => f.filePath.endsWith("token.tsx"))!;
-    expect(token.unlocksFileCount).toBe(0);
+    expect(token.soleBlockerFileCount).toBe(0);
+    // Base does cascade-bail on token, so token is still in token's blocker chain.
+    expect(token.blockedFileCount).toBe(1);
+  });
+
+  it("does not claim a sole unlock for files with multiple independent blockers", async () => {
+    // Consumer wraps two separate genuine blockers, so converting either one
+    // alone does not auto-convert it. It must count in each blocker's raw chain
+    // impact, but as a sole unlock for neither.
+    const tmp = await writeProject({
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        "export const Base = styled.div`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/Other.tsx": [
+        'import styled from "styled-components";',
+        "export const Other = styled.div`",
+        "  & > span { color: blue; }",
+        "`;",
+      ].join("\n"),
+      "src/Consumer.tsx": [
+        'import styled from "styled-components";',
+        'import { Base } from "./Base";',
+        'import { Other } from "./Other";',
+        "export const A = styled(Base)`",
+        "  margin: 1px;",
+        "`;",
+        "export const B = styled(Other)`",
+        "  margin: 2px;",
+        "`;",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    const base = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Base.tsx"))!;
+    const other = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Other.tsx"))!;
+    // Consumer is in each blocker's chain, but neither alone unblocks it.
+    expect(base.blockedFileCount).toBe(1);
+    expect(base.soleBlockerFileCount).toBe(0);
+    expect(other.blockedFileCount).toBe(1);
+    expect(other.soleBlockerFileCount).toBe(0);
+    // Consumer is not itself a blocker; converting both Base and Other unblocks it.
+    expect(plan.manualConversionFiles.some((f) => f.filePath.endsWith("Consumer.tsx"))).toBe(false);
+    expect(plan.unlocksFileCount).toBe(1);
   });
 
   it("ignores type-only imports when counting consumers", async () => {

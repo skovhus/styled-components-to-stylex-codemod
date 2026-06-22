@@ -64,10 +64,17 @@ export interface ManualConversionFile {
   /** Number of distinct files that import from this file. */
   consumerCount: number;
   /**
-   * Number of distinct files that currently bail (cascade conflict) because this
-   * file is still styled-components — i.e. files unlocked by converting it.
+   * Number of files that auto-convert once this file is converted, because this
+   * file is their ONLY remaining blocker (single cascade blocker, no unsupported
+   * patterns of their own). Converting this file is sufficient for these.
    */
-  unlocksFileCount: number;
+  soleBlockerFileCount: number;
+  /**
+   * Number of files that cascade-bail on this file (raw chain involvement).
+   * Includes files that also have other blockers, so converting this file alone
+   * does not necessarily unblock all of them. Always ≥ `soleBlockerFileCount`.
+   */
+  blockedFileCount: number;
   /** Which exports consumers import, so you know what to convert first. */
   importedExports: ImportedExportUsage[];
   /** Why the codemod cannot convert this file automatically. */
@@ -82,9 +89,9 @@ export interface MigrationPlan {
   /** Total number of files matched by the `files` glob. */
   totalFiles: number;
   /**
-   * Number of distinct files that are currently blocked (cascade conflict) by one
-   * or more of the listed files — i.e. files unlocked for automatic migration once
-   * the manual conversions are done.
+   * Number of distinct files that auto-convert once ALL listed files are
+   * converted (cascade-blocked files that have no unsupported patterns of their
+   * own). This is the whole-plan payoff, not attributable to any single file.
    */
   unlocksFileCount: number;
 }
@@ -164,7 +171,8 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
     consumersByBlocker,
     depsByBlocker,
     consumerCountByBlocker,
-    unlockedByBlocker,
+    blockedCountByBlocker,
+    soleBlockerCountByBlocker,
     weightByBlocker,
   } = buildBlockerGraph(blockerSet, graph, cascadeUnblocks);
 
@@ -190,17 +198,22 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
       filePath: displayByNorm.get(blocker) ?? relative(cwd, blocker),
       order: index + 1,
       consumerCount: consumerCountByBlocker.get(blocker) ?? 0,
-      unlocksFileCount: unlockedByBlocker.get(blocker)?.length ?? 0,
+      soleBlockerFileCount: soleBlockerCountByBlocker.get(blocker) ?? 0,
+      blockedFileCount: blockedCountByBlocker.get(blocker) ?? 0,
       importedExports,
       reasons: reasonsByBlocker.get(blocker) ?? [],
       dependsOn,
     };
   });
 
+  // Whole-plan payoff: every cascade-bailing file that isn't itself a blocker
+  // auto-converts once all listed files are converted.
   const unlockedFiles = new Set<string>();
-  for (const unlocked of unlockedByBlocker.values()) {
-    for (const consumer of unlocked) {
-      unlockedFiles.add(consumer);
+  for (const consumers of cascadeUnblocks.values()) {
+    for (const consumer of consumers) {
+      if (!blockerSet.has(consumer)) {
+        unlockedFiles.add(consumer);
+      }
     }
   }
 
@@ -303,9 +316,11 @@ interface BlockerGraph {
   depsByBlocker: Map<string, Set<string>>;
   /** blocker -> number of distinct files importing it. */
   consumerCountByBlocker: Map<string, number>;
-  /** blocker -> files that cascade-bail on it and aren't blockers themselves. */
-  unlockedByBlocker: Map<string, string[]>;
-  /** blocker -> ordering weight (unlock impact, consumer count as tiebreak). */
+  /** blocker -> number of files that cascade-bail on it (raw chain involvement). */
+  blockedCountByBlocker: Map<string, number>;
+  /** blocker -> number of files for which it is the only remaining blocker. */
+  soleBlockerCountByBlocker: Map<string, number>;
+  /** blocker -> ordering weight (sole-unlock impact, chain involvement as tiebreak). */
   weightByBlocker: Map<string, number>;
 }
 
@@ -334,34 +349,49 @@ function buildBlockerGraph(
     }
   }
 
+  // Invert cascade relationships: each cascade-bailing file -> the set of blocker
+  // files that cause it to bail. A blocker is the SOLE auto-unlocker of a file
+  // only when it is that file's single cascade blocker and the file has no
+  // unsupported patterns of its own (i.e. it isn't itself a blocker).
+  const blockersByConsumer = new Map<string, Set<string>>();
+  for (const [blocker, consumers] of cascadeUnblocks) {
+    for (const consumer of consumers) {
+      const set = blockersByConsumer.get(consumer) ?? new Set<string>();
+      set.add(blocker);
+      blockersByConsumer.set(consumer, set);
+    }
+  }
+
   const consumerCountByBlocker = new Map<string, number>();
-  const unlockedByBlocker = new Map<string, string[]>();
+  const blockedCountByBlocker = new Map<string, number>();
+  const soleBlockerCountByBlocker = new Map<string, number>();
   const weightByBlocker = new Map<string, number>();
   for (const blocker of blockerSet) {
-    const consumers = new Set<string>();
+    const importers = new Set<string>();
     for (const set of consumersByBlocker.get(blocker)!.values()) {
       for (const consumer of set) {
-        consumers.add(consumer);
+        importers.add(consumer);
       }
     }
-    // A blocker "unlocks" files that cascade-bail on it but aren't blockers
-    // themselves — those auto-convert once it is hand-converted. Files that are
-    // also blockers still need their own manual work, so they don't count.
-    const unlocked = [...(cascadeUnblocks.get(blocker) ?? [])].filter(
-      (consumer) => !blockerSet.has(consumer),
+    const blocked = [...(cascadeUnblocks.get(blocker) ?? [])];
+    const soleBlocked = blocked.filter(
+      (consumer) =>
+        !blockerSet.has(consumer) && (blockersByConsumer.get(consumer)?.size ?? 0) === 1,
     );
-    consumerCountByBlocker.set(blocker, consumers.size);
-    unlockedByBlocker.set(blocker, unlocked);
-    // Prioritize files that unblock the most automatic migration; consumer count
-    // breaks ties. Dependency order is still enforced by orderBottomUp.
-    weightByBlocker.set(blocker, unlocked.length * 1_000_000 + consumers.size);
+    consumerCountByBlocker.set(blocker, importers.size);
+    blockedCountByBlocker.set(blocker, blocked.length);
+    soleBlockerCountByBlocker.set(blocker, soleBlocked.length);
+    // Prioritize files that solely unblock the most migration; raw chain
+    // involvement breaks ties. Dependency order is still enforced by orderBottomUp.
+    weightByBlocker.set(blocker, soleBlocked.length * 1_000_000 + blocked.length);
   }
 
   return {
     consumersByBlocker,
     depsByBlocker,
     consumerCountByBlocker,
-    unlockedByBlocker,
+    blockedCountByBlocker,
+    soleBlockerCountByBlocker,
     weightByBlocker,
   };
 }
@@ -382,7 +412,7 @@ function collectFocusPaths(files: readonly ManualConversionFile[]): Set<string> 
   }
   const focus = new Set<string>();
   for (const file of files) {
-    if (file.unlocksFileCount > 0 || file.dependsOn.length > 0 || dependedUpon.has(file.filePath)) {
+    if (file.blockedFileCount > 0 || file.dependsOn.length > 0 || dependedUpon.has(file.filePath)) {
       focus.add(file.filePath);
     }
   }
@@ -397,8 +427,11 @@ function appendFileEntry(
 ): void {
   lines.push(`${position}. ${file.filePath}`);
   const impact: string[] = [];
-  if (file.unlocksFileCount > 0) {
-    impact.push(`unblocks ${file.unlocksFileCount} file(s) for auto-migration`);
+  if (file.soleBlockerFileCount > 0) {
+    impact.push(`sole blocker for ${file.soleBlockerFileCount} file(s)`);
+  }
+  if (file.blockedFileCount > 0) {
+    impact.push(`in blocker chain for ${file.blockedFileCount} file(s)`);
   }
   if (file.consumerCount > 0) {
     impact.push(`imported by ${file.consumerCount} file(s)`);
@@ -612,9 +645,9 @@ function buildImportGraph(
     }
     const importNodes: AstNode[] = [];
     walkForImportsAndTemplates(program, importNodes, []);
-    // Drop type-only imports — `import type {...}` / `import { type X }` are
-    // erased at runtime, so they don't make the target a conversion prerequisite
-    // and shouldn't inflate consumer counts.
+    // Drop type-only imports (`import type {...}`, `import { type X }`, Flow's
+    // `import typeof`) — they're erased at runtime, so they don't make the target
+    // a conversion prerequisite and shouldn't inflate consumer counts.
     const importMap = buildImportMapFromNodes(importNodes.map(stripTypeOnlyImports));
 
     const edges: ImportEdge[] = [];
@@ -637,7 +670,9 @@ function buildImportGraph(
 
 /** Remove type-only specifiers (or the whole declaration) so only runtime imports remain. */
 function stripTypeOnlyImports(node: AstNode): AstNode {
-  if ((node as { importKind?: string }).importKind === "type") {
+  // `import type {...}` and Flow's `import typeof Foo` are erased at runtime, so
+  // they don't make the target a conversion prerequisite or a real consumer.
+  if (isTypeOnlyImportKind((node as { importKind?: string }).importKind)) {
     return { ...node, specifiers: [] };
   }
   const specifiers = node.specifiers as AstNode[] | undefined;
@@ -645,11 +680,15 @@ function stripTypeOnlyImports(node: AstNode): AstNode {
     return node;
   }
   const valueSpecifiers = specifiers.filter(
-    (spec) => (spec as { importKind?: string }).importKind !== "type",
+    (spec) => !isTypeOnlyImportKind((spec as { importKind?: string }).importKind),
   );
   return valueSpecifiers.length === specifiers.length
     ? node
     : { ...node, specifiers: valueSpecifiers };
+}
+
+function isTypeOnlyImportKind(importKind: string | undefined): boolean {
+  return importKind === "type" || importKind === "typeof";
 }
 
 function parseProgram(
