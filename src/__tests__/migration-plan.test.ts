@@ -100,9 +100,10 @@ describe("analyzeMigrationPlan", () => {
     expect(report).toContain("Convert these exports: Base (used by 2)");
   });
 
-  it("orders blockers bottom-up (a blocker's blocker dependency comes first)", async () => {
-    // Both files are genuine blockers (each has its own unsupported selector).
-    // Base imports from token, so token must be converted first.
+  it("keeps a zero-unlock dependency ahead of the high-impact file that needs it", async () => {
+    // token: genuine blocker, no cascade unlocks of its own.
+    // Base: genuine blocker that imports token AND is wrapped by Page, so it
+    //   unblocks Page (high impact). token must still convert before Base.
     const tmp = await writeProject({
       "src/token.tsx": [
         'import styled from "styled-components";',
@@ -123,6 +124,13 @@ describe("analyzeMigrationPlan", () => {
         "  </Base>",
         ");",
       ].join("\n"),
+      "src/Page.tsx": [
+        'import styled from "styled-components";',
+        'import { Base } from "./Base";',
+        "export const Page = styled(Base)`",
+        "  margin: 4px;",
+        "`;",
+      ].join("\n"),
     });
 
     const plan = await analyzeMigrationPlan({
@@ -135,6 +143,17 @@ describe("analyzeMigrationPlan", () => {
     expect(order).toHaveLength(2);
     expect(order[0]!.endsWith("token.tsx")).toBe(true);
     expect(order[1]!.endsWith("Base.tsx")).toBe(true);
+
+    const base = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Base.tsx"))!;
+    expect(base.dependsOn.some((dep) => dep.endsWith("token.tsx"))).toBe(true);
+    expect(base.unlocksFileCount).toBe(1);
+
+    // The human-readable report must not contradict the dependency order: token
+    // (zero-unlock dependency) appears in the focus list before Base, not demoted
+    // to the standalone section.
+    const report = formatMigrationPlan(plan);
+    expect(report).not.toContain("Standalone");
+    expect(report.indexOf("token.tsx")).toBeLessThan(report.indexOf("Base.tsx"));
   });
 
   it("reports no manual conversion when everything is convertible", async () => {

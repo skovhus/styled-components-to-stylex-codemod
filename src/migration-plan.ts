@@ -12,9 +12,13 @@ import { readFileSync } from "node:fs";
 
 import type { AdapterInput } from "./adapter.js";
 import { expandGlobFiles, runTransform, type TransformFileResult } from "./run.js";
-import { CASCADE_CONFLICT_WARNING, type CollectedWarning } from "./internal/logger.js";
+import { CASCADE_CONFLICT_WARNING, type CollectedWarning, Logger } from "./internal/logger.js";
 import { createModuleResolver } from "./internal/prepass/resolve-imports.js";
-import { createPrepassParser, type AstNode } from "./internal/prepass/prepass-parser.js";
+import {
+  createPrepassParser,
+  type AstNode,
+  type PrepassParserName,
+} from "./internal/prepass/prepass-parser.js";
 import {
   buildImportMapFromNodes,
   walkForImportsAndTemplates,
@@ -63,6 +67,8 @@ export interface ManualConversionFile {
   importedExports: ImportedExportUsage[];
   /** Why the codemod cannot convert this file automatically. */
   reasons: ManualConversionReason[];
+  /** Other files in this plan that this file imports (must be converted first). */
+  dependsOn: string[];
 }
 
 export interface MigrationPlan {
@@ -95,20 +101,27 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   const runFiles = await expandGlobFiles(filePatterns, cwd);
   const scanFiles = unique([...runFiles, ...(await expandGlobFiles(consumerPatterns, cwd))]);
 
+  const parser = options.parser ?? "tsx";
+
   // 1. Run the codemod in dependency order (dry, silent) to discover what it
   //    cannot convert. The dependency-ordered run resolves transient
   //    "dependency not converted yet" bails on its own, so whatever remains
   //    unconverted with a non-cascade reason is a genuine blocker.
+  //    `Logger` is process-global, so snapshot any pre-existing warnings and
+  //    keep only the ones this run produced — otherwise warnings from an earlier
+  //    transform/plan in the same process could surface stale blockers.
+  const priorWarnings = new Set(Logger.createReport().getWarnings());
   const result = await runTransform({
     files: options.files,
     consumerPaths: options.consumerPaths,
     adapter: options.adapter,
-    parser: options.parser ?? "tsx",
+    parser,
     dryRun: true,
     silent: true,
   });
+  const warnings = result.warnings.filter((warning) => !priorWarnings.has(warning));
 
-  const blockerReasons = collectGenuineBlockers(result.warnings, result.fileResults, cwd);
+  const blockerReasons = collectGenuineBlockers(warnings, result.fileResults, cwd);
   if (blockerReasons.size === 0) {
     return { manualConversionFiles: [], totalFiles: runFiles.length, unlocksFileCount: 0 };
   }
@@ -116,8 +129,8 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   // 2. Build the import graph across every scanned file so we can attribute
   //    consumers and imported exports to each blocker, and order blockers
   //    bottom-up (a blocker imported by another blocker is converted first).
-  const graph = buildImportGraph(scanFiles, cwd);
-  const cascadeUnblocks = collectCascadeUnblocks(result.warnings, cwd);
+  const graph = buildImportGraph(scanFiles, cwd, parser);
+  const cascadeUnblocks = collectCascadeUnblocks(warnings, cwd);
   const displayByNorm = buildDisplayMap(scanFiles, cwd);
 
   const blockerSet = new Set(blockerReasons.keys());
@@ -165,6 +178,10 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
         (a, b) => b.consumerCount - a.consumerCount || a.exportName.localeCompare(b.exportName),
       );
 
+    const dependsOn = [...(depsByBlocker.get(blocker) ?? [])]
+      .map((dep) => displayByNorm.get(dep) ?? dep)
+      .sort();
+
     return {
       filePath: displayByNorm.get(blocker) ?? blocker,
       order: index + 1,
@@ -172,6 +189,7 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
       unlocksFileCount: unlocksCount(blocker),
       importedExports,
       reasons: blockerReasons.get(blocker) ?? [],
+      dependsOn,
     };
   });
 
@@ -196,8 +214,12 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
     return `No manual conversion needed — the codemod can convert all ${totalFiles} file(s) in dependency order.`;
   }
 
-  const priority = manualConversionFiles.filter((file) => file.unlocksFileCount > 0);
-  const standalone = manualConversionFiles.filter((file) => file.unlocksFileCount === 0);
+  // Focus = files that unblock automatic migration, plus the (possibly
+  // zero-unlock) blockers they depend on — those must be converted first, so
+  // they belong in the ordered focus list rather than the standalone section.
+  const focusPaths = collectFocusPaths(manualConversionFiles);
+  const priority = manualConversionFiles.filter((file) => focusPaths.has(file.filePath));
+  const standalone = manualConversionFiles.filter((file) => !focusPaths.has(file.filePath));
 
   const lines: string[] = [];
   lines.push("Manual conversion plan");
@@ -205,7 +227,7 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
   lines.push(`${manualConversionFiles.length} of ${totalFiles} file(s) need manual conversion.`);
   if (unlocksFileCount > 0) {
     lines.push(
-      `Converting the ${priority.length} high-impact file(s) below unblocks ${unlocksFileCount} file(s) for automatic migration.`,
+      `Focus on the ${priority.length} file(s) below — converting them unblocks ${unlocksFileCount} file(s) for automatic migration.`,
     );
   }
   lines.push("");
@@ -213,14 +235,12 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
   if (priority.length > 0) {
     lines.push("Focus here first — convert in this order (dependencies first):");
     lines.push("");
-    for (const file of priority) {
-      appendFileEntry(lines, file);
-    }
+    priority.forEach((file, index) => appendFileEntry(lines, file, index + 1));
   }
 
   if (standalone.length > 0) {
     lines.push(
-      `Standalone file(s) — nothing else depends on these; convert as you reach them (${standalone.length}):`,
+      `Standalone file(s) — nothing else in the plan depends on these; convert as you reach them (${standalone.length}):`,
     );
     lines.push("");
     appendStandaloneSummary(lines, standalone);
@@ -231,13 +251,41 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
 
 // --- Non-exported helpers ---
 
-function appendFileEntry(lines: string[], file: ManualConversionFile): void {
-  lines.push(`${file.order}. ${file.filePath}`);
-  const impact = [`unblocks ${file.unlocksFileCount} file(s) for auto-migration`];
+/**
+ * Files to surface in the ordered focus list: every file that unblocks
+ * automatic migration, plus the transitive set of in-plan files they depend on.
+ */
+function collectFocusPaths(files: readonly ManualConversionFile[]): Set<string> {
+  const byPath = new Map(files.map((file) => [file.filePath, file]));
+  const focus = new Set<string>();
+  const stack = files.filter((file) => file.unlocksFileCount > 0).map((file) => file.filePath);
+  while (stack.length > 0) {
+    const filePath = stack.pop()!;
+    if (focus.has(filePath)) {
+      continue;
+    }
+    focus.add(filePath);
+    for (const dependency of byPath.get(filePath)?.dependsOn ?? []) {
+      if (!focus.has(dependency)) {
+        stack.push(dependency);
+      }
+    }
+  }
+  return focus;
+}
+
+function appendFileEntry(lines: string[], file: ManualConversionFile, position: number): void {
+  lines.push(`${position}. ${file.filePath}`);
+  const impact: string[] = [];
+  if (file.unlocksFileCount > 0) {
+    impact.push(`unblocks ${file.unlocksFileCount} file(s) for auto-migration`);
+  }
   if (file.consumerCount > 0) {
     impact.push(`imported by ${file.consumerCount} file(s)`);
   }
-  lines.push(`   → ${impact.join(" · ")}`);
+  if (impact.length > 0) {
+    lines.push(`   → ${impact.join(" · ")}`);
+  }
   if (file.importedExports.length > 0) {
     const exportList = file.importedExports
       .map((usage) => `${formatExportName(usage.exportName)} (used by ${usage.consumerCount})`)
@@ -411,10 +459,14 @@ function cascadeTargetPath(warning: CollectedWarning): string | undefined {
 }
 
 /** Build a `consumer -> [{ dep, exportName }]` import graph over all scanned files. */
-function buildImportGraph(scanFiles: readonly string[], cwd: string): Map<string, ImportEdge[]> {
+function buildImportGraph(
+  scanFiles: readonly string[],
+  cwd: string,
+  parserName: PrepassParserName,
+): Map<string, ImportEdge[]> {
   const graph = new Map<string, ImportEdge[]>();
   const resolver = createModuleResolver();
-  const parser = createPrepassParser("tsx");
+  const parser = createPrepassParser(parserName);
   const read = (filePath: string): string => {
     try {
       return readFileSync(filePath, "utf-8");
