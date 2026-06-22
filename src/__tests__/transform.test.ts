@@ -13828,6 +13828,27 @@ export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
     expect(output).not.toContain("<Box className={className} sx={sx}>");
   });
 
+  it("keeps generated StyleX sx when explicit intrinsic props define non-StyleX sx", () => {
+    const source = `
+import styled from "styled-components";
+
+type ImageProps = {
+  sx?: number;
+};
+
+export const Image = styled.img<ImageProps>\`
+  width: 24px;
+\`;
+
+export const App = () => <Image className="from-consumer" />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("sx?: number");
+    expect(output).toContain("sx?: stylex.StyleXStyles");
+    expect(output).toContain("...mergedSx([styles.image, sx], className)");
+  });
+
   it("propagates destructured wrapper sx when bare StyleXStyles is imported from StyleX", () => {
     const source = `
 import styled from "styled-components";

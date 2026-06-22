@@ -749,7 +749,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           propsType: d.propsType,
         });
       const sxTypeIntersectionFor = (...typeTexts: Array<string | undefined>) =>
-        allowSxProp && !typeTexts.some(typeTextIncludesSxProp)
+        allowSxProp && !typeTexts.some((typeText) => typeTextIncludesStylexSxProp(ctx, typeText))
           ? `{ ${SX_PROP_TYPE_TEXT} }`
           : undefined;
 
@@ -1415,8 +1415,38 @@ function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
   return omitted.length > 0 ? `Omit<${args.typeText}, ${omitted.join(" | ")}>` : args.typeText;
 }
 
-function typeTextIncludesSxProp(typeText: string | undefined): boolean {
-  return typeText != null && /\bsx\??\s*:/.test(typeText);
+function typeTextIncludesStylexSxProp(
+  ctx: EmitIntrinsicContext,
+  typeText: string | undefined,
+): boolean {
+  if (!typeText || !/\bsx\??\s*:/.test(typeText)) {
+    return false;
+  }
+  if (/\bsx\??\s*:\s*stylex\.StyleXStyles\b/.test(typeText)) {
+    return true;
+  }
+  if (!/\bsx\??\s*:\s*StyleXStyles\b/.test(typeText)) {
+    return false;
+  }
+  return hasStyleXStylesImport(ctx);
+}
+
+function hasStyleXStylesImport(ctx: EmitIntrinsicContext): boolean {
+  let found = false;
+  ctx.emitter.root.find(ctx.j.ImportDeclaration).forEach((path) => {
+    if (path.node.source.value !== "@stylexjs/stylex") {
+      return;
+    }
+    found =
+      found ||
+      (path.node.specifiers ?? []).some(
+        (specifier) =>
+          specifier.type === "ImportSpecifier" &&
+          specifier.imported?.type === "Identifier" &&
+          specifier.imported.name === "StyleXStyles",
+      );
+  });
+  return found;
 }
 
 function explicitTypeMayContainExternalStyleProps(args: {
