@@ -1,1 +1,0 @@
-import{s as e,t}from"./jsx-runtime-B8sTdNyf.js";import{p as n}from"./index-D-j-25dw.js";var r=e(n(),1),i=t(),a=()=>{let e=(0,r.useRef)(null);return(0,r.useEffect)(()=>{e.current?.focus()},[]),(0,i.jsx)(`input`,{ref:e,placeholder:`Focus me on mount!`,className:`xon2cxt x1sscd6g x1c28xdg xd10qfp xc342km xng3xce xhm8nzw x18zih8k`})};export{a as App};

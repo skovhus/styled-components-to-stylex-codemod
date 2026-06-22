@@ -1,1 +1,0 @@
-import{s as e,t}from"./jsx-runtime-B8sTdNyf.js";import{p as n}from"./index-D-j-25dw.js";var r=e(n(),1),i=t(),a={div:r.forwardRef(({style:e,...t},n)=>(0,i.jsx)(`div`,{ref:n,...t,style:e})),img:r.forwardRef(({style:e,...t},n)=>(0,i.jsx)(`img`,{ref:n,...t,style:e}))};export{a as t};

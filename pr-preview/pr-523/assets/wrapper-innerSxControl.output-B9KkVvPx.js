@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-D-j-25dw.js";import{t as n}from"./inner-sx-control-CTJOIZUE.js";t();var r=e();function i(e){return(0,r.jsx)(n,{...e,className:`xr9ek0c`})}var a=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,gap:8,padding:16},children:[(0,r.jsx)(`span`,{children:`Label`}),(0,r.jsx)(i,{"aria-label":`Done`})]});export{a as App};

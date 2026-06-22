@@ -1,1 +1,0 @@
-import{s as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-D-j-25dw.js";var n=e(t(),1);function r(e){let{align:t,gap:r,direction:i,...a}=e;return n.createElement(`div`,a)}export{r as t};

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,o as n}from"./index-woQTAk4H.js";t();var r=e();function i(e){let{sx:t,className:i,style:a,...o}=e,s=n(t);return(0,r.jsxs)(`label`,{className:i,style:a,children:[(0,r.jsx)(`input`,{...o,...s,type:`checkbox`,style:{...s.style,opacity:0,position:`absolute`}}),(0,r.jsx)(`span`,{children:`Control`})]})}export{i as t};

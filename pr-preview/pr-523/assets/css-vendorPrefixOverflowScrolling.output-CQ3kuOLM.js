@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{className:`x5lxg6s x1odjw0f x1n4lwwq xe8ttls xmftpkk`,children:[(0,t.jsx)(`div`,{children:`Scrollable panel`}),(0,t.jsx)(`div`,{children:`Second row`})]});export{n as App};
