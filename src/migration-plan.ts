@@ -28,7 +28,7 @@ import {
   buildImportMapFromNodes,
   walkForImportsAndTemplates,
 } from "./internal/prepass/scan-cross-file-selectors.js";
-import { resolveBarrelReExport } from "./internal/prepass/extract-external-interface.js";
+import { resolveBarrelReExportBinding } from "./internal/prepass/extract-external-interface.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export interface MigrationPlanOptions {
@@ -676,10 +676,18 @@ function buildImportGraph(
         continue;
       }
       const resolvedReal = toRealPath(resolved);
-      const definitionPath =
-        resolveBarrelReExport(resolvedReal, entry.importedName, resolveForBarrel, read) ??
-        resolvedReal;
-      edges.push({ dep: toRealPath(definitionPath), exportName: entry.importedName });
+      // Follow barrel re-exports to the defining file, and report the name that
+      // file actually exports — an aliased re-export (`export { Base as Button }`)
+      // must surface `Base`, not the consumer-facing `Button`.
+      const binding = resolveBarrelReExportBinding(
+        resolvedReal,
+        entry.importedName,
+        resolveForBarrel,
+        read,
+      );
+      const definitionPath = binding?.filePath ?? resolvedReal;
+      const exportName = binding?.exportedName ?? entry.importedName;
+      edges.push({ dep: toRealPath(definitionPath), exportName });
     }
     graph.set(toRealPath(absFrom), edges);
   }

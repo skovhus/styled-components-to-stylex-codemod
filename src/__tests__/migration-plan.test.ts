@@ -346,6 +346,36 @@ describe("analyzeMigrationPlan", () => {
     expect(plan.unlocksFileCount).toBe(1);
   });
 
+  it("reports the source export name through an aliased barrel re-export", async () => {
+    // Consumer imports `Button`, which the barrel re-exports as `Base`. The plan
+    // must name the export Base.tsx actually defines (`Base`), not the alias.
+    const tmp = await writeProject({
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        "export const Base = styled.div`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/index.ts": 'export { Base as Button } from "./Base";\n',
+      "src/Consumer.tsx": [
+        'import styled from "styled-components";',
+        'import { Button } from "./index";',
+        "export const X = styled(Button)`",
+        "  margin: 1px;",
+        "`;",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    const base = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Base.tsx"))!;
+    expect(base.importedExports).toEqual([{ exportName: "Base", consumerCount: 1 }]);
+  });
+
   it("ignores type-only imports when counting consumers", async () => {
     // Base is a blocker; Consumer only imports a type from it, so Base has no
     // runtime consumer and the type import must not inflate its consumer count.
