@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-iPOnlJ5b.js";import{t as n}from"./inline-base-flex-m8an4q1V.js";t();var r=e();function i({isCompact:e}){return(0,r.jsx)(`div`,{className:`x1tamke2 xln26u5`,children:(0,r.jsx)(n,{column:!0,grow:1,align:e?`start`:`center`,gap:e?8:16,children:`Content`})})}export{i as App};
