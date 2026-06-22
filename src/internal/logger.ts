@@ -270,6 +270,15 @@ export class Logger {
     return new LoggerReport([...Logger.collected], Logger.fileCount, Logger.maxExamples);
   }
 
+  /**
+   * Restore the collected warnings to a previous snapshot (from
+   * `createReport().getWarnings()`). Used to undo the side effects of an
+   * analysis-only dry run on the process-global logger.
+   */
+  public static restoreWarnings(warnings: CollectedWarning[]): void {
+    Logger.collected = [...warnings];
+  }
+
   /** @internal - for testing only */
   public static _clearCollected(): void {
     Logger.collected = [];

@@ -156,6 +156,91 @@ describe("analyzeMigrationPlan", () => {
     expect(report.indexOf("token.tsx")).toBeLessThan(report.indexOf("Base.tsx"));
   });
 
+  it("keeps a pure dependency chain ordered even when nothing unlocks auto-migration", async () => {
+    // Neither file unblocks a wrapper (no styled(...) consumer), but Base imports
+    // the blocked token, so the report must still order token before Base rather
+    // than dumping both into the standalone "nothing depends on these" section.
+    const tmp = await writeProject({
+      "src/token.tsx": [
+        'import styled from "styled-components";',
+        "export const Token = styled.span`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        'import * as React from "react";',
+        'import { Token } from "./token";',
+        "export const Base = styled.div`",
+        "  & > div { color: blue; }",
+        "`;",
+        "export const App = () => (",
+        "  <Base>",
+        "    <Token />",
+        "  </Base>",
+        ");",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    expect(plan.unlocksFileCount).toBe(0);
+    const report = formatMigrationPlan(plan);
+    expect(report).not.toContain("Standalone");
+    expect(report.indexOf("token.tsx")).toBeLessThan(report.indexOf("Base.tsx"));
+  });
+
+  it("ignores type-only imports when counting consumers", async () => {
+    // Base is a blocker; Consumer only imports a type from it, so Base has no
+    // runtime consumer and the type import must not inflate its consumer count.
+    const tmp = await writeProject({
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        "export const Base = styled.div`",
+        "  & > div { color: red; }",
+        "`;",
+        "export type BaseProps = { tone: string };",
+      ].join("\n"),
+      "src/Consumer.tsx": [
+        'import type { BaseProps } from "./Base";',
+        'export const value: BaseProps = { tone: "a" };',
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    const base = plan.manualConversionFiles.find((f) => f.filePath.endsWith("Base.tsx"))!;
+    expect(base.consumerCount).toBe(0);
+  });
+
+  it("restores the global logger so analysis warnings don't leak", async () => {
+    const tmp = await writeProject({
+      "src/Base.tsx": [
+        'import styled from "styled-components";',
+        "export const Base = styled.div`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+    });
+
+    await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    // beforeEach cleared the logger, so after analysis it must be empty again.
+    expect(Logger.createReport().getWarnings()).toHaveLength(0);
+  });
+
   it("reports no manual conversion when everything is convertible", async () => {
     const tmp = await writeProject({
       "src/Box.tsx": [

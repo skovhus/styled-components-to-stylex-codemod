@@ -107,18 +107,25 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   //    cannot convert. The dependency-ordered run resolves transient
   //    "dependency not converted yet" bails on its own, so whatever remains
   //    unconverted with a non-cascade reason is a genuine blocker.
-  //    `Logger` is process-global, so snapshot any pre-existing warnings and
-  //    keep only the ones this run produced — otherwise warnings from an earlier
-  //    transform/plan in the same process could surface stale blockers.
-  const priorWarnings = new Set(Logger.createReport().getWarnings());
-  const result = await runTransform({
-    files: options.files,
-    consumerPaths: options.consumerPaths,
-    adapter: options.adapter,
-    parser,
-    dryRun: true,
-    silent: true,
-  });
+  //    `Logger` is process-global, so snapshot the pre-existing warnings: keep
+  //    only the ones this run produced, and restore the snapshot afterward so an
+  //    analysis-only dry run never leaks blocker warnings into a later transform
+  //    in the same process.
+  const warningsSnapshot = Logger.createReport().getWarnings();
+  const priorWarnings = new Set(warningsSnapshot);
+  let result: Awaited<ReturnType<typeof runTransform>>;
+  try {
+    result = await runTransform({
+      files: options.files,
+      consumerPaths: options.consumerPaths,
+      adapter: options.adapter,
+      parser,
+      dryRun: true,
+      silent: true,
+    });
+  } finally {
+    Logger.restoreWarnings(warningsSnapshot);
+  }
   const warnings = result.warnings.filter((warning) => !priorWarnings.has(warning));
 
   const blockerReasons = collectGenuineBlockers(warnings, result.fileResults, cwd);
@@ -214,9 +221,9 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
     return `No manual conversion needed — the codemod can convert all ${totalFiles} file(s) in dependency order.`;
   }
 
-  // Focus = files that unblock automatic migration, plus the (possibly
-  // zero-unlock) blockers they depend on — those must be converted first, so
-  // they belong in the ordered focus list rather than the standalone section.
+  // Focus = files that unblock automatic migration plus any file in a dependency
+  // chain with another listed file; those keep their bottom-up order. Only fully
+  // isolated blockers go to the standalone section.
   const focusPaths = collectFocusPaths(manualConversionFiles);
   const priority = manualConversionFiles.filter((file) => focusPaths.has(file.filePath));
   const standalone = manualConversionFiles.filter((file) => !focusPaths.has(file.filePath));
@@ -233,7 +240,7 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
   lines.push("");
 
   if (priority.length > 0) {
-    lines.push("Focus here first — convert in this order (dependencies first):");
+    lines.push("Convert in this order (dependencies first):");
     lines.push("");
     priority.forEach((file, index) => appendFileEntry(lines, file, index + 1));
   }
@@ -252,23 +259,23 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
 // --- Non-exported helpers ---
 
 /**
- * Files to surface in the ordered focus list: every file that unblocks
- * automatic migration, plus the transitive set of in-plan files they depend on.
+ * Files to surface in the ordered focus list: any file that unblocks automatic
+ * migration, plus any file involved in an in-plan dependency relationship (it
+ * depends on another listed file, or another listed file depends on it). Only
+ * fully isolated blockers fall through to the standalone summary, so the ordered
+ * list never loses a real dependency chain — even when nothing unlocks a wrapper.
  */
 function collectFocusPaths(files: readonly ManualConversionFile[]): Set<string> {
-  const byPath = new Map(files.map((file) => [file.filePath, file]));
-  const focus = new Set<string>();
-  const stack = files.filter((file) => file.unlocksFileCount > 0).map((file) => file.filePath);
-  while (stack.length > 0) {
-    const filePath = stack.pop()!;
-    if (focus.has(filePath)) {
-      continue;
+  const dependedUpon = new Set<string>();
+  for (const file of files) {
+    for (const dependency of file.dependsOn) {
+      dependedUpon.add(dependency);
     }
-    focus.add(filePath);
-    for (const dependency of byPath.get(filePath)?.dependsOn ?? []) {
-      if (!focus.has(dependency)) {
-        stack.push(dependency);
-      }
+  }
+  const focus = new Set<string>();
+  for (const file of files) {
+    if (file.unlocksFileCount > 0 || file.dependsOn.length > 0 || dependedUpon.has(file.filePath)) {
+      focus.add(file.filePath);
     }
   }
   return focus;
@@ -489,7 +496,10 @@ function buildImportGraph(
     }
     const importNodes: AstNode[] = [];
     walkForImportsAndTemplates(program, importNodes, []);
-    const importMap = buildImportMapFromNodes(importNodes);
+    // Drop type-only imports — `import type {...}` / `import { type X }` are
+    // erased at runtime, so they don't make the target a conversion prerequisite
+    // and shouldn't inflate consumer counts.
+    const importMap = buildImportMapFromNodes(importNodes.map(stripTypeOnlyImports));
 
     const edges: ImportEdge[] = [];
     for (const entry of importMap.values()) {
@@ -507,6 +517,23 @@ function buildImportGraph(
   }
 
   return graph;
+}
+
+/** Remove type-only specifiers (or the whole declaration) so only runtime imports remain. */
+function stripTypeOnlyImports(node: AstNode): AstNode {
+  if ((node as { importKind?: string }).importKind === "type") {
+    return { ...node, specifiers: [] };
+  }
+  const specifiers = node.specifiers as AstNode[] | undefined;
+  if (!specifiers) {
+    return node;
+  }
+  const valueSpecifiers = specifiers.filter(
+    (spec) => (spec as { importKind?: string }).importKind !== "type",
+  );
+  return valueSpecifiers.length === specifiers.length
+    ? node
+    : { ...node, specifiers: valueSpecifiers };
 }
 
 function parseProgram(
