@@ -270,6 +270,15 @@ export class Logger {
     return new LoggerReport([...Logger.collected], Logger.fileCount, Logger.maxExamples);
   }
 
+  /**
+   * Restore the collected warnings to a previous snapshot (from
+   * `createReport().getWarnings()`). Used to undo the side effects of an
+   * analysis-only dry run on the process-global logger.
+   */
+  public static restoreWarnings(warnings: CollectedWarning[]): void {
+    Logger.collected = [...warnings];
+  }
+
   /** @internal - for testing only */
   public static _clearCollected(): void {
     Logger.collected = [];
@@ -576,20 +585,20 @@ class LoggerReport {
   }
 }
 
-function getCascadeDependedFilePath(warning: WarningWithSnippet): string | undefined {
+/**
+ * Extract the depended-on file path from a cascade-conflict warning's context
+ * (the base component's defining file that must be converted first). Owned here
+ * alongside the warning-type definition so consumers share one invariant.
+ */
+export function getCascadeDependedFilePath(warning: WarningLog): string | undefined {
   const context = warning.context;
-  if (!context || typeof context !== "object") {
+  if (!context) {
     return undefined;
   }
-
-  const record = context as Record<string, unknown>;
-  const definitionPath = record.definitionPath;
-  if (typeof definitionPath === "string") {
-    return definitionPath;
+  if (typeof context.definitionPath === "string") {
+    return context.definitionPath;
   }
-
-  const importedPath = record.importedPath;
-  return typeof importedPath === "string" ? importedPath : undefined;
+  return typeof context.importedPath === "string" ? context.importedPath : undefined;
 }
 
 function uniqueSorted(values: string[]): string[] {

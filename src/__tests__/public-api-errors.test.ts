@@ -193,6 +193,27 @@ describe("public API runtime validation (DX)", () => {
     ).rejects.toThrowError(/consumerPaths is null/);
   });
 
+  it("runTransform: throws when assumeConvertedFiles is used on a writing run", async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: () => ({ styles: true, as: false, ref: false }),
+      styleMerger: null,
+      useSxProp: false,
+      usePhysicalProperties: true,
+    };
+    await expect(
+      runTransform({
+        files: "src/__tests__/fixtures/**/*.tsx",
+        consumerPaths: null,
+        adapter,
+        dryRun: false,
+        assumeConvertedFiles: ["src/__tests__/fixtures/some-base.tsx"],
+      }),
+    ).rejects.toThrowError(/`assumeConvertedFiles` is only supported with `dryRun: true`/);
+  });
+
   it("runTransform: throws when consumerPaths matches no files", async () => {
     const adapter = {
       resolveValue: () => undefined,

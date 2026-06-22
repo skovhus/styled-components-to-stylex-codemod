@@ -37,6 +37,8 @@ The adapter maps your project's `props.theme.*` access, CSS variables, and helpe
 
 When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
 
+Run [`analyzeMigrationPlan`](#planning-manual-conversions) to get the ordered, bottom-up list of files to convert by hand first.
+
 ### 4. Verify, iterate, clean up
 
 Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
@@ -379,6 +381,24 @@ await runTransform({
 ```
 
 </details>
+
+### Planning manual conversions
+
+`analyzeMigrationPlan` runs the codemod in analysis-only mode (it never writes files) and returns the bottom-up ordered list of files you must convert by hand — the genuine blockers the codemod can't convert — each with its consumer count, the exports to convert, how many files it unblocks, and the bail reasons. `formatMigrationPlan` renders it as a report (high-impact files first).
+
+```ts
+import { analyzeMigrationPlan, formatMigrationPlan } from "styled-components-to-stylex-codemod";
+
+const plan = await analyzeMigrationPlan({
+  files: "src/**/*.tsx",
+  consumerPaths: "src/**/*.tsx",
+  adapter, // the same adapter you pass to runTransform
+});
+
+console.log(formatMigrationPlan(plan));
+```
+
+Try it against this repo's own fixtures with `node scripts/migration-plan.mts`.
 
 ### Adapter
 

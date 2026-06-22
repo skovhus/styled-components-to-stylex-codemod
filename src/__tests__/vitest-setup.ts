@@ -25,6 +25,7 @@ vi.mock("../internal/logger.js", () => ({
       print: vi.fn(),
       getWarnings: vi.fn(() => []),
     })),
+    restoreWarnings: vi.fn(),
     setFileCount: vi.fn(),
     setMaxExamples: vi.fn(),
     markErrorAsLogged: vi.fn(),

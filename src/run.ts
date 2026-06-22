@@ -36,9 +36,10 @@ import {
   type Resolve,
 } from "./internal/prepass/extract-external-interface.js";
 import {
-  extractStyledDefBasesFromSource,
+  extractStyledDefBases,
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
+import { createPrepassParser } from "./internal/prepass/prepass-parser.js";
 import type {
   CrossFileInfo,
   CrossFileSelectorUsage,
@@ -120,7 +121,8 @@ export interface RunTransformOptions {
   maxExamples?: number;
 
   /**
-   * Suppress jscodeshift runner output.
+   * Suppress console output: both the per-file runner messages and the final
+   * warning summary report. Warnings are still collected and returned.
    * @default false
    */
   silent?: boolean;
@@ -158,6 +160,14 @@ export interface RunTransformOptions {
    * @default false
    */
   collectStandaloneFileResults?: boolean;
+
+  /**
+   * Absolute paths of files to treat as already converted to StyleX, even though
+   * they are not. Cascade-conflict checks then "see past" these files so a
+   * consumer's own unsupported patterns surface instead of being masked by the
+   * cascade bail. Intended for analysis-only/dry runs (e.g. the migration plan).
+   */
+  assumeConvertedFiles?: string[];
 }
 
 export interface RunTransformResult {
@@ -173,6 +183,8 @@ export interface RunTransformResult {
   timeElapsed: number;
   /** Warnings emitted during transformation */
   warnings: CollectedWarning[];
+  /** Per-file outcomes from the dependency-ordered run. */
+  fileResults: TransformFileResult[];
   /** Per-file outcomes from isolated transforms, populated when requested. */
   standaloneFileResults?: TransformFileResult[];
   /** Warnings from isolated transforms, populated when requested. */
@@ -181,6 +193,17 @@ export interface RunTransformResult {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/** Expand glob pattern(s) into file paths relative to `cwd`. */
+export async function expandGlobFiles(patterns: readonly string[], cwd: string): Promise<string[]> {
+  const filePaths: string[] = [];
+  for (const pattern of patterns) {
+    for await (const file of glob(pattern, { cwd })) {
+      filePaths.push(file);
+    }
+  }
+  return filePaths;
+}
 
 /**
  * Run the styled-components to StyleX transform on files matching the glob pattern.
@@ -329,6 +352,19 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapterInput = options.adapter;
   assertValidAdapterInput(adapterInput, "runTransform(options)");
 
+  // `assumeConvertedFiles` seeds files as already converted so cascade-conflict
+  // checks "see past" a manual blocker. That is only safe for dry-run analysis
+  // (the migration planner). On a writing run it would let wrappers emit against
+  // a base that is still styled-components, bypassing the cascade safety bail —
+  // so reject it instead of silently corrupting output.
+  if ((options.assumeConvertedFiles?.length ?? 0) > 0 && !dryRun) {
+    throw new Error(
+      "runTransform(options): `assumeConvertedFiles` is only supported with `dryRun: true` " +
+        "(it is used by the migration planner's analysis passes). Seeding assumed conversions " +
+        "on a writing run would bypass the cascade-conflict safety bail.",
+    );
+  }
+
   // externalInterface: "auto" requires consumerPaths to know where to scan
   if (adapterInput.externalInterface === "auto" && consumerPathsOption === null) {
     throw new Error(
@@ -400,14 +436,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
-  let filePaths: string[] = [];
-
   const cwd = process.cwd();
-  for (const pattern of patterns) {
-    for await (const file of glob(pattern, { cwd })) {
-      filePaths.push(file);
-    }
-  }
+  let filePaths: string[] = await expandGlobFiles(patterns, cwd);
 
   if (filePaths.length === 0) {
     Logger.warn("No files matched the provided glob pattern(s)");
@@ -418,6 +448,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       transformed: 0,
       timeElapsed: 0,
       warnings: [],
+      fileResults: [],
     };
   }
 
@@ -429,12 +460,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ? consumerPathsOption
       : [consumerPathsOption]
     : [];
-  const consumerFilePaths: string[] = [];
-  for (const pattern of consumerPatterns) {
-    for await (const file of glob(pattern, { cwd })) {
-      consumerFilePaths.push(file);
-    }
-  }
+  const consumerFilePaths = await expandGlobFiles(consumerPatterns, cwd);
 
   if (consumerPatterns.length > 0 && consumerFilePaths.length === 0) {
     throw new Error(
@@ -506,6 +532,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const transformedComponents = new Map<string, Set<string>>();
   const transformedFileSources = new Map<string, string>();
 
+  // Seed files the caller asks us to treat as already converted (analysis-only:
+  // lets cascade-conflict and wrapped-component-surface checks "see past" a manual
+  // blocker so a consumer's own unsupported patterns surface instead of being
+  // masked). Seeding transformedFileSources makes wrappers assume the hand-
+  // converted base will expose the styling surface (className/sx). Guarded above
+  // to dry runs so a writing run can't bypass the cascade-conflict safety bail.
+  const seedParser = createPrepassParser(parser);
+  for (const assumedFile of options.assumeConvertedFiles ?? []) {
+    const realPath = toRealPath(resolve(assumedFile));
+    transformedFiles.add(realPath);
+    if (!transformedComponents.has(realPath)) {
+      const extracted: StyledDefBasesMap = new Map();
+      let source = "";
+      try {
+        source = readFileSync(realPath, "utf-8");
+        // AST-aware extraction so aliased/named `styled` imports in the assumed
+        // base are recognized; otherwise a consumer's own unsupported pattern
+        // stays cascade-masked and never surfaces as a blocker.
+        extractStyledDefBases(realPath, source, seedParser, extracted);
+      } catch {
+        // Unreadable file — seed it as converted with no known component names.
+      }
+      transformedComponents.set(realPath, new Set(extracted.get(realPath)?.keys() ?? []));
+      transformedFileSources.set(realPath, source);
+    }
+  }
+
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
     transformedFiles,
@@ -547,7 +600,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           return cached;
         }
         const extracted: StyledDefBasesMap = new Map();
-        extractStyledDefBasesFromSource(realPath, cachedRead(realPath), extracted);
+        extractStyledDefBases(realPath, cachedRead(realPath), seedParser, extracted);
         const names = new Set(extracted.get(realPath)?.keys() ?? []);
         styledDefinitionNamesByFile.set(realPath, names);
         return names;
@@ -862,7 +915,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   const report = Logger.createReport();
-  report.print();
+  if (!(options.silent ?? false)) {
+    report.print();
+  }
 
   return {
     errors: result.error,
@@ -871,6 +926,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformed: result.ok,
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
+    fileResults: result.files,
     standaloneFileResults: standaloneResult?.files,
     standaloneWarnings,
   };
