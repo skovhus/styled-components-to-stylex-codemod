@@ -150,10 +150,44 @@ describe("analyzeMigrationPlan", () => {
 
     // The human-readable report must not contradict the dependency order: token
     // (zero-unlock dependency) appears in the focus list before Base, not demoted
-    // to the standalone section.
+    // to the standalone section, and Base points back to token by position.
     const report = formatMigrationPlan(plan);
     expect(report).not.toContain("Standalone");
     expect(report.indexOf("token.tsx")).toBeLessThan(report.indexOf("Base.tsx"));
+    expect(report).toContain("Requires first: #1");
+  });
+
+  it("reports an out-of-scope styled base that blocks in-scope wrappers", async () => {
+    // Base lives outside the `files` glob but Page (in scope) wraps it. The plan
+    // must not claim success — it should surface Base as an external prerequisite.
+    const tmp = await writeProject({
+      "src/components/Base.tsx": [
+        'import styled from "styled-components";',
+        "export const Base = styled.div`",
+        "  color: red;",
+        "`;",
+      ].join("\n"),
+      "src/pages/Page.tsx": [
+        'import styled from "styled-components";',
+        'import { Base } from "../components/Base";',
+        "export const Page = styled(Base)`",
+        "  margin: 4px;",
+        "`;",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/pages/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    expect(plan.manualConversionFiles).toHaveLength(1);
+    const base = plan.manualConversionFiles[0]!;
+    expect(base.filePath.endsWith("components/Base.tsx")).toBe(true);
+    expect(base.reasons[0]!.message).toContain("Outside the analyzed files");
+    expect(base.unlocksFileCount).toBe(1);
+    expect(formatMigrationPlan(plan)).not.toContain("No manual conversion");
   });
 
   it("keeps a pure dependency chain ordered even when nothing unlocks auto-migration", async () => {

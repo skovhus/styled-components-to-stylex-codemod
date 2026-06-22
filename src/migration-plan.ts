@@ -7,7 +7,7 @@
  * styled-components), bottom-up dependency ordering, and consumer/imported-export
  * accounting so each blocker is presented with the impact of converting it.
  */
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { readFileSync } from "node:fs";
 
 import type { AdapterInput } from "./adapter.js";
@@ -107,20 +107,32 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
   const scanFiles = unique([...runFiles, ...(await expandGlobFiles(consumerPatterns, cwd))]);
 
   const parser = options.parser ?? "tsx";
+  const runFilesNorm = new Set(runFiles.map((file) => norm(file, cwd)));
 
-  // First pass with no assumptions establishes the real cascade relationships:
-  // which files bail only because they wrap an unconverted styled import.
+  // First pass (no assumptions) establishes the real cascade relationships:
+  // which files bail only because they wrap an unconverted styled base.
   const firstPass = await runAnalysisPass(options, parser, []);
   const cascadeUnblocks = collectCascadeUnblocks(firstPass.warnings, cwd);
 
-  // Fixpoint: a cascade conflict bails a file before rule lowering, so a file
-  // that wraps a blocker AND has its own unsupported pattern only shows the
-  // cascade warning at first. Assume the blockers found so far are converted and
-  // re-run; consumers whose own issues were masked now surface. Repeat until no
-  // new blockers appear.
-  let blockerReasons = collectGenuineBlockers(firstPass.warnings, firstPass.fileResults, cwd);
-  const assumedConverted = new Set<string>();
+  // Cascade targets outside the analyzed files are external prerequisites: they
+  // still use styled-components and block their in-scope wrappers, but the codemod
+  // never sees them (not in `files`). Assume them converted so in-scope consumers
+  // reveal their own issues, and report them so we never claim success while a
+  // wrapper stays blocked by an out-of-scope base.
+  const externalBlockerSet = new Set(
+    [...cascadeUnblocks.keys()].filter((target) => !runFilesNorm.has(target)),
+  );
+
+  // Fixpoint: a cascade conflict bails a file before rule lowering, so a file that
+  // wraps a blocker AND has its own unsupported pattern only shows the cascade
+  // warning at first. Assume the blockers found so far (plus external bases) are
+  // converted and re-run; consumers whose own issues were masked now surface.
+  // Repeat until no new in-scope blockers appear.
+  const assumedConverted = new Set<string>(externalBlockerSet);
+  let blockerReasons = new Map<string, ManualConversionReason[]>();
   for (let pass = 0; pass < MAX_ANALYSIS_PASSES; pass++) {
+    const passResult = await runAnalysisPass(options, parser, [...assumedConverted]);
+    blockerReasons = collectGenuineBlockers(passResult.warnings, passResult.fileResults, cwd);
     const newlyFound = [...blockerReasons.keys()].filter((file) => !assumedConverted.has(file));
     if (newlyFound.length === 0) {
       break;
@@ -128,19 +140,26 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
     for (const file of newlyFound) {
       assumedConverted.add(file);
     }
-    const nextPass = await runAnalysisPass(options, parser, [...assumedConverted]);
-    blockerReasons = collectGenuineBlockers(nextPass.warnings, nextPass.fileResults, cwd);
   }
 
-  if (blockerReasons.size === 0) {
+  // External prerequisites only matter if they actually block an in-scope file.
+  const reachableExternalBlockers = new Set(
+    [...externalBlockerSet].filter((target) => (cascadeUnblocks.get(target)?.size ?? 0) > 0),
+  );
+
+  if (blockerReasons.size === 0 && reachableExternalBlockers.size === 0) {
     return { manualConversionFiles: [], totalFiles: runFiles.length, unlocksFileCount: 0 };
   }
 
-  // Build the import graph across every scanned file, then attribute consumers,
-  // dependencies, and impact weights to each blocker (precomputed once).
+  // Build the import graph and attribute consumers, dependencies, and impact
+  // weights to every blocker — in-scope genuine blockers plus external bases.
   const graph = buildImportGraph(scanFiles, cwd, parser);
   const displayByNorm = buildDisplayMap(scanFiles, cwd);
-  const blockerSet = new Set(blockerReasons.keys());
+  const blockerSet = new Set([...blockerReasons.keys(), ...reachableExternalBlockers]);
+  const reasonsByBlocker = new Map(blockerReasons);
+  for (const target of reachableExternalBlockers) {
+    reasonsByBlocker.set(target, [{ message: EXTERNAL_BLOCKER_REASON, locations: [] }]);
+  }
   const {
     consumersByBlocker,
     depsByBlocker,
@@ -164,16 +183,16 @@ export async function analyzeMigrationPlan(options: MigrationPlanOptions): Promi
       );
 
     const dependsOn = [...(depsByBlocker.get(blocker) ?? [])]
-      .map((dep) => displayByNorm.get(dep) ?? dep)
+      .map((dep) => displayByNorm.get(dep) ?? relative(cwd, dep))
       .sort();
 
     return {
-      filePath: displayByNorm.get(blocker) ?? blocker,
+      filePath: displayByNorm.get(blocker) ?? relative(cwd, blocker),
       order: index + 1,
       consumerCount: consumerCountByBlocker.get(blocker) ?? 0,
       unlocksFileCount: unlockedByBlocker.get(blocker)?.length ?? 0,
       importedExports,
-      reasons: blockerReasons.get(blocker) ?? [],
+      reasons: reasonsByBlocker.get(blocker) ?? [],
       dependsOn,
     };
   });
@@ -218,9 +237,12 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
   lines.push("");
 
   if (priority.length > 0) {
+    // Map each focus file to its printed position so entries can reference the
+    // other listed files they depend on (e.g. "requires #4 first").
+    const positionByPath = new Map(priority.map((file, index) => [file.filePath, index + 1]));
     lines.push("Convert in this order (dependencies first):");
     lines.push("");
-    priority.forEach((file, index) => appendFileEntry(lines, file, index + 1));
+    priority.forEach((file, index) => appendFileEntry(lines, file, index + 1, positionByPath));
   }
 
   if (standalone.length > 0) {
@@ -367,7 +389,12 @@ function collectFocusPaths(files: readonly ManualConversionFile[]): Set<string> 
   return focus;
 }
 
-function appendFileEntry(lines: string[], file: ManualConversionFile, position: number): void {
+function appendFileEntry(
+  lines: string[],
+  file: ManualConversionFile,
+  position: number,
+  positionByPath: ReadonlyMap<string, number>,
+): void {
   lines.push(`${position}. ${file.filePath}`);
   const impact: string[] = [];
   if (file.unlocksFileCount > 0) {
@@ -378,6 +405,17 @@ function appendFileEntry(lines: string[], file: ManualConversionFile, position: 
   }
   if (impact.length > 0) {
     lines.push(`   → ${impact.join(" · ")}`);
+  }
+  // Surface dependencies on other listed files so the order is self-explanatory
+  // ("convert #4 before this one").
+  if (file.dependsOn.length > 0) {
+    const deps = file.dependsOn
+      .map((dep) => {
+        const depPosition = positionByPath.get(dep);
+        return depPosition === undefined ? dep : `#${depPosition} ${dep}`;
+      })
+      .sort();
+    lines.push(`   Requires first: ${deps.join(", ")}`);
   }
   if (file.importedExports.length > 0) {
     const exportList = file.importedExports
@@ -447,6 +485,8 @@ interface ImportEdge {
 
 const MAX_REASON_LOCATIONS = 3;
 const MAX_STANDALONE_FILES_PER_REASON = 5;
+const EXTERNAL_BLOCKER_REASON =
+  "Outside the analyzed files — still uses styled-components and is wrapped by in-scope component(s); convert it or add it to the migration scope first";
 /** Safety cap on fixpoint passes; each pass reveals at least one new blocker until stable. */
 const MAX_ANALYSIS_PASSES = 50;
 
