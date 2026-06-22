@@ -298,6 +298,41 @@ describe("analyzeMigrationPlan", () => {
     ).rejects.toThrow(/did not stabilize within 1 passes/);
   });
 
+  it("reveals a cascade-masked blocker even when the base uses an aliased styled import", async () => {
+    // Token defines its styled component via `import { styled as sc }`. Seeding it
+    // as assumed-converted must use AST-aware extraction so its component name is
+    // known; otherwise Base = sc2(Token) with its own unsupported selector stays
+    // cascade-masked and is wrongly counted as auto-unlocked.
+    const tmp = await writeProject({
+      "src/token.tsx": [
+        'import { styled as sc } from "styled-components";',
+        "export const Token = sc.span`",
+        "  & > div { color: red; }",
+        "`;",
+      ].join("\n"),
+      "src/Base.tsx": [
+        'import { styled as sc2 } from "styled-components";',
+        'import { Token } from "./token";',
+        "export const Base = sc2(Token)`",
+        "  & > span { color: blue; }",
+        "`;",
+      ].join("\n"),
+    });
+
+    const plan = await analyzeMigrationPlan({
+      files: join(tmp, "src/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter,
+    });
+
+    const order = plan.manualConversionFiles.map((f) => f.filePath);
+    expect(order).toHaveLength(2);
+    expect(order[0]!.endsWith("token.tsx")).toBe(true);
+    expect(order[1]!.endsWith("Base.tsx")).toBe(true);
+    // Base is itself a blocker, so it must not be counted as auto-unlocked.
+    expect(plan.unlocksFileCount).toBe(0);
+  });
+
   it("does not claim a sole unlock for files with multiple independent blockers", async () => {
     // Consumer wraps two separate genuine blockers, so converting either one
     // alone does not auto-convert it. It must count in each blocker's raw chain

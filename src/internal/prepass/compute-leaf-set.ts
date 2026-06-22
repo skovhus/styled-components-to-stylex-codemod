@@ -9,6 +9,10 @@ import {
   resolveBarrelReExportBinding,
   type Resolve,
 } from "./extract-external-interface.js";
+import {
+  collectStyledLocalBindingNames,
+  walkForImportsAndTemplates,
+} from "./scan-cross-file-selectors.js";
 import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import type { ResolveBaseComponentContext, ResolveBaseComponentResult } from "../../adapter.js";
 import type { AstNode } from "./prepass-parser.js";
@@ -76,6 +80,35 @@ export function extractStyledDefBasesFromSource(
     if (name && ident) {
       map.set(name, { kind: "component", ident });
     }
+  }
+}
+
+/**
+ * Regex baseline for styled defs, then an AST pass overrides/adds rows when the
+ * source parses. The AST pass understands aliased/named `styled` imports
+ * (`import { styled as sc }`) that the regexes (which assume the literal `styled`)
+ * miss, so callers that only ran the regex extractor under-report components.
+ */
+export function extractStyledDefBases(
+  filePath: string,
+  source: string,
+  parser: { parse(source: string): unknown },
+  into: StyledDefBasesMap,
+): void {
+  extractStyledDefBasesFromSource(filePath, source, into);
+  try {
+    const ast = parser.parse(source) as AstNode;
+    const program = ((ast as { program?: AstNode }).program ?? ast) as AstNode;
+    const importNodes: AstNode[] = [];
+    walkForImportsAndTemplates(program, importNodes, []);
+    extractStyledDefBasesFromAstProgram(
+      filePath,
+      program,
+      collectStyledLocalBindingNames(importNodes),
+      into,
+    );
+  } catch {
+    // Regex rows already populated; nothing more to add when parsing fails.
   }
 }
 

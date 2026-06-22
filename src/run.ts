@@ -36,9 +36,10 @@ import {
   type Resolve,
 } from "./internal/prepass/extract-external-interface.js";
 import {
-  extractStyledDefBasesFromSource,
+  extractStyledDefBases,
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
+import { createPrepassParser } from "./internal/prepass/prepass-parser.js";
 import type {
   CrossFileInfo,
   CrossFileSelectorUsage,
@@ -523,6 +524,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // blocker so a consumer's own unsupported patterns surface instead of being
   // masked). Seeding transformedFileSources makes wrappers assume the hand-
   // converted base will expose the styling surface (className/sx).
+  const seedParser = createPrepassParser(parser);
   for (const assumedFile of options.assumeConvertedFiles ?? []) {
     const realPath = toRealPath(resolve(assumedFile));
     transformedFiles.add(realPath);
@@ -531,7 +533,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       let source = "";
       try {
         source = readFileSync(realPath, "utf-8");
-        extractStyledDefBasesFromSource(realPath, source, extracted);
+        // AST-aware extraction so aliased/named `styled` imports in the assumed
+        // base are recognized; otherwise a consumer's own unsupported pattern
+        // stays cascade-masked and never surfaces as a blocker.
+        extractStyledDefBases(realPath, source, seedParser, extracted);
       } catch {
         // Unreadable file — seed it as converted with no known component names.
       }
@@ -581,7 +586,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           return cached;
         }
         const extracted: StyledDefBasesMap = new Map();
-        extractStyledDefBasesFromSource(realPath, cachedRead(realPath), extracted);
+        extractStyledDefBases(realPath, cachedRead(realPath), seedParser, extracted);
         const names = new Set(extracted.get(realPath)?.keys() ?? []);
         styledDefinitionNamesByFile.set(realPath, names);
         return names;

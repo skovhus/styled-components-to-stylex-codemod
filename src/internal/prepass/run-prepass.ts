@@ -45,7 +45,6 @@ import {
   deduplicateAndResolve,
   findComponentSelectorLocalsFromNodes,
   findCssImportNamesFromNodes,
-  collectStyledLocalBindingNames,
   findStyledImportNameFromNodes,
   walkForImportsAndTemplates,
   type CrossFileInfo,
@@ -55,8 +54,7 @@ import {
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 import {
   computeGlobalLeafKeys,
-  extractStyledDefBasesFromAstProgram,
-  extractStyledDefBasesFromSource,
+  extractStyledDefBases,
   type StyledDefBasesMap,
 } from "./compute-leaf-set.js";
 import type { TypeScriptPrepassMetadata } from "./typescript-analysis.js";
@@ -709,21 +707,7 @@ function mergeLeafStyledDefBasesForFile(
   if (hasLeavesOnlyPrepassBlocker(source)) {
     return;
   }
-  extractStyledDefBasesFromSource(filePath, source, styledDefBases);
-  try {
-    const ast = parser.parse(source) as AstNode;
-    const program = ((ast as { program?: AstNode }).program ?? ast) as AstNode;
-    const importNodes: AstNode[] = [];
-    walkForImportsAndTemplates(program, importNodes, []);
-    extractStyledDefBasesFromAstProgram(
-      filePath,
-      program,
-      collectStyledLocalBindingNames(importNodes),
-      styledDefBases,
-    );
-  } catch {
-    // Regex rows already populated
-  }
+  extractStyledDefBases(filePath, source, parser, styledDefBases);
 }
 
 function hasLeavesOnlyPrepassBlocker(source: string): boolean {
