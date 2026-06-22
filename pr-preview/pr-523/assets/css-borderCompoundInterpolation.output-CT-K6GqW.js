@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-Cx-FVXAG.js";t();var n=e();function r(){return(0,n.jsx)(`div`,{className:`x1cum3z5 xj8oexa x1xijbu4 x1b4wo1g x1y0btm7 xw05z1l x2lah0s`,children:`Hello`})}export{r as App};

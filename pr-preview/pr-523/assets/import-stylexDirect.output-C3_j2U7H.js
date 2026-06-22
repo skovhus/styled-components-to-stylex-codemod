@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-BO-NS-aI.js";t();var n=e();function r(){return(0,n.jsx)(`div`,{className:`xur7f20 x1ruevkc xixxii4 x8ihxv3`,children:`StyleX Direct Import`})}export{r as App};
