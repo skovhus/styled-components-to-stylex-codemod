@@ -167,17 +167,6 @@ describe("public API runtime validation (DX)", () => {
     ).rejects.toThrowError(/expected an adapter object/i);
   });
 
-  it("runTransform: throws a helpful message when transformMode is invalid", async () => {
-    await expect(
-      runTransform({
-        files: "src/**/*.tsx",
-        consumerPaths: null,
-        transformMode: "leafOnly",
-        adapter: {},
-      } as any),
-    ).rejects.toThrowError(/`transformMode` must be one of/);
-  });
-
   it('runTransform: throws when externalInterface is "auto" but consumerPaths is null', async () => {
     const adapter = {
       resolveValue: () => undefined,

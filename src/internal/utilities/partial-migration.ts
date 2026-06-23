@@ -9,7 +9,7 @@ export function shouldSkipPartialImportedComponentRoot(
   ctx: TransformContext,
   decl: StyledDecl,
 ): boolean {
-  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
+  if (ctx.options.allowPartialMigration !== true) {
     return false;
   }
   if (decl.base.kind !== "component") {

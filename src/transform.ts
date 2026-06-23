@@ -34,7 +34,6 @@ import { detectPartialCascadeConflictStep } from "./internal/transform-steps/det
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { resolveBaseComponentsStep } from "./internal/transform-steps/resolve-base-components.js";
-import { applyLeavesOnlyPolicyStep } from "./internal/transform-steps/apply-leaves-only-policy.js";
 import { markPartialImportedRootsStep } from "./internal/transform-steps/mark-partial-imported-roots.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
@@ -174,9 +173,7 @@ function shouldAttemptStrictFullConversionFirst(
   options: TransformOptions,
 ): boolean {
   return (
-    options.allowPartialMigration === true &&
-    options.transformMode !== "leavesOnly" &&
-    !hasImportedRootStyledStaticAssignment(file, api)
+    options.allowPartialMigration === true && !hasImportedRootStyledStaticAssignment(file, api)
   );
 }
 
@@ -196,7 +193,6 @@ function runTransformPipeline(
     collectStyledDeclsStep,
     inlinePropConditionalCssHelpersStep,
     resolveBaseComponentsStep,
-    applyLeavesOnlyPolicyStep,
     markPartialImportedRootsStep,
     detectUnsupportedPatternsStep,
     detectCascadeConflictStep,
@@ -420,7 +416,6 @@ interface GlobalPrepassResult {
   propUsageByFile?: Map<string, Map<string, ComponentPropUsageInfo>>;
   styledDefFiles?: Map<string, Set<string>>;
   stylexComponentFiles?: Map<string, Set<string>>;
-  globalLeafKeys?: Set<string>;
   transformedFiles?: Set<string>;
   transformedComponents?: Map<string, Set<string>>;
   typeScriptMetadata?: TypeScriptPrepassMetadata;
@@ -457,7 +452,6 @@ function extractCrossFileInfoForFile(
   const hasStylexComponentFiles =
     prepass.stylexComponentFiles && prepass.stylexComponentFiles.size > 0;
   const hasPropUsage = propUsageByComponent && propUsageByComponent.size > 0;
-  const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
   const hasTransformedFiles = prepass.transformedFiles !== undefined;
   const hasTransformedComponents = prepass.transformedComponents !== undefined;
   const hasTypeScriptMetadata =
@@ -469,7 +463,6 @@ function extractCrossFileInfoForFile(
     !hasPropUsage &&
     !hasStyledDefFiles &&
     !hasStylexComponentFiles &&
-    !hasGlobalLeafKeys &&
     !hasTransformedFiles &&
     !hasTransformedComponents &&
     !hasTypeScriptMetadata
@@ -483,7 +476,6 @@ function extractCrossFileInfoForFile(
     propUsageByComponent,
     styledDefFiles: prepass.styledDefFiles,
     stylexComponentFiles: prepass.stylexComponentFiles,
-    globalLeafKeys: prepass.globalLeafKeys,
     transformedFiles: prepass.transformedFiles,
     transformedComponents: prepass.transformedComponents,
     typeScriptMetadata: prepass.typeScriptMetadata,
@@ -492,7 +484,6 @@ function extractCrossFileInfoForFile(
   return {
     ...options,
     crossFileInfo,
-    globalLeafKeys: options.globalLeafKeys ?? prepass.globalLeafKeys,
   };
 }
 

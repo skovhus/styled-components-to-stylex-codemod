@@ -39,8 +39,7 @@ export function extractCssHelpersStep(ctx: TransformContext): StepResult {
     toStyleKey,
     preserveDeclarationOnlyNames: collectCssHelpersUsedBySkippedImportedRoots(ctx),
     preservedStyledComponentSelectorNames: collectSkippedImportedRootStyledComponentNames(ctx),
-    preserveUniversalSelectorHelpers:
-      ctx.options.allowPartialMigration === true && ctx.options.transformMode !== "leavesOnly",
+    preserveUniversalSelectorHelpers: ctx.options.allowPartialMigration === true,
   });
 
   if (cssHelpers.unsupportedCssUsages.length > 0) {
@@ -60,7 +59,7 @@ export function extractCssHelpersStep(ctx: TransformContext): StepResult {
 }
 
 function collectSkippedImportedRootStyledComponentNames(ctx: TransformContext): Set<string> {
-  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
+  if (ctx.options.allowPartialMigration !== true) {
     return new Set();
   }
   const names = new Set<string>();
@@ -94,7 +93,7 @@ function initializerWrapsImportedComponent(ctx: TransformContext, init: unknown)
 }
 
 function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set<string> {
-  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
+  if (ctx.options.allowPartialMigration !== true) {
     return new Set();
   }
   const importMap = ctx.importMap ?? new Map();

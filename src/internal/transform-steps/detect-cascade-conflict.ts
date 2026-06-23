@@ -23,7 +23,6 @@ import {
   localNamesForExport,
 } from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
-import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 
@@ -61,8 +60,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   // marks every `styled(ImportedComponent)` decl as skipped before lowering. Honor
   // the same policy here so the cascade-conflict check doesn't bail the whole file
   // for a decl that will be left as styled-components anyway.
-  const skipImportedRoots =
-    ctx.options.allowPartialMigration === true && ctx.options.transformMode !== "leavesOnly";
+  const skipImportedRoots = ctx.options.allowPartialMigration === true;
 
   // Build lookup of locally defined styled-component names for exclusion
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
@@ -79,8 +77,8 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     const baseIdent = decl.base.ident;
     const baseImportLocalName = rootLocalName(baseIdent);
     // For `styled(Imported.Member)` the import resolves the root binding, but the
-    // wrapped component is the static member — carry the member path into every
-    // dependency check so a clean root cannot mask a styled-dependent member.
+    // wrapped component is the static member. Carry the member path into dependency
+    // checks so a clean root cannot mask a styled-dependent member.
     const baseMemberPath = baseIdent.split(".").slice(1);
 
     // Skip if the base is a locally defined styled-component (delegation handles it)
@@ -103,27 +101,6 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       path: importedPath,
       importedName: importEntry.importedName,
     };
-
-    // Leaves-only mode: wrapping another leaf styled component from this transform run
-    // is safe — both sides become StyleX; skip the conservative imported-styled bail.
-    // Import paths omit extensions while prepass keys use resolved files — probe extensions.
-    // Leaf keys identify the root export only, so they cannot vouch for a static member.
-    if (
-      baseMemberPath.length === 0 &&
-      ctx.options.transformMode === "leavesOnly" &&
-      ctx.options.globalLeafKeys?.size
-    ) {
-      if (
-        globalLeafKeyExists(
-          ctx.options.globalLeafKeys,
-          definition.path,
-          definition.importedName,
-          definition.importedName === "default",
-        )
-      ) {
-        continue;
-      }
-    }
 
     // Check if the imported file contains styled-components.
     // Prefer prepass data when available, but fall back to direct file scan if the
@@ -256,59 +233,6 @@ const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 
 /** Regex matching styled-component definitions: `const Name = styled.tag` or `const Name = styled(Component)` */
 const STYLED_DEF_RE = /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled[.(]/g;
-
-/** Whether `${resolvedDefFile}:${binding}` is in the leaves-only prepass key set. */
-function globalLeafKeyExists(
-  keys: ReadonlySet<string>,
-  importedPath: string,
-  bindingName: string,
-  allowDefaultFallback: boolean,
-): boolean {
-  const candidates = [
-    importedPath,
-    ...EXTENSIONS.map((ext) => importedPath + ext),
-    ...EXTENSIONS.map((ext) => pathResolve(importedPath, `index${ext}`)),
-  ];
-  for (const c of candidates) {
-    const key = `${toRealPath(c)}:${bindingName}`;
-    if (keys.has(key)) {
-      return true;
-    }
-    if (allowDefaultFallback) {
-      const source = tryReadFile(c);
-      const defaultName = source ? findDefaultExportedLocalName(source) : undefined;
-      if (defaultName && keys.has(`${toRealPath(c)}:${defaultName}`)) {
-        return true;
-      }
-      const reExportSpecifier = source ? findDefaultReExportSpecifier(source) : undefined;
-      if (reExportSpecifier && defaultReExportLeafKeyExists(keys, c, reExportSpecifier)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function findDefaultReExportSpecifier(source: string): string | undefined {
-  return source.match(/\bexport\s*\{\s*default\s*\}\s*from\s*["']([^"']+)["']/)?.[1];
-}
-
-function defaultReExportLeafKeyExists(
-  keys: ReadonlySet<string>,
-  barrelPath: string,
-  specifier: string,
-): boolean {
-  const basePath = pathResolve(dirname(barrelPath), specifier);
-  const candidates = [basePath, ...EXTENSIONS.map((ext) => basePath + ext)];
-  for (const candidate of candidates) {
-    const source = tryReadFile(candidate);
-    const defaultName = source ? findDefaultExportedLocalName(source) : undefined;
-    if (defaultName && keys.has(`${toRealPath(candidate)}:${defaultName}`)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Resolve an import path to a styledDefFiles entry. The importMap stores resolved

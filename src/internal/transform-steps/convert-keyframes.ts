@@ -17,10 +17,9 @@ import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
  * Tracks styled-components keyframes names before partial lowering decides which
  * styled templates can be safely transformed.
  *
- * Also collects the names of pre-existing `stylex.keyframes(...)` declarations in the
- * file, so that incremental migrations (e.g. a leaves-only pass followed by a full
- * migration) can still recognize keyframe identifiers when expanding `animation`
- * shorthands in the surviving styled-components declarations.
+ * Also collects the names of pre-existing `stylex.keyframes(...)` declarations in
+ * the file, so incremental migrations can still recognize keyframe identifiers
+ * when expanding `animation` shorthands in surviving styled-components declarations.
  */
 export function convertKeyframesStep(ctx: TransformContext): StepResult {
   const { styledImports, j, root } = ctx;

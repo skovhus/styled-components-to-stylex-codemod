@@ -84,11 +84,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
     isStyledTag: ctx.isStyledTag,
     styledDecls: ctx.styledDecls,
   });
-  if (
-    ctx.options.transformMode !== "leavesOnly" &&
-    !(ctx.options.allowPartialMigration ?? false) &&
-    uncollectedStyledTemplateLoc !== undefined
-  ) {
+  if (!(ctx.options.allowPartialMigration ?? false) && uncollectedStyledTemplateLoc !== undefined) {
     ctx.warnings.push({
       severity: "warning",
       type: "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported",
@@ -101,7 +97,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   const unparseableSfpDecl = styledDecls.find(
     (d) => !d.skipTransform && d.hasUnparseableShouldForwardProp,
   );
-  if (unparseableSfpDecl && ctx.options.transformMode !== "leavesOnly") {
+  if (unparseableSfpDecl) {
     ctx.warnings.push({
       severity: "warning",
       type: UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING,
@@ -116,7 +112,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
       d.attrsInfo?.sourceKind === "function" &&
       d.attrsInfo.hasUnsupportedValues,
   );
-  if (unsupportedFunctionAttrsDecl && ctx.options.transformMode !== "leavesOnly") {
+  if (unsupportedFunctionAttrsDecl) {
     ctx.warnings.push({
       severity: "warning",
       type: "Unsupported .attrs() callback pattern",
@@ -159,7 +155,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
   // With partial migration enabled, preserve only the declarations that contain them; otherwise keep
   // the legacy whole-file bail.
-  if (hasUniversalSelectors && ctx.options.transformMode !== "leavesOnly") {
+  if (hasUniversalSelectors) {
     ctx.warnings.push({
       severity: "warning",
       type: "Universal selectors (`*`) are currently unsupported",

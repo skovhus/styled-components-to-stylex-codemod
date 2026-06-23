@@ -846,67 +846,6 @@ describe("runTransform (e2e)", () => {
     expect(consumer).not.toContain("sx={styles.body}");
   });
 
-  it("collects standalone file results without inheriting broad-run leaf state", async () => {
-    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-standalone-leaves-"));
-    await mkdir(join(tmp, "src"), { recursive: true });
-    await writeFile(
-      join(tmp, "tsconfig.json"),
-      JSON.stringify({ compilerOptions: { jsx: "preserve", moduleResolution: "bundler" } }),
-    );
-
-    const baseFile = join(tmp, "src/Base.tsx");
-    const wrapperFile = join(tmp, "src/Wrapper.tsx");
-    await writeFile(
-      baseFile,
-      [
-        'import styled from "styled-components";',
-        "",
-        "export const Base = styled.div`",
-        "  color: red;",
-        "`;",
-        "",
-      ].join("\n"),
-    );
-    await writeFile(
-      wrapperFile,
-      [
-        'import styled from "styled-components";',
-        'import { Base } from "./Base";',
-        "",
-        "export const Wrapper = styled(Base)`",
-        "  color: blue;",
-        "`;",
-        "",
-      ].join("\n"),
-    );
-
-    const result = await runTransform({
-      files: [baseFile, wrapperFile],
-      consumerPaths: join(tmp, "src/**/*.tsx"),
-      adapter: defineAdapterFromIndex({
-        useSxProp: false,
-        usePhysicalProperties: true,
-        externalInterface: () => ({ styles: false, as: false, ref: false }),
-        styleMerger: null,
-        resolveValue: () => undefined,
-        resolveCall: () => undefined,
-        resolveSelector: () => undefined,
-      }),
-      dryRun: true,
-      print: false,
-      parser: "tsx",
-      transformMode: "leavesOnly",
-      collectStandaloneFileResults: true,
-      silent: true,
-    });
-
-    const standaloneByFile = new Map(
-      result.standaloneFileResults?.map((fileResult) => [fileResult.filePath, fileResult.status]),
-    );
-    expect(standaloneByFile.get(baseFile)).toBe("transformed");
-    expect(standaloneByFile.get(wrapperFile)).toBe("skipped");
-  });
-
   it("does not leak jscodeshift worker listeners on runs with more than ten files", async () => {
     const tmp = await mkdtemp(join(tmpdir(), "styledx-run-many-files-"));
     await mkdir(join(tmp, "src"), { recursive: true });

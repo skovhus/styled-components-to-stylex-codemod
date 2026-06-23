@@ -90,7 +90,7 @@ export function inlinePropConditionalCssHelpersStep(ctx: TransformContext): Step
   // Empty the rules of fully-inlined helpers so they lower to nothing (no dead style keys).
   // The decls are deliberately kept in `styledDecls`: lowerRulesStep's skipped-decl safety
   // check relies on them remaining in `removedHelperLocalNames` to bail when a preserved
-  // consumer (partial migration / leaves-only) still references the extracted helper source.
+  // consumer in partial migration still references the extracted helper source.
   for (const decl of styledDecls) {
     if (
       decl.isCssHelper &&

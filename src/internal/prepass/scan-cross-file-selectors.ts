@@ -49,11 +49,6 @@ export interface CrossFileInfo {
   styledDefFiles?: Map<string, Set<string>>;
   /** Files that export components already using StyleX → set of export names. */
   stylexComponentFiles?: Map<string, Set<string>>;
-  /**
-   * Leaves-only mode: `${realpathOfDefiningFile}:${bindingName}` for styled components
-   * classified as leaves (intrinsic base or transitive wrapper of another leaf in the run).
-   */
-  globalLeafKeys?: Set<string>;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
