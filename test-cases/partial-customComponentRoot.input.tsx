@@ -1,6 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
-import { Text } from "./lib/text";
+import { Text } from "./lib/styled-text";
 
 const Notice = styled.div`
   padding: 8px;
