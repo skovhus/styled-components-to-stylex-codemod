@@ -1,4 +1,6 @@
-// Dynamic inline style objects on intrinsic styled components should stay as JSX style props.
+// Inline style object with multiple properties sharing the same ternary condition.
+// Should hoist into a static base style + boolean-conditional variant style instead
+// of emitting a single dynamic function with N ternary call args.
 import * as React from "react";
 import styled from "styled-components";
 
@@ -19,12 +21,18 @@ const InputRow = ({ hasRange }: { hasRange: boolean }) => (
   />
 );
 
-// Preserving dynamic style props keeps per-property expression evaluation
-// semantics for impure conditions.
+// A shared ternary whose test is a function call. Promotion must NOT collapse
+// the per-property ternaries here: hoisting to a single `cond && styles.x` would
+// evaluate the call only once instead of once-per-property and can apply a
+// different branch than the original inline style object when the call returns
+// a different value each time (e.g. `Math.random()` based logic, time-based
+// flags, side-effecting getters).
 const ImpureBox = styled.div`
   padding: 8px;
 `;
-// Deterministic at runtime so input/output renders match pixel-for-pixel.
+// Deterministic at runtime so input/output renders match pixel-for-pixel, but
+// still a `CallExpression` at AST analysis time so the purity check trips and
+// the codemod falls back to the per-property dynamic style function.
 const isImpureFlag = () => true;
 const ImpureRow = () => (
   <ImpureBox
@@ -37,8 +45,11 @@ const ImpureRow = () => (
   </ImpureBox>
 );
 
-// Preserving the caller style avoids generating extra keys that can collide
-// with unrelated styled components.
+// A shared-ternary promotion for `<Box>` would generate the key
+// `${box}${Active}` = `boxActive`, which collides with the unrelated styled
+// component `BoxActive` already registered under that key. The promoted entry
+// must be deduplicated against existing style keys so it doesn't silently
+// overwrite `BoxActive`'s style.
 const Box = styled.div`
   padding: 4px;
 `;

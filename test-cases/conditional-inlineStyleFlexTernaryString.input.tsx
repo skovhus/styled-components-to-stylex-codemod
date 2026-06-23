@@ -1,4 +1,4 @@
-// Dynamic inline flex values should remain in the caller-owned JSX style prop.
+// Single-use dynamic inline flex values should promote to a StyleX dynamic function.
 import * as React from "react";
 import styled from "styled-components";
 

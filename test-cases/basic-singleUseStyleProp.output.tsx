@@ -7,9 +7,7 @@ const ARCHIVED_BG = "#eef2ff";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-    <div sx={styles.tick} style={{ left: 6 + TICK_OFFSET }}>
-      Tick
-    </div>
+    <div sx={styles.tick(6 + TICK_OFFSET)}>Tick</div>
     <span {...mergedSx(styles.label, "custom-label")}>Label</span>
     <div sx={styles.drillHeader} style={{ paddingRight: HEADER_PADDING_RIGHT }}>
       Dynamic padding
@@ -24,10 +22,11 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  tick: {
+  tick: (left: number | string) => ({
     margin: 3,
     backgroundColor: "coral",
-  },
+    left,
+  }),
   label: {
     fontWeight: "bold",
     color: "navy",

@@ -9497,7 +9497,7 @@ export const App = () => {
     expect(result.code).not.toContain("(background-color:");
   });
 
-  it("should preserve dynamic length-like style props through configured style merger", async () => {
+  it("should use number | string for promoted length-like style params with unknown type", async () => {
     const source = `
 import styled from 'styled-components';
 
@@ -9518,11 +9518,11 @@ export const App = () => {
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("stylexProps(styles.box, undefined, { left })");
-    expect(result.code).not.toContain("(left:");
+    expect(result.code).toContain("(left: number | string) => ({");
+    expect(result.code).not.toContain("(left: number) => ({");
   });
 
-  it("should preserve dynamic grid style props through configured style merger", async () => {
+  it("should use string type for promoted grid property params (StyleX types grid props as string)", async () => {
     const source = `
 import styled from 'styled-components';
 
@@ -9542,9 +9542,11 @@ export const App = ({ row }: { row: number }) => {
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("stylexProps(styles.box, undefined, { gridRow: row })");
-    expect(result.code).not.toContain("(gridRow:");
-    expect(result.code).not.toContain("String(row)");
+    expect(result.code).toContain("(gridRow: string) => ({");
+    expect(result.code).not.toContain("number | string");
+    expect(result.code).not.toContain("gridRow: number");
+    // Call site must coerce numeric arg to string
+    expect(result.code).toContain("String(row)");
   });
 
   it("should coerce static numeric gridRow values to strings", async () => {

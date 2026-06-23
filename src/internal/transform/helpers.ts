@@ -67,7 +67,7 @@ export type PropCommentMetadata = {
 
 export const SOURCE_CSS_PROPERTIES_KEY = "__sourceCssProperties";
 
-function propCommentMetadataToAstComments(
+export function propCommentMetadataToAstComments(
   commentEntry: string | PropCommentMetadata | null | undefined,
 ): any[] {
   const leading =

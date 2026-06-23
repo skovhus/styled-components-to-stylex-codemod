@@ -709,6 +709,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     root,
     j,
     styledDecls,
+    allStyledDecls,
     declByLocal,
     getJsxUsageCount,
     ctx.resolvedStyleObjects ?? new Map(),

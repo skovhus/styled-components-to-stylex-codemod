@@ -1086,6 +1086,142 @@ export function cloneAstNode<T>(node: T): T {
 }
 
 /**
+ * Conservative purity check for a JS expression: returns true when evaluating
+ * the expression repeatedly yields the same value and produces no observable
+ * side effects (assignment, function call, mutation, await, etc.).
+ *
+ * Use this before lifting an expression out of N evaluations into a single
+ * shared evaluation (e.g. collapsing `cond ? a : b` repeated for several
+ * properties into one `cond && variant` guard). Anything that *might* return a
+ * different value on a subsequent call (function/method calls, `new`, `yield`,
+ * `await`, assignments, increment/decrement) is treated as impure.
+ *
+ * Conservatively returns false for unfamiliar node types.
+ */
+export function isPureIdempotentExpression(node: unknown): boolean {
+  if (!isAstNode(node)) {
+    return false;
+  }
+  const n = node as { type: string } & Record<string, unknown>;
+  switch (n.type) {
+    case "Identifier":
+    case "ThisExpression":
+    case "Super":
+    case "NullLiteral":
+    case "BooleanLiteral":
+    case "NumericLiteral":
+    case "StringLiteral":
+    case "BigIntLiteral":
+    case "RegExpLiteral":
+    case "Literal":
+      return true;
+    case "TemplateLiteral":
+      return Array.isArray(n.expressions) && n.expressions.every(isPureIdempotentExpression);
+    case "UnaryExpression":
+      // `delete` mutates; `++`/`--` aren't UnaryExpressions but check anyway.
+      if (n.operator === "delete") {
+        return false;
+      }
+      return isPureIdempotentExpression(n.argument);
+    case "BinaryExpression":
+      return isPureIdempotentExpression(n.left) && isPureIdempotentExpression(n.right);
+    case "LogicalExpression":
+      return isPureIdempotentExpression(n.left) && isPureIdempotentExpression(n.right);
+    case "ConditionalExpression":
+      return (
+        isPureIdempotentExpression(n.test) &&
+        isPureIdempotentExpression(n.consequent) &&
+        isPureIdempotentExpression(n.alternate)
+      );
+    case "MemberExpression":
+    case "OptionalMemberExpression": {
+      if (!isPureIdempotentExpression(n.object)) {
+        return false;
+      }
+      // Computed access can run an arbitrary expression (or hit a getter on a
+      // dynamic key); only treat dotted, non-computed access as pure.
+      if (n.computed) {
+        return false;
+      }
+      return true;
+    }
+    case "TSAsExpression":
+    case "TSTypeAssertion":
+    case "TSNonNullExpression":
+    case "TSSatisfiesExpression":
+      return isPureIdempotentExpression(n.expression);
+    case "ParenthesizedExpression":
+      return isPureIdempotentExpression(n.expression);
+    case "ArrayExpression":
+      return (
+        Array.isArray(n.elements) &&
+        n.elements.every((el) => el === null || isPureIdempotentExpression(el))
+      );
+    case "ObjectExpression":
+      return (
+        Array.isArray(n.properties) &&
+        n.properties.every((p) => {
+          if (!isAstNode(p)) {
+            return false;
+          }
+          const prop = p as { type: string; key?: unknown; value?: unknown; computed?: boolean };
+          if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+            return false;
+          }
+          if (prop.computed && !isPureIdempotentExpression(prop.key)) {
+            return false;
+          }
+          return isPureIdempotentExpression(prop.value);
+        })
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * Structural equality check for AST nodes.
+ * Compares two nodes recursively, ignoring metadata (loc, start/end, comments, tokens).
+ * Returns true when the nodes have the same shape and values.
+ */
+export function astNodesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a === null || b === null || a === undefined || b === undefined) {
+    return false;
+  }
+  if (typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!astNodesEqual(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  const aKeys = Object.keys(a as Record<string, unknown>).filter((k) => !AST_METADATA_KEYS.has(k));
+  const bKeys = Object.keys(b as Record<string, unknown>).filter((k) => !AST_METADATA_KEYS.has(k));
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) {
+      return false;
+    }
+    if (!astNodesEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Type guard for LogicalExpression nodes.
  */
 export function isLogicalExpressionNode(

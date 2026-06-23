@@ -1,4 +1,4 @@
-// Intrinsic styled component style props: static styles promote, dynamic caller styles stay inline
+// Intrinsic styled component style props: single-use dynamic promotes, reused dynamic stays inline
 import styled from "styled-components";
 
 const TICK_OFFSET = 4;
