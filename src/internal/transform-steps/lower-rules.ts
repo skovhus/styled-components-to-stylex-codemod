@@ -54,8 +54,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
 
   // Partial migration is opt-in. When disabled, any per-decl bail escalates to a
   // whole-file bail so the output matches the stricter pre-flag behavior.
-  const allowPartialMigration =
-    (ctx.options.allowPartialMigration ?? false) || ctx.options.transformMode === "leavesOnly";
+  const allowPartialMigration = ctx.options.allowPartialMigration ?? false;
   if (ctx.styledDecls && ctx.styledDecls.length > 0) {
     const anyTransformable = ctx.styledDecls.some((d) => !d.skipTransform);
     if (!anyTransformable) {

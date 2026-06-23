@@ -1229,9 +1229,6 @@ function canInlineWithoutLocalCallsites(
  * Creates synthetic StyledDecl objects that flow through the existing pipeline.
  */
 function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]): void {
-  if (ctx.options.transformMode === "leavesOnly") {
-    return;
-  }
   const resolveBaseComponent = ctx.resolveBaseComponent;
   if (!resolveBaseComponent) {
     return;

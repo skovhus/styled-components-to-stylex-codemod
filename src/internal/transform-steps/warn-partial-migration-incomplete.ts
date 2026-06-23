@@ -35,11 +35,7 @@ export function warnPartialMigrationIncompleteStep(ctx: TransformContext): StepR
 const MAX_PARTIAL_MIGRATION_WARNING_NAMES = 20;
 
 function shouldWarnForPartialMigration(ctx: TransformContext): boolean {
-  return (
-    ctx.hasChanges &&
-    ctx.options.allowPartialMigration === true &&
-    ctx.options.transformMode !== "leavesOnly"
-  );
+  return ctx.hasChanges && ctx.options.allowPartialMigration === true;
 }
 
 function collectSkippedStyledDeclarations(styledDecls: StyledDecl[] | undefined): StyledDecl[] {

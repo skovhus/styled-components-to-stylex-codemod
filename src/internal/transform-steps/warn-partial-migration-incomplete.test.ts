@@ -32,20 +32,6 @@ describe("warnPartialMigrationIncompleteStep", () => {
       }),
     );
   });
-
-  it("does not warn for leaves-only transforms", () => {
-    const ctx = createContext({
-      options: { allowPartialMigration: true, transformMode: "leavesOnly" },
-      styledDecls: [
-        createStyledDecl("Converted"),
-        createStyledDecl("Skipped", { skipTransform: true }),
-      ],
-    });
-
-    warnPartialMigrationIncompleteStep(ctx);
-
-    expect(ctx.warnings).toEqual([]);
-  });
 });
 
 function createContext({

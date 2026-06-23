@@ -1,20 +1,11 @@
 /**
- * Computes which styled-component bindings are "leaves" for leaves-only mode:
- * intrinsic bases (`styled.div`) or transitive wrappers around other leaf styled
- * components in the transform set. Uses AST extraction (primary), regex fallback,
- * fixed-point + import resolution (same helpers as consumer analysis).
+ * Extracts styled-component definition bases for prepass consumers that need
+ * component names and their root shape.
  */
-import {
-  findImportSource,
-  resolveBarrelReExportBinding,
-  type Resolve,
-} from "./extract-external-interface.js";
 import {
   collectStyledLocalBindingNames,
   walkForImportsAndTemplates,
 } from "./scan-cross-file-selectors.js";
-import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
-import type { ResolveBaseComponentContext, ResolveBaseComponentResult } from "../../adapter.js";
 import type { AstNode } from "./prepass-parser.js";
 
 export type StyledDefBase = { kind: "intrinsic" } | { kind: "component"; ident: string };
@@ -46,7 +37,7 @@ const STYLED_COMPONENT_RE = new RegExp(
  * Regex-derived styled definition bases for files in the transform set.
  * Later entries for the same component name overwrite earlier ones (rare).
  */
-export function extractStyledDefBasesFromSource(
+function extractStyledDefBasesFromSource(
   filePath: string,
   source: string,
   into: StyledDefBasesMap,
@@ -117,7 +108,7 @@ export function extractStyledDefBases(
  * and `.attrs` / `.withConfig` chains before the tagged template.
  * Results merge into `into`; bindings found here override regex entries for the same name.
  */
-export function extractStyledDefBasesFromAstProgram(
+function extractStyledDefBasesFromAstProgram(
   filePath: string,
   program: AstNode,
   styledLocalNames: ReadonlySet<string>,
@@ -294,158 +285,4 @@ function classifyStyledTemplateTag(
   }
 
   return null;
-}
-
-/**
- * Fixed-point: a styled binding is a leaf if its base is intrinsic, or its base
- * component resolves (same-file or import) to another leaf binding in the transform set.
- *
- * @param transformSet - Absolute realpaths of files being transformed
- * @param styledDefBases - From {@link extractStyledDefBasesFromSource}
- * @param resolve - Module path resolver
- * @param cachedRead - Read file source for import resolution
- */
-export function computeGlobalLeafKeys(args: {
-  transformSet: ReadonlySet<string>;
-  styledDefBases: StyledDefBasesMap;
-  resolve: Resolve;
-  cachedRead: (path: string) => string;
-  toRealPath: (path: string) => string;
-  resolveBaseComponent?: (
-    ctx: ResolveBaseComponentContext,
-  ) => ResolveBaseComponentResult | undefined;
-}): Set<string> {
-  const { transformSet, styledDefBases, resolve, cachedRead, toRealPath, resolveBaseComponent } =
-    args;
-
-  /** fileRealPath → Set of local binding names that are leaves */
-  const globalLeaves = new Map<string, Set<string>>();
-
-  const ensureSet = (file: string): Set<string> => {
-    let s = globalLeaves.get(file);
-    if (!s) {
-      s = new Set();
-      globalLeaves.set(file, s);
-    }
-    return s;
-  };
-
-  const isLeaf = (file: string, name: string): boolean =>
-    globalLeaves.get(file)?.has(name) ?? false;
-
-  const tryResolveImportedLeaf = (file: string, ident: string): boolean => {
-    const importInfo = findImportSource(cachedRead(file), ident);
-    if (!importInfo) {
-      return false;
-    }
-    const initialDefFile = resolve(importInfo.source, file);
-    if (!initialDefFile) {
-      return false;
-    }
-    const exportNameForBarrel = importInfo.isDefault ? "default" : importInfo.exportedName;
-    const reExport = resolveBarrelReExportBinding(
-      initialDefFile,
-      exportNameForBarrel,
-      resolve,
-      cachedRead,
-    );
-    const defFile = reExport?.filePath ?? initialDefFile;
-    const exportedName = reExport?.exportedName ?? importInfo.exportedName;
-    const defReal = toRealPath(defFile);
-    if (!transformSet.has(defReal)) {
-      return false;
-    }
-    return leafKeyExists(
-      defReal,
-      exportedName,
-      exportedName === "default" || importInfo.isDefault,
-      cachedRead,
-      globalLeaves,
-    );
-  };
-
-  const tryResolveAdapterIntrinsic = (file: string, ident: string): boolean => {
-    if (!resolveBaseComponent) {
-      return false;
-    }
-    const importInfo = findImportSource(cachedRead(file), ident);
-    if (!importInfo) {
-      return false;
-    }
-    try {
-      const result = resolveBaseComponent({
-        importSource: importInfo.source,
-        importedName: importInfo.exportedName,
-        staticProps: {},
-        filePath: file,
-      });
-      return typeof result?.tagName === "string" && result.tagName.trim() !== "";
-    } catch {
-      return false;
-    }
-  };
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [filePath, nameMap] of styledDefBases) {
-      const fileReal = toRealPath(filePath);
-      if (!transformSet.has(fileReal)) {
-        continue;
-      }
-      for (const [name, base] of nameMap) {
-        if (isLeaf(fileReal, name)) {
-          continue;
-        }
-        if (base.kind === "intrinsic") {
-          ensureSet(fileReal).add(name);
-          changed = true;
-          continue;
-        }
-
-        const ident = base.ident;
-        if (isLeaf(fileReal, ident)) {
-          ensureSet(fileReal).add(name);
-          changed = true;
-          continue;
-        }
-
-        if (tryResolveAdapterIntrinsic(filePath, ident)) {
-          ensureSet(fileReal).add(name);
-          changed = true;
-          continue;
-        }
-
-        if (tryResolveImportedLeaf(filePath, ident)) {
-          ensureSet(fileReal).add(name);
-          changed = true;
-        }
-      }
-    }
-  }
-
-  const globalLeafKeys = new Set<string>();
-  for (const [file, names] of globalLeaves) {
-    for (const name of names) {
-      globalLeafKeys.add(`${file}:${name}`);
-    }
-  }
-  return globalLeafKeys;
-}
-
-function leafKeyExists(
-  defFile: string,
-  exportedName: string,
-  allowDefaultFallback: boolean,
-  cachedRead: (path: string) => string,
-  globalLeaves: Map<string, Set<string>>,
-): boolean {
-  if (globalLeaves.get(defFile)?.has(exportedName) ?? false) {
-    return true;
-  }
-  if (!allowDefaultFallback) {
-    return false;
-  }
-  const defaultLocalName = findDefaultExportedLocalName(cachedRead(defFile));
-  return defaultLocalName ? (globalLeaves.get(defFile)?.has(defaultLocalName) ?? false) : false;
 }

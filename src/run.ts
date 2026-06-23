@@ -26,7 +26,6 @@ import type {
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
-import type { TransformMode } from "./internal/transform-types.js";
 import type {
   TypeScriptComponentMetadata,
   TypeScriptPrepassMetadata,
@@ -38,7 +37,7 @@ import {
 import {
   extractStyledDefBases,
   type StyledDefBasesMap,
-} from "./internal/prepass/compute-leaf-set.js";
+} from "./internal/prepass/styled-def-bases.js";
 import { createPrepassParser } from "./internal/prepass/prepass-parser.js";
 import type {
   CrossFileInfo,
@@ -126,18 +125,6 @@ export interface RunTransformOptions {
    * @default false
    */
   silent?: boolean;
-
-  /**
-   * Controls which styled declarations are eligible for conversion.
-   *
-   * - `"all"` converts every supported styled declaration.
-   * - `"leavesOnly"` only converts declarations whose render base is intrinsic
-   *   after adapter resolution, or that wrap another leaf styled declaration in
-   *   the transform run (including cross-file imports).
-   *
-   * @default "all"
-   */
-  transformMode?: TransformMode;
 
   /**
    * When true, allow the codemod to leave individual styled declarations as-is when
@@ -319,22 +306,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   }
 
-  const transformModeRaw = (options as { transformMode?: unknown }).transformMode;
-  if (
-    transformModeRaw !== undefined &&
-    transformModeRaw !== "all" &&
-    transformModeRaw !== "leavesOnly"
-  ) {
-    throw new Error(
-      [
-        'runTransform(options): `transformMode` must be one of: "all", "leavesOnly".',
-        `Received: transformMode=${describeValue(transformModeRaw)}`,
-      ].join("\n"),
-    );
-  }
-
-  const leavesOnly = options.transformMode === "leavesOnly";
-
   const {
     files,
     consumerPaths: consumerPathsOption,
@@ -498,8 +469,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       parserName: parser,
       createExternalInterface: adapterInput.externalInterface === "auto",
       enableAstCache: true,
-      leavesOnly,
-      resolveBaseComponent: adapterInput.resolveBaseComponent,
     });
     Logger.info(`Prepass: completed in ${formatElapsedSeconds(prepassStartedAt)}s\n`);
   } catch (err) {
@@ -517,7 +486,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         componentsNeedingGlobalSelectorBridge: new Map(),
         propUsageByFile: new Map(),
         stylexComponentFiles: new Map(),
-        globalLeafKeys: leavesOnly ? new Set() : undefined,
       },
       consumerAnalysis: undefined,
       forwardedAsConsumers: new Map(),
@@ -771,9 +739,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformedComponents,
     transformedFileSources,
     transientPropRenames,
-    allowPartialMigration: options.allowPartialMigration ?? (leavesOnly ? true : false),
-    transformMode: leavesOnly ? "leavesOnly" : (options.transformMode ?? "all"),
-    globalLeafKeys: crossFilePrepassResult.globalLeafKeys,
+    allowPartialMigration: options.allowPartialMigration ?? false,
     resolveModule: (fromFile: string, specifier: string) =>
       sharedResolver.resolve(resolve(fromFile), specifier),
     // Programmatic use passes an Adapter object (functions). That cannot be
@@ -1143,22 +1109,9 @@ function createStandalonePrepassResult(
     selectorUsages,
     componentsNeedingMarkerSidecar,
     componentsNeedingGlobalSelectorBridge,
-    globalLeafKeys: getStandaloneGlobalLeafKeys(prepass.globalLeafKeys, standaloneFile),
     transformedFiles,
     transformedComponents,
   };
-}
-
-function getStandaloneGlobalLeafKeys(
-  globalLeafKeys: Set<string> | undefined,
-  standaloneFile: string,
-): Set<string> | undefined {
-  if (!globalLeafKeys) {
-    return undefined;
-  }
-
-  const filePrefix = `${standaloneFile}:`;
-  return new Set([...globalLeafKeys].filter((key) => key.startsWith(filePrefix)));
 }
 
 function addSetMapEntry(map: Map<string, Set<string>>, key: string, value: string): void {
