@@ -19,7 +19,9 @@ export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
     <Code>{"  "}return a + b;</Code>
     <Gutter>4</Gutter>
     <Code>{"}"}</Code>
-    <div sx={[styles.gutter, styles.gutterDynamic(String(highlightRow))]}>*</div>
+    <div sx={styles.gutter} style={{ gridRow: highlightRow }}>
+      *
+    </div>
     <div sx={[styles.code, styles.codeHighlighted]}>highlighted</div>
   </div>
 );
@@ -58,9 +60,6 @@ const styles = stylex.create({
       'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace',
     fontSize: 12,
   },
-  gutterDynamic: (gridRow: string) => ({
-    gridRow,
-  }),
   codeHighlighted: {
     gridRow: "2",
   },

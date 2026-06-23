@@ -703,13 +703,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     localElementProofs.set(decl.localName, { proof, unsupportedReason });
   }
 
-  // Pre-analyze inline style props at JSX call sites to determine if they can be promoted
-  // to static/dynamic stylex.create entries (avoiding wrapper components and mergedSx).
+  // Pre-analyze inline style props at JSX call sites to determine if static values
+  // can be promoted or dynamic caller styles can be preserved while inlining.
   analyzePromotableStyleProps(
     root,
     j,
     styledDecls,
-    allStyledDecls,
     declByLocal,
     getJsxUsageCount,
     ctx.resolvedStyleObjects ?? new Map(),
@@ -736,8 +735,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
       decl.receivesClassNameOrStyleInJsx = true;
-      // Style props promoted to stylex.create entries don't need a wrapper.
-      if (!className && decl.promotedStyleProps?.length) {
+      // Style props promoted to stylex.create entries, or dynamic style props
+      // preserved on intrinsic JSX, don't need a wrapper.
+      if (!className && (decl.promotedStyleProps?.length || decl.preserveInlineStyleProps)) {
         continue;
       }
       if (
@@ -894,10 +894,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     ) {
       continue;
     }
-    // When every call site has promoted style props, each site is fully inlined;
-    // a wrapper would be generated but never used. Skip wrapping in that case.
+    // When every call site is handled directly (via promoted style props or
+    // preserved inline style props), a wrapper would be unused. If only a subset
+    // is handled directly, keep the wrapper for the remaining reusable call sites.
     const usageCount = getJsxUsageCount(decl.localName);
-    if (decl.promotedStyleProps?.length && decl.promotedStyleProps.length >= usageCount) {
+    const directlyHandledStylePropCount =
+      (decl.promotedStyleProps?.length ?? 0) + (decl.preservedInlineStylePropCount ?? 0);
+    if (directlyHandledStylePropCount > 0 && directlyHandledStylePropCount >= usageCount) {
       continue;
     }
     const { ref } = getJsxAttributeUsage(decl.localName);

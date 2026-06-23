@@ -12,7 +12,7 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <div sx={[styles.flex, flexGapVariants[12], styles.flexMarginQuad]}>
         Margin quad and explicit longhands
       </div>
-      <div sx={[styles.flex, flexGapVariants[16], styles.flexDynamicColor(accentColor)]}>
+      <div sx={[styles.flex, flexGapVariants[16]]} style={{ color: accentColor, opacity: 0.5 }}>
         Dynamic color and opacity
       </div>
       <div sx={[styles.flex, flexGapVariants[20], styles.flexInline]}>
@@ -61,10 +61,6 @@ const styles = stylex.create({
     paddingBlock: 4,
     paddingInline: 8,
   },
-  flexDynamicColor: (color: string) => ({
-    opacity: 0.5,
-    color,
-  }),
   flexInline: {
     WebkitMaskImage: "none",
     color: "white",

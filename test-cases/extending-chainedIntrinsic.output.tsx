@@ -1,4 +1,4 @@
-// Extending chain with style props promoted to stylex styles and dynamic functions
+// Extending chain with static style props promoted and dynamic style props preserved inline
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
@@ -21,9 +21,9 @@ export function App() {
         <div ref={measureRef} sx={[styles.itemRow, styles.itemRowMeasure]}>
           <span>Measure</span>
         </div>
-        <div sx={[styles.fadeBase, styles.fadeLeft, styles.fadeLeftDynamic(offset)]} />
-        <div sx={[styles.fadeBase, styles.fadeRight(offset)]} />
-        <div sx={styles.tick(lineColor)} />
+        <div sx={[styles.fadeBase, styles.fadeLeft]} style={{ zIndex: 1, left: offset }} />
+        <div sx={[styles.fadeBase, styles.fadeRight]} style={{ left: offset }} />
+        <div sx={styles.tick} style={{ left: 40, borderRightColor: lineColor }} />
       </div>
     </div>
   );
@@ -52,25 +52,23 @@ const styles = stylex.create({
     width: FADE_WIDTH,
     backgroundImage: "linear-gradient(to right, transparent, #f0f5ff)",
   },
-  fadeRight: (left: number | string) => ({
+  fadeRight: {
     width: FADE_WIDTH,
     backgroundImage: "linear-gradient(to left, transparent, #f0f5ff)",
-    left,
-  }),
+  },
   smallFade: {
     width: 10,
     right: 0,
   },
-  tick: (borderRightColor: string) => ({
+  tick: {
     position: "absolute",
     top: -OFFSET,
     height: 6,
     borderRightWidth: 1,
     borderRightStyle: "solid",
+    borderRightColor: "transparent",
     zIndex: 1,
-    left: 40,
-    borderRightColor,
-  }),
+  },
   itemRowLabel: {
     height: 24,
     left: 10,
@@ -80,8 +78,4 @@ const styles = stylex.create({
     opacity: 0,
     zIndex: -1,
   },
-  fadeLeftDynamic: (left: number | string) => ({
-    zIndex: 1,
-    left,
-  }),
 });

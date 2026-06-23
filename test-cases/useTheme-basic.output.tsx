@@ -15,7 +15,7 @@ export function Input(props: InputProps) {
   const theme = useTheme();
   const someCustomColor = theme.color.bgBase;
 
-  return <div sx={styles.colorPickerWrapper(someCustomColor)} />;
+  return <div sx={styles.colorPickerWrapper} style={{ backgroundColor: someCustomColor }} />;
 }
 
 export const App = () => (
@@ -26,9 +26,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  colorPickerWrapper: (backgroundColor: string) => ({
+  colorPickerWrapper: {
     width: "auto",
     height: 10,
+    backgroundColor: $colors.bgBase,
     boxShadow: `0 2px 4px ${$colors.primaryColor}`,
     borderRadius: 8,
     display: "flex",
@@ -37,8 +38,7 @@ const styles = stylex.create({
     borderColor: $colors.bgSub,
     minWidth: 300,
     padding: 12,
-    backgroundColor,
-  }),
+  },
   // Nullish coalescing fallback on theme color
   fallbackBox: {
     color: $colors.labelBase,

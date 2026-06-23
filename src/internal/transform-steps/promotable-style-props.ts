@@ -2,19 +2,13 @@
  * Promotable style-prop analysis (plus the prop-comment metadata helpers it
  * depends on) extracted from analyze-before-emit. Promotes JSX call-site
  * `style={{ ... }}` objects on intrinsic styled components into proper
- * `stylex.create` entries, expanding shorthands and folding shared ternaries.
+ * `stylex.create` entries when they are static, while leaving dynamic caller
+ * style props inline.
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { PromotedStyleEntry, StyledDecl } from "../transform-types.js";
 import { hasInlineableStyleFnOnly } from "../utilities/delegation-utils.js";
-import {
-  astNodesEqual,
-  type ExpressionKind,
-  isAstNode,
-  isConditionalExpressionNode,
-  isPureIdempotentExpression,
-  literalToStaticValue,
-} from "../utilities/jscodeshift-utils.js";
+import { isAstNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 import {
   camelToKebabCase,
   isSingleBackgroundComponent,
@@ -24,13 +18,8 @@ import {
   cssDeclarationToStylexDeclarations,
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
-import { extractConditionName } from "../utilities/style-key-naming.js";
 import { addPropComments } from "../lower-rules/comments.js";
-import {
-  propCommentMetadataToAstComments,
-  SOURCE_CSS_PROPERTIES_KEY,
-  type PropCommentMetadata,
-} from "../transform/helpers.js";
+import { SOURCE_CSS_PROPERTIES_KEY, type PropCommentMetadata } from "../transform/helpers.js";
 
 /**
  * React-style camelCase CSS property names that promotion refuses to emit into
@@ -66,33 +55,20 @@ export const NON_PROMOTABLE_STYLE_PROPS = new Set<string>([
 
 /**
  * Analyzes JSX call-site `style={{ ... }}` objects for all intrinsic styled components
- * and promotes analyzable style objects to proper `stylex.create` entries.
+ * and promotes analyzable static style objects to proper `stylex.create` entries.
  *
  * This avoids wrapper components and `mergedSx` calls for components whose
- * call-site style props are static objects (or objects with known dynamic values).
+ * call-site style props are static objects. Dynamic caller styles are preserved
+ * inline so they keep native React `style` override semantics.
  */
 export function analyzePromotableStyleProps(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   styledDecls: StyledDecl[],
-  /**
-   * Every decl in the file, including skipped ones. A preserved `styled(Base)` leaf
-   * still references `Base` at runtime, so Base must stay a wrapper — the extends
-   * check uses this list so it sees skipped extenders.
-   */
-  allStyledDecls: StyledDecl[],
   declByLocal: Map<string, StyledDecl>,
   getJsxUsageCount: (name: string) => number,
   resolvedStyleObjects: Map<string, unknown>,
 ): void {
-  // Collect every style key that already exists across the file so promoted
-  // entries can be safely deduplicated against unrelated styled components,
-  // template-derived variants (`decl.variantStyleKeys`), per-call-site combined
-  // styles, and base-component-resolved boolean variants. Without this, a
-  // generated variant key like `${baseKey}${ConditionName}` could silently
-  // overwrite an unrelated style entry.
-  const reservedStyleKeys = collectReservedStyleKeys(resolvedStyleObjects, styledDecls);
-
   for (const decl of styledDecls) {
     // Only promote for elements that don't already need wrappers and ultimately render
     // as intrinsic elements (either directly or through a chain of styled extensions).
@@ -141,7 +117,8 @@ export function analyzePromotableStyleProps(
       continue;
     }
 
-    // Check if ALL call sites with style props are promotable.
+    // Check if ALL call sites with style props are safe to inline. Static style
+    // props can be promoted; dynamic style props will be preserved verbatim.
     let allPromotable = true;
     const siteAnalyses: Array<{
       opening: any;
@@ -289,10 +266,11 @@ export function analyzePromotableStyleProps(
       continue;
     }
 
-    // All call sites are promotable. Generate entries and tag JSX nodes.
+    // All call sites are safe to inline. Generate static entries and tag JSX nodes.
     const promotedEntries: PromotedStyleEntry[] = [];
     const usageCount = getJsxUsageCount(decl.localName);
     const usedKeyNames = new Set<string>();
+    let preservedInlineStylePropCount = 0;
 
     for (const site of siteAnalyses) {
       if (!site.styleAttr || site.properties.length === 0) {
@@ -331,212 +309,21 @@ export function analyzePromotableStyleProps(
           (site.opening as any).__promotedStyleKey = styleKey;
         }
       } else if (hasDynamic) {
-        // Mixed static+dynamic or all-dynamic: create a dynamic style function.
-        // Build static part of the style object and collect dynamic params.
-        const inlineStaticObj: Record<string, unknown> = {};
-        const dynamicParams: PromotedDynamicParam[] = [];
-
-        for (const p of site.properties) {
-          if (p.staticValue !== null) {
-            inlineStaticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
-            addStylePropComments(inlineStaticObj, p.key, p.comments);
-          } else {
-            dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr, comments: p.comments });
-          }
-        }
-
-        // Don't merge if another styled component extends this one — converting
-        // the base style to a function would break the child's static style
-        // reference. Also include skipped decls here: a preserved `styled(Base)`
-        // leaf references `Base` at runtime and would break if merged.
-        const isExtendedByOther = allStyledDecls.some(
-          (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
-        );
-        const baseObj = resolvedStyleObjects.get(decl.styleKey);
-        const baseIsSimpleObject = isPlainStyleObject(baseObj);
-        const isReusable = usageCount > 1 || decl.isExported === true;
-
-        // Shared-ternary promotion: when every dynamic value is the same
-        // conditional `cond ? a : b` with literal branches, fold the alternate
-        // values into the base and emit the consequent values as a separate
-        // boolean-gated variant style. This produces `[styles.x, cond && styles.xVariant]`
-        // instead of `styles.x(cond ? a : b, cond ? c : d, ...)`.
-        if (!isReusable && !isExtendedByOther && baseIsSimpleObject) {
-          const sharedTernary = tryExtractSharedTernaryPromotion({
-            dynamicParams,
-            inlineStaticObj,
-            baseStyleKey: decl.styleKey,
-            existingBaseStyles: baseObj,
-            usedKeyNames,
-            reservedKeys: reservedStyleKeys,
-          });
-          if (sharedTernary) {
-            promotedEntries.push({
-              styleKey: decl.styleKey,
-              styleValue: sharedTernary.alternateStyles,
-              mergeIntoBase: true,
-            });
-            promotedEntries.push({
-              styleKey: sharedTernary.variantKey,
-              styleValue: sharedTernary.consequentStyles,
-            });
-            (site.opening as { __promotedMergeIntoBase?: boolean }).__promotedMergeIntoBase = true;
-            (
-              site.opening as { __promotedConditionalVariant?: PromotedConditionalVariantTag }
-            ).__promotedConditionalVariant = {
-              styleKey: sharedTernary.variantKey,
-              conditionExpr: sharedTernary.conditionExpr,
-            };
-            usedKeyNames.add(sharedTernary.variantKey);
-            continue;
-          }
-        }
-
-        // Check if we can merge the base static styles into this dynamic function.
-        // This produces a single style entry instead of separate static + dynamic keys.
-        const canMergeDynamic =
-          !isReusable &&
-          !isExtendedByOther &&
-          baseIsSimpleObject &&
-          !hasPropertyOverlap(inlineStaticObj, baseObj as Record<string, unknown>);
-
-        // Collect all static properties (base + inline) for the merged function body.
-        // Dynamic params override base properties with the same key, so filter them out.
-        const dynamicPropKeys = new Set(dynamicParams.map((dp) => dp.cssProp));
-        const mergedStaticProps: Array<{
-          key: string;
-          value: unknown;
-          comments: PropCommentMetadata | null;
-        }> = [];
-        if (canMergeDynamic) {
-          for (const [k, v] of Object.entries(baseObj as Record<string, unknown>)) {
-            if (isPromotedStyleMetadataKey(k)) {
-              continue;
-            }
-            if (!dynamicPropKeys.has(k)) {
-              mergedStaticProps.push({
-                key: k,
-                value: v,
-                comments: getStoredPropComments(baseObj as Record<string, unknown>, k),
-              });
-            }
-          }
-        }
-        for (const [k, v] of Object.entries(inlineStaticObj)) {
-          if (isPromotedStyleMetadataKey(k)) {
-            continue;
-          }
-          mergedStaticProps.push({
-            key: k,
-            value: v,
-            comments: getStoredPropComments(inlineStaticObj, k),
-          });
-        }
-
-        const styleKey = canMergeDynamic
-          ? decl.styleKey
-          : generatePromotedDynamicStyleKey(decl.styleKey, usedKeyNames, site.children);
-        if (!canMergeDynamic) {
-          usedKeyNames.add(styleKey);
-        }
-
-        // Build the ArrowFunctionExpression AST node.
-        // Use CSS property names as function parameter names for self-documenting code.
-        // Deduplicate parameters with the same CSS property name.
-        const paramEntries: Array<{
-          paramName: string;
-          cssProp: string;
-          type: PromotedParamType;
-        }> = [];
-        const seenParamNames = new Set<string>();
-
-        for (const dp of dynamicParams) {
-          const paramName = dp.cssProp;
-          if (!seenParamNames.has(paramName)) {
-            seenParamNames.add(paramName);
-            paramEntries.push({
-              paramName,
-              cssProp: dp.cssProp,
-              type: inferTypeForCssProp(dp.cssProp, dp.expr),
-            });
-          }
-        }
-
-        // Build arrow function params
-        const params = paramEntries.map((pe) => {
-          const id = j.identifier(pe.paramName);
-          const typeNode =
-            pe.type === "number"
-              ? j.tsNumberKeyword()
-              : pe.type === "numberOrString"
-                ? j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()])
-                : j.tsStringKeyword();
-          (id as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
-          return id;
-        });
-
-        // Build object expression body with merged base + inline properties
-        const bodyProperties: ReturnType<typeof j.property>[] = [];
-        for (const sp of mergedStaticProps) {
-          const val = isAstNode(sp.value)
-            ? (sp.value as ExpressionKind) // Already an AST node — use directly
-            : typeof sp.value === "string"
-              ? j.stringLiteral(sp.value)
-              : typeof sp.value === "number"
-                ? j.numericLiteral(sp.value)
-                : j.booleanLiteral(sp.value as boolean);
-          const prop = j.property("init", j.identifier(sp.key), val);
-          attachStylePropComments(prop, sp.comments);
-          bodyProperties.push(prop);
-        }
-        for (const p of site.properties) {
-          if (p.dynamicExpr !== null) {
-            const prop = j.property("init", j.identifier(p.key), j.identifier(p.key));
-            (prop as any).shorthand = true;
-            attachStylePropComments(prop, p.comments);
-            bodyProperties.push(prop);
-          }
-        }
-
-        const fnNode = j.arrowFunctionExpression(params, j.objectExpression(bodyProperties));
-
-        if (canMergeDynamic) {
-          // Replace the base static entry with the merged function.
-          promotedEntries.push({
-            styleKey: decl.styleKey,
-            styleValue: fnNode as unknown as Record<string, unknown>,
-            mergeIntoBase: true,
-          });
-          // Tag JSX: merge consumes the style attr, and the base key becomes a fn call.
-          (site.opening as any).__promotedMergeIntoBase = true;
-          (site.opening as any).__promotedMergeArgs = dynamicParams.map((dp) =>
-            isStylexStringOnlyCssProp(dp.cssProp)
-              ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
-              : dp.expr,
-          );
-        } else {
-          // Store the AST node directly in resolvedStyleObjects (emitter handles AST nodes).
-          promotedEntries.push({
-            styleKey,
-            styleValue: fnNode as unknown as Record<string, unknown>,
-          });
-
-          // Tag the JSX node with the style key and call arguments.
-          (site.opening as any).__promotedStyleKey = styleKey;
-          // The call args are the actual expressions from the style object.
-          // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
-          const callArgs = dynamicParams.map((dp) =>
-            isStylexStringOnlyCssProp(dp.cssProp)
-              ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
-              : dp.expr,
-          );
-          (site.opening as any).__promotedStyleArgs = callArgs;
-        }
+        // Dynamic caller style stays as an inline `style` prop. This preserves
+        // React/styled-components override semantics and avoids generated
+        // StyleX functions for per-callsite values.
+        (site.opening as { __preserveInlineStyleProp?: boolean }).__preserveInlineStyleProp = true;
+        preservedInlineStylePropCount += 1;
+        continue;
       }
     }
 
     if (promotedEntries.length > 0) {
       decl.promotedStyleProps = promotedEntries;
+    }
+    if (preservedInlineStylePropCount > 0) {
+      decl.preserveInlineStyleProps = true;
+      decl.preservedInlineStylePropCount = preservedInlineStylePropCount;
     }
   }
 }
@@ -763,41 +550,10 @@ function resolvesToIntrinsic(decl: StyledDecl, declByLocal: Map<string, StyledDe
   return false;
 }
 
-/** CSS properties whose values are typically numeric (no unit string needed). */
-const NUMERIC_CSS_PROPS = new Set([
-  "zIndex",
-  "opacity",
-  "flex",
-  "flexGrow",
-  "flexShrink",
-  "order",
-  "fontWeight",
-  "lineHeight",
-  "tabSize",
-  "orphans",
-  "widows",
-  "columnCount",
-]);
-
-/**
- * CSS properties that accept numeric values in standard CSS / React inline styles
- * but are typed as `string` in StyleX. Numeric values must be coerced to strings.
- */
-type PromotedParamType = "number" | "string" | "numberOrString";
-
-const LENGTH_LIKE_CSS_PROP_RE =
-  /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/;
-
 type PromotableStyleProperty = {
   key: string;
   staticValue: string | number | boolean | null;
   dynamicExpr: unknown;
-  comments: PropCommentMetadata | null;
-};
-
-type PromotedDynamicParam = {
-  cssProp: string;
-  expr: unknown;
   comments: PropCommentMetadata | null;
 };
 
@@ -812,75 +568,6 @@ function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
     return String(value);
   }
   return value;
-}
-
-/**
- * Infers a TS type keyword for a dynamic expression based on the CSS property it's assigned to.
- * Numeric-only properties get `number`; ambiguous length-like values get `number | string`.
- * StyleX string-only properties always get `string` even when the value is numeric.
- */
-function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType {
-  if (isStylexStringOnlyCssProp(cssProp)) {
-    return "string";
-  }
-  const conditionalType = inferTypeFromConditionalBranches(expr);
-  if (conditionalType) {
-    if (conditionalType === "number" && LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
-      return "numberOrString";
-    }
-    return conditionalType;
-  }
-  const staticVal = literalToStaticValue(expr);
-  if (typeof staticVal === "number") {
-    return "number";
-  }
-  if (typeof staticVal === "string") {
-    return "string";
-  }
-  if (NUMERIC_CSS_PROPS.has(cssProp)) {
-    return "number";
-  }
-  if (LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
-    return "numberOrString";
-  }
-  return "string";
-}
-
-function inferTypeFromConditionalBranches(expr: unknown): PromotedParamType | null {
-  if (!expr || typeof expr !== "object") {
-    return null;
-  }
-  const node = expr as { type?: string; consequent?: unknown; alternate?: unknown };
-  if (node.type !== "ConditionalExpression") {
-    return null;
-  }
-  const consequent = inferTypeFromExpressionValue(node.consequent);
-  const alternate = inferTypeFromExpressionValue(node.alternate);
-  if (!consequent || !alternate) {
-    return null;
-  }
-  if (consequent === alternate) {
-    return consequent;
-  }
-  return "numberOrString";
-}
-
-function inferTypeFromExpressionValue(expr: unknown): PromotedParamType | null {
-  const nested = inferTypeFromConditionalBranches(expr);
-  if (nested) {
-    return nested;
-  }
-  if (expr && typeof expr === "object" && (expr as { type?: string }).type === "TemplateLiteral") {
-    return "string";
-  }
-  const value = literalToStaticValue(expr);
-  if (typeof value === "string") {
-    return "string";
-  }
-  if (typeof value === "number") {
-    return "number";
-  }
-  return null;
 }
 
 function extractInlineStylePropComments(
@@ -950,28 +637,6 @@ function mergeStoredPropComments(target: Record<string, unknown>, commentsMap: u
   }
 }
 
-function attachStylePropComments(prop: unknown, comments: PropCommentMetadata | null): void {
-  const astComments = propCommentMetadataToAstComments(comments);
-  if (astComments.length > 0) {
-    (prop as { comments?: unknown[] }).comments = astComments;
-  }
-}
-
-function getStoredPropComments(
-  target: Record<string, unknown>,
-  prop: string,
-): PropCommentMetadata | null {
-  const propComments = target.__propComments;
-  if (!propComments || typeof propComments !== "object" || Array.isArray(propComments)) {
-    return null;
-  }
-  const entry = (propComments as Record<string, unknown>)[prop];
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-    return null;
-  }
-  return entry as PropCommentMetadata;
-}
-
 function isPromotedStyleMetadataKey(key: string): boolean {
   return key === "__propComments" || key === SOURCE_CSS_PROPERTIES_KEY;
 }
@@ -1034,19 +699,6 @@ function generatePromotedStyleKey(
   children?: unknown[],
 ): string {
   return generateUniqueStyleKey(baseKey, usedKeys, children, "Inline");
-}
-
-/**
- * Generates a unique style key for a promoted dynamic style function.
- * Tries to derive a descriptive suffix from JSX children text content,
- * falling back to `Dynamic`, `Dynamic2`, etc.
- */
-function generatePromotedDynamicStyleKey(
-  baseKey: string,
-  usedKeys: Set<string>,
-  children?: unknown[],
-): string {
-  return generateUniqueStyleKey(baseKey, usedKeys, children, "Dynamic");
 }
 
 /**
@@ -1190,8 +842,8 @@ function hasPropertyOverlap(incoming: Record<string, unknown>, base: unknown): b
 
 /**
  * Returns true if any value in the base resolved style object contains `!important`.
- * When the base uses `!important`, style props must stay as inline styles (via mergedSx)
- * to preserve the semantics where `!important` CSS beats inline `style` attributes.
+ * When the base uses `!important`, caller style props must stay inline to
+ * preserve the semantics where `!important` CSS beats inline `style` attributes.
  */
 function baseStyleHasImportant(base: unknown): boolean {
   if (!base || typeof base !== "object" || isAstNode(base)) {
@@ -1200,125 +852,4 @@ function baseStyleHasImportant(base: unknown): boolean {
   return Object.values(base as Record<string, unknown>).some(
     (v) => typeof v === "string" && v.includes("!important"),
   );
-}
-
-/** JSX-side tag for shared-ternary promotion: applies `cond && styles.variantKey` at the call site. */
-type PromotedConditionalVariantTag = {
-  styleKey: string;
-  conditionExpr: unknown;
-};
-
-/**
- * Detects when every dynamic property in a promoted style object shares the same
- * conditional `cond ? a : b` test with literal branches, and folds the alternate
- * values into the base style + emits the consequent values as a boolean-gated
- * variant style key. Returns `null` when the pattern doesn't apply.
- *
- * Caller must already have verified that:
- * - The component is single-use, non-exported, and not extended by another component.
- * - The base style object has only primitive/AST-node values (no nested rule objects).
- */
-function tryExtractSharedTernaryPromotion(args: {
-  dynamicParams: Array<{ cssProp: string; expr: unknown }>;
-  inlineStaticObj: Record<string, unknown>;
-  baseStyleKey: string;
-  existingBaseStyles: Record<string, unknown>;
-  /** Keys generated by other promotion sites within this `analyzePromotableStyleProps` pass. */
-  usedKeyNames: Set<string>;
-  /** Keys already in use globally (other styled decls, template variants, base-resolved variants). */
-  reservedKeys: Set<string>;
-}): {
-  variantKey: string;
-  consequentStyles: Record<string, unknown>;
-  alternateStyles: Record<string, unknown>;
-  conditionExpr: unknown;
-} | null {
-  const {
-    dynamicParams,
-    inlineStaticObj,
-    baseStyleKey,
-    existingBaseStyles,
-    usedKeyNames,
-    reservedKeys,
-  } = args;
-
-  if (dynamicParams.length < 2) {
-    return null;
-  }
-
-  let conditionExpr: unknown = null;
-  const consequentEntries: Array<{ key: string; value: string | number | boolean }> = [];
-  const alternateEntries: Array<{ key: string; value: string | number | boolean }> = [];
-  for (const dp of dynamicParams) {
-    const expr = dp.expr;
-    if (!isConditionalExpressionNode(expr)) {
-      return null;
-    }
-    const consequentVal = literalToStaticValue(expr.consequent);
-    const alternateVal = literalToStaticValue(expr.alternate);
-    if (consequentVal === null || alternateVal === null) {
-      return null;
-    }
-    if (conditionExpr === null) {
-      conditionExpr = expr.test;
-    } else if (!astNodesEqual(conditionExpr, expr.test)) {
-      return null;
-    }
-    consequentEntries.push({
-      key: dp.cssProp,
-      value: coerceToStringForStyleX(dp.cssProp, consequentVal) as string | number | boolean,
-    });
-    alternateEntries.push({
-      key: dp.cssProp,
-      value: coerceToStringForStyleX(dp.cssProp, alternateVal) as string | number | boolean,
-    });
-  }
-
-  if (!conditionExpr) {
-    return null;
-  }
-
-  // Only collapse N per-property evaluations into one shared evaluation when
-  // the test is pure / idempotent. Otherwise hoisting changes runtime behavior:
-  // `flipCoin() ? a : b` evaluated once vs N times can pick different branches.
-  if (!isPureIdempotentExpression(conditionExpr)) {
-    return null;
-  }
-
-  // The variant key must be derivable from the condition; bail when we can't
-  // produce a stable readable suffix (matches existing variant-naming conventions).
-  const conditionName = extractConditionName(conditionExpr as ExpressionKind);
-  if (!conditionName) {
-    return null;
-  }
-
-  // Reject overlap between the alternate-branch values folded into the base and
-  // any pre-existing base or inline-static property — overwriting would silently
-  // change semantics.
-  for (const e of alternateEntries) {
-    if (
-      Object.prototype.hasOwnProperty.call(existingBaseStyles, e.key) ||
-      Object.prototype.hasOwnProperty.call(inlineStaticObj, e.key)
-    ) {
-      return null;
-    }
-  }
-
-  const alternateStyles: Record<string, unknown> = { ...inlineStaticObj };
-  for (const e of alternateEntries) {
-    alternateStyles[e.key] = e.value;
-  }
-  const consequentStyles: Record<string, unknown> = {};
-  for (const e of consequentEntries) {
-    consequentStyles[e.key] = e.value;
-  }
-
-  const variantKey = ensureUniqueKey(`${baseStyleKey}${conditionName}`, usedKeyNames, reservedKeys);
-
-  return {
-    variantKey,
-    consequentStyles,
-    alternateStyles,
-    conditionExpr,
-  };
 }

@@ -1,4 +1,4 @@
-// Extending chain with style props promoted to stylex styles and dynamic functions
+// Extending chain with static style props promoted and dynamic style props preserved inline
 import * as React from "react";
 import styled from "styled-components";
 

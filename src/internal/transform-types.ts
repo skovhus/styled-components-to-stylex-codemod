@@ -733,6 +733,18 @@ export type StyledDecl = {
    */
   promotedStyleProps?: PromotedStyleEntry[];
   /**
+   * True when JSX call-site style props are safe to preserve while inlining the
+   * styled component to an intrinsic element. Used for dynamic inline styles that
+   * should remain as caller-owned `style` props instead of generated StyleX functions.
+   */
+  preserveInlineStyleProps?: boolean;
+  /**
+   * Number of JSX call sites whose dynamic style props should be preserved inline.
+   * Used to decide whether a reusable intrinsic component still needs a wrapper
+   * for call sites that do not carry preserved/promoted style props.
+   */
+  preservedInlineStylePropCount?: number;
+  /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.
    */

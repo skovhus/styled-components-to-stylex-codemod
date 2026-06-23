@@ -1,4 +1,4 @@
-// Direct JSX usage of imported component with inline style prop should promote to stylex.create.
+// Direct JSX usage of imported component with inline style prop should promote static values and preserve dynamic values.
 // Covers directional shorthands (padding/margin), background, border, plain props, and dynamic values.
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
