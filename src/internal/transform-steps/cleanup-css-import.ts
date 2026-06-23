@@ -3,7 +3,7 @@
  * Core concepts: identifier reference scanning and import cleanup.
  */
 import { CONTINUE, type StepResult } from "../transform-types.js";
-import { isIdentifierReference } from "../transform/css-helpers.js";
+import { dropCssImportSpecifier, isIdentifierReference } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
 
 /**
@@ -26,25 +26,7 @@ export function cleanupCssImportStep(ctx: TransformContext): StepResult {
       .size() > 0;
 
   if (!isStillReferenced()) {
-    styledImports.forEach((imp: any) => {
-      const specs = imp.node.specifiers ?? [];
-      const next = specs.filter((s: any) => {
-        if (s.type !== "ImportSpecifier") {
-          return true;
-        }
-        if (s.imported.type !== "Identifier") {
-          return true;
-        }
-        return s.imported.name !== "css";
-      });
-      if (next.length !== specs.length) {
-        imp.node.specifiers = next;
-        if (imp.node.specifiers.length === 0) {
-          j(imp).remove();
-        }
-        ctx.markChanged();
-      }
-    });
+    dropCssImportSpecifier(j, styledImports, () => ctx.markChanged());
   }
 
   return CONTINUE;

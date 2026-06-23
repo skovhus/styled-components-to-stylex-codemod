@@ -14,6 +14,7 @@ import {
   extractStaticLiteralValue,
   getFunctionBodyExpr,
   getNodeLocStart,
+  locateDeclarationInProgram,
 } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
@@ -659,28 +660,11 @@ function collectStyledDeclsImpl(args: {
   const getPlacementHints = (
     declaratorPath: any,
   ): { declIndex?: number; insertAfterName?: string } => {
-    const varDeclPath = declaratorPath?.parentPath;
-    if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+    const located = locateDeclarationInProgram(root, declaratorPath);
+    if (!located) {
       return {};
     }
-    const programBody = (root.get().node.program as any)?.body;
-    if (!Array.isArray(programBody)) {
-      return {};
-    }
-    const idx = (() => {
-      const direct = programBody.indexOf(varDeclPath.node);
-      if (direct >= 0) {
-        return direct;
-      }
-      const loc = (varDeclPath.node as any)?.loc?.start;
-      if (!loc) {
-        return -1;
-      }
-      return programBody.findIndex((s: any) => {
-        const sloc = s?.loc?.start;
-        return sloc && sloc.line === loc.line && sloc.column === loc.column;
-      });
-    })();
+    const { programBody, index: idx } = located;
     if (idx < 0) {
       return {};
     }
@@ -852,15 +836,15 @@ function collectStyledDeclsImpl(args: {
       if (!propsType) {
         propsType = readFirstTypeArgFromNode(init);
       }
-      // styled.h1
-      if (
-        tag.type === "MemberExpression" &&
-        tag.object.type === "Identifier" &&
-        tag.object.name === styledDefaultImport &&
-        tag.property.type === "Identifier"
-      ) {
-        const localName = id.name;
-        const tagName = tag.property.name;
+
+      // Parse the styled template and push a simple styled decl (no attrs /
+      // withConfig metadata) for the plain `styled.tag` / `styled("tag")` /
+      // `styled(Component)` forms, which differ only in the `base` they target.
+      const pushSimpleStyledDecl = (
+        localName: string,
+        base: StyledDecl["base"],
+        styleKey: string = toStyleKey(localName),
+      ): void => {
         const template = init.quasi;
         const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
@@ -872,8 +856,8 @@ function collectStyledDeclsImpl(args: {
         styledDecls.push({
           ...placementHints,
           localName,
-          base: { kind: "intrinsic", tagName },
-          styleKey: toStyleKey(localName),
+          base,
+          styleKey,
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
@@ -882,6 +866,16 @@ function collectStyledDeclsImpl(args: {
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
+      };
+
+      // styled.h1
+      if (
+        tag.type === "MemberExpression" &&
+        tag.object.type === "Identifier" &&
+        tag.object.name === styledDefaultImport &&
+        tag.property.type === "Identifier"
+      ) {
+        pushSimpleStyledDecl(id.name, { kind: "intrinsic", tagName: tag.property.name });
         return;
       }
 
@@ -946,30 +940,7 @@ function collectStyledDeclsImpl(args: {
         tag.arguments.length === 1 &&
         tag.arguments[0]?.type === "Identifier"
       ) {
-        const localName = id.name;
-        const ident = tag.arguments[0].name;
-        const styleKey = toStyleKey(localName);
-        const template = init.quasi;
-        const templateLoc = getNodeLocStart(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "component", ident },
-          styleKey,
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
+        pushSimpleStyledDecl(id.name, { kind: "component", ident: tag.arguments[0].name });
       }
 
       // styled(Component.sub) - where Component is a MemberExpression (e.g., animated.div)
@@ -980,32 +951,11 @@ function collectStyledDeclsImpl(args: {
         tag.arguments.length === 1 &&
         tag.arguments[0]?.type === "MemberExpression"
       ) {
-        const localName = id.name;
         const ident = memberExprToIdent(tag.arguments[0]);
         if (!ident) {
           return;
         }
-        const template = init.quasi;
-        const templateLoc = getNodeLocStart(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "component", ident },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
+        pushSimpleStyledDecl(id.name, { kind: "component", ident });
       }
 
       // styled("tagName") - intrinsic element with string argument (without chaining)
@@ -1018,30 +968,8 @@ function collectStyledDeclsImpl(args: {
           (tag.arguments[0]?.type === "Literal" &&
             typeof (tag.arguments[0] as any).value === "string"))
       ) {
-        const localName = id.name;
         const arg0 = tag.arguments[0] as any;
-        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
-        const template = init.quasi;
-        const templateLoc = getNodeLocStart(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        const hasUniversalSelector = noteUniversalSelectorIfPresent(template, parsed.rawCss, rules);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "intrinsic", tagName },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(hasUniversalSelector ? { hasUniversalSelector } : {}),
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
+        pushSimpleStyledDecl(id.name, { kind: "intrinsic", tagName: arg0.value });
       }
     });
 

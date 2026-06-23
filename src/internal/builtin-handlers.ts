@@ -88,6 +88,39 @@ export function resolveDynamicNode(
 
 // --- Non-exported handler functions ---
 
+/**
+ * Shared preamble for the dynamic-value handlers: require the declaration to
+ * have a CSS property and its interpolation to be an arrow function, returning
+ * the (narrowed) arrow expression or `null` so callers can bail uniformly.
+ */
+function getPropArrowFn(node: DynamicNode) {
+  if (!node.css.property) {
+    return null;
+  }
+  return isArrowFunctionExpression(node.expr) ? node.expr : null;
+}
+
+/**
+ * Like {@link getPropArrowFn} but additionally requires the arrow to have a
+ * single identifier parameter (`paramName`) with resolvable parameter
+ * `bindings`. Returns `null` when any of those preconditions fail.
+ */
+function getPropArrowSingleParam(node: DynamicNode) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
+  return { expr, paramName, bindings };
+}
+
 function tryResolveThemeAccess(
   node: DynamicNode,
   ctx: InternalHandlerContext,
@@ -209,11 +242,8 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
 
@@ -305,11 +335,8 @@ function tryResolveArrowFnPreservedRuntimeCall(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
 
@@ -642,11 +669,8 @@ function tryResolveArrowFnCurriedHelperCallWithPropFallback(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const paramName = getArrowFnSingleParamName(expr);
@@ -698,11 +722,8 @@ function tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const paramName = getArrowFnSingleParamName(expr);
@@ -740,11 +761,8 @@ function tryResolveArrowFnImportedHelperCall(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const body = getFunctionBodyExpr(expr);
@@ -894,11 +912,8 @@ function tryResolveInlineStyleValueForConditionalExpression(
 function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): HandlerResult | null {
   // Conservative fallback for logical expressions (e.g., props.$delay ?? 0)
   // that we can preserve via a wrapper inline style.
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const body = getFunctionBodyExpr(expr);
@@ -933,11 +948,8 @@ function tryResolveThemeDependentTemplateLiteral(
 ): HandlerResult | null {
   // Handles cases like: ${props => `${props.theme.color.bg}px`}
   // Tries to resolve theme interpolations via the adapter; bails if unresolvable.
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const body = getFunctionBodyExpr(expr);
@@ -1072,11 +1084,8 @@ function hasBareParamUsage(root: unknown, paramName: string): boolean {
 }
 
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const bindings = getArrowFnParamBindings(expr);
@@ -1120,22 +1129,12 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
  * of falling through to the inline style fallback.
  */
 function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
-    return null;
-  }
   // Only support simple Identifier params — bail on destructured ObjectPattern
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
+  const arrow = getPropArrowSingleParam(node);
+  if (!arrow) {
     return null;
   }
-  const bindings = getArrowFnParamBindings(expr);
-  if (!bindings) {
-    return null;
-  }
+  const { expr, paramName, bindings } = arrow;
   const body = getFunctionBodyExpr(expr);
   if (!body || (body as { type?: string }).type !== "ConditionalExpression") {
     return null;
@@ -1278,21 +1277,11 @@ function tryDecomposeConditionalBranches(
  * Output:  `(props) => ({ paddingLeft: \`${props.$depth * 16 + 4}px\` })`
  */
 function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
+  const arrow = getPropArrowSingleParam(node);
+  if (!arrow) {
     return null;
   }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
-    return null;
-  }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
-    return null;
-  }
-  const bindings = getArrowFnParamBindings(expr);
-  if (!bindings) {
-    return null;
-  }
+  const { expr, paramName, bindings } = arrow;
   const body = getFunctionBodyExpr(expr);
   if (!body) {
     return null;
@@ -1321,11 +1310,8 @@ function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | nul
 }
 
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
   const paramName = getArrowFnSingleParamName(expr);
@@ -1385,11 +1371,8 @@ function tryResolveInlineStyleValueFromArrowFn(node: DynamicNode): HandlerResult
  * Other handlers (theme access, conditionals, etc.) only support simple params.
  */
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
+  const expr = getPropArrowFn(node);
+  if (!expr) {
     return null;
   }
 
@@ -1425,6 +1408,10 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   }
 
   const cssProp = node.css.property;
+  // getPropArrowFn already guarantees a property is present; re-narrow for the type checker.
+  if (!cssProp) {
+    return null;
+  }
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
 
   // Static attrs usually override user-passed props at runtime in

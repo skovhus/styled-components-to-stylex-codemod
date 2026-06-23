@@ -6,7 +6,7 @@ import type { Collection, Expression, JSCodeshift, TemplateLiteral } from "jscod
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import { getNodeLocStart, locateDeclarationInProgram } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
@@ -170,6 +170,38 @@ export function isIdentifierReference(p: any): boolean {
   return true;
 }
 
+/**
+ * Remove the `css` named specifier from styled-components imports, dropping the
+ * whole import when it becomes empty. Invokes `onChanged` for each import that
+ * was modified. Callers should guard with their own "is `css` still referenced"
+ * check before calling.
+ */
+export function dropCssImportSpecifier(
+  j: JSCodeshift,
+  styledImports: Collection<any>,
+  onChanged: () => void,
+): void {
+  styledImports.forEach((imp: any) => {
+    const specs = imp.node.specifiers ?? [];
+    const next = specs.filter((s: any) => {
+      if (s.type !== "ImportSpecifier") {
+        return true;
+      }
+      if (s.imported.type !== "Identifier") {
+        return true;
+      }
+      return s.imported.name !== "css";
+    });
+    if (next.length !== specs.length) {
+      imp.node.specifiers = next;
+      if (imp.node.specifiers.length === 0) {
+        j(imp).remove();
+      }
+      onChanged();
+    }
+  });
+}
+
 function buildExportedLocalNames(root: any, j: JSCodeshift): Set<string> {
   const exportedLocalNames = new Set<string>();
   root.find(j.ExportNamedDeclaration).forEach((p: any) => {
@@ -196,7 +228,7 @@ function buildExportedLocalNames(root: any, j: JSCodeshift): Set<string> {
   return exportedLocalNames;
 }
 
-function collectStyledDefaultImportLocalNames(styledImports: Collection<any>): Set<string> {
+export function collectStyledDefaultImportLocalNames(styledImports: Collection<any>): Set<string> {
   const styledLocalNames = new Set<string>();
   styledImports.forEach((imp) => {
     const specs = imp.node.specifiers ?? [];
@@ -238,28 +270,11 @@ function getCssHelperPlacementHints(
   root: any,
   declaratorPath: any,
 ): { declIndex?: number; insertAfterName?: string } {
-  const varDeclPath = declaratorPath?.parentPath;
-  if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+  const located = locateDeclarationInProgram(root, declaratorPath);
+  if (!located) {
     return {};
   }
-  const programBody = (root.get().node.program as any)?.body;
-  if (!Array.isArray(programBody)) {
-    return {};
-  }
-  const idx = (() => {
-    const direct = programBody.indexOf(varDeclPath.node);
-    if (direct >= 0) {
-      return direct;
-    }
-    const loc = (varDeclPath.node as any)?.loc?.start;
-    if (!loc) {
-      return -1;
-    }
-    return programBody.findIndex((s: any) => {
-      const sloc = s?.loc?.start;
-      return sloc && sloc.line === loc.line && sloc.column === loc.column;
-    });
-  })();
+  const { programBody, index: idx } = located;
   let insertAfterName: string | undefined = undefined;
   if (idx > 0) {
     for (let i = idx - 1; i >= 0; i--) {
@@ -1944,24 +1959,8 @@ export function extractAndRemoveCssHelpers(args: {
   // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
   // (e.g. `return css\`...\`` inside a function).
   if (!isStillReferenced()) {
-    styledImports.forEach((imp) => {
-      const specs = imp.node.specifiers ?? [];
-      const next = specs.filter((s: any) => {
-        if (s.type !== "ImportSpecifier") {
-          return true;
-        }
-        if (s.imported.type !== "Identifier") {
-          return true;
-        }
-        return s.imported.name !== "css";
-      });
-      if (next.length !== specs.length) {
-        imp.node.specifiers = next;
-        if (imp.node.specifiers.length === 0) {
-          j(imp).remove();
-        }
-        changed = true;
-      }
+    dropCssImportSpecifier(j, styledImports, () => {
+      changed = true;
     });
   }
 

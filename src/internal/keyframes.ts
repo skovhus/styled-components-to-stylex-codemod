@@ -3,11 +3,10 @@
  * Core concepts: Stylis parsing and keyframes extraction.
  */
 import type { ASTNode, ASTPath, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
-import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
-import { classifyAnimationTokens } from "./lower-rules/animation.js";
+import { classifyAnimationTokens, parseAnimationSegments } from "./lower-rules/animation.js";
 import { cloneAstNode, literalToStaticValue } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
@@ -1154,34 +1153,6 @@ export function expandStaticAnimationShorthand(
   return true;
 }
 
-function parseAnimationSegments(value: string): string[][] {
-  const parsed = valueParser(value.trim());
-  const segments: valueParser.Node[][] = [];
-  let current: valueParser.Node[] = [];
-  for (const node of parsed.nodes) {
-    if (node.type === "div" && node.value === ",") {
-      if (current.length > 0) {
-        segments.push(current);
-      }
-      current = [];
-      continue;
-    }
-    current.push(node);
-  }
-  if (current.length > 0) {
-    segments.push(current);
-  }
-  return segments
-    .map((nodes) =>
-      nodes
-        .filter((node) => node.type !== "space")
-        .map((node) => valueParser.stringify(node))
-        .map((token) => token.trim())
-        .filter(Boolean),
-    )
-    .filter((tokens) => tokens.length > 0);
-}
-
 function buildAnimationNameTemplate(j: JSCodeshift, names: string[]): ExpressionKind {
   const quasis = names.map((_, index) =>
     j.templateElement({ raw: index === 0 ? "" : ", ", cooked: index === 0 ? "" : ", " }, false),
@@ -1222,7 +1193,30 @@ function assignAnimationLonghand(
  * Bails (returns null) on comma-separated multi-animation shorthands,
  * which the single-tuple parser cannot correctly model.
  */
-export function expandInterpolatedAnimationShorthand(args: {
+/**
+ * Guard + delegate for resolving an interpolated `animation`/`animation-name`
+ * declaration. Returns `null` (so callers fall through to their normal handling)
+ * unless the property is animation-related and keyframes names are available.
+ */
+export function tryExpandInterpolatedAnimation(args: {
+  property?: string;
+  valueRaw: string;
+  slotExprById: Map<number, unknown>;
+  keyframesNames?: Set<string>;
+  j?: JSCodeshift;
+  inlineKeyframeNameMap?: Map<string, string>;
+}): Record<string, unknown> | null {
+  const { property, keyframesNames, j } = args;
+  if (property !== "animation" && property !== "animation-name") {
+    return null;
+  }
+  if (!keyframesNames || keyframesNames.size === 0 || !j) {
+    return null;
+  }
+  return expandInterpolatedAnimationShorthand({ ...args, keyframesNames, j });
+}
+
+function expandInterpolatedAnimationShorthand(args: {
   property?: string;
   valueRaw: string;
   slotExprById: Map<number, unknown>;

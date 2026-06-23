@@ -247,7 +247,6 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     tryHandleThemeIndexedLookup,
   } = createValuePatternHandlers({
     ...sharedFromState,
-    api,
     importMap,
     enumValueMap,
     decl,

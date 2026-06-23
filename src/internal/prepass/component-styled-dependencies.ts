@@ -4,7 +4,15 @@
  */
 import { findDefaultExportedLocalName } from "../utilities/default-export-name.js";
 import { getReExportedSourceName } from "./extract-external-interface.js";
-import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
+import { type AstNode } from "./prepass-parser.js";
+import {
+  astArray,
+  localBindings,
+  nodeName,
+  nodeReferencesLocalNames as referencesLocalNames,
+  parseProgram,
+  programBody,
+} from "./prepass-ast-utils.js";
 
 export function localNamesForExport(
   source: string,
@@ -229,18 +237,6 @@ function isObjectAssignCallee(callee: AstNode | undefined): boolean {
   );
 }
 
-function parseProgram(source: string): AstNode | null {
-  for (const parserName of ["tsx", "babel"] satisfies PrepassParserName[]) {
-    try {
-      const ast = createPrepassParser(parserName).parse(source) as AstNode;
-      return ((ast as { program?: AstNode }).program ?? ast) as AstNode;
-    } catch {
-      // Try the next parser before falling back to conservative behavior.
-    }
-  }
-  return null;
-}
-
 function collectExportTargets(
   program: AstNode,
   exportedName: string,
@@ -437,119 +433,12 @@ function expandLocalDependencyNames(
   return dependencyNames;
 }
 
-function localBindings(program: AstNode): Array<{ name: string; node: AstNode }> {
-  const bindings: Array<{ name: string; node: AstNode }> = [];
-  for (const stmt of programBody(program)) {
-    const declaration =
-      stmt.type === "ExportNamedDeclaration" ? (stmt.declaration as AstNode | undefined) : stmt;
-    if (!declaration) {
-      continue;
-    }
-
-    if (declaration.type === "FunctionDeclaration") {
-      const name = nodeName(declaration.id as AstNode | undefined);
-      const body = declaration.body as AstNode | undefined;
-      if (name && body) {
-        bindings.push({ name, node: body });
-      }
-      continue;
-    }
-
-    if (declaration.type === "ClassDeclaration") {
-      const name = nodeName(declaration.id as AstNode | undefined);
-      const body = declaration.body as AstNode | undefined;
-      if (name && body) {
-        bindings.push({ name, node: body });
-      }
-      continue;
-    }
-
-    if (declaration.type === "VariableDeclaration") {
-      for (const declarator of astArray(declaration.declarations)) {
-        const name = nodeName(declarator.id as AstNode | undefined);
-        const init = declarator.init as AstNode | undefined;
-        if (name && init) {
-          bindings.push({ name, node: init });
-        }
-      }
-    }
-  }
-  return bindings;
-}
-
+/** Dependency checks treat a missing node as conservatively dependent. */
 function nodeReferencesLocalNames(
   node: AstNode | undefined,
   localNames: ReadonlySet<string>,
 ): boolean {
-  if (!node) {
-    return true;
-  }
-
-  let found = false;
-  walkValueAst(node, (candidate) => {
-    if (!found && isNamedReference(candidate, localNames)) {
-      found = true;
-    }
-  });
-  return found;
-}
-
-function walkValueAst(root: AstNode, visitor: (node: AstNode) => void): void {
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-
-    const astNode = node as AstNode;
-    visitor(astNode);
-    for (const key of Object.keys(astNode)) {
-      if (shouldSkipChild(astNode, key)) {
-        continue;
-      }
-      const child = astNode[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(root);
-}
-
-function shouldSkipChild(node: AstNode, key: string): boolean {
-  if (["loc", "comments", "leadingComments", "trailingComments"].includes(key)) {
-    return true;
-  }
-  if (["typeAnnotation", "typeParameters", "returnType"].includes(key)) {
-    return true;
-  }
-  if (
-    key === "key" &&
-    (node.type === "ObjectProperty" || node.type === "Property") &&
-    (node as { computed?: boolean }).computed !== true
-  ) {
-    return true;
-  }
-  if (
-    key === "property" &&
-    node.type === "MemberExpression" &&
-    (node as { computed?: boolean }).computed !== true
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function isNamedReference(node: AstNode, localNames: ReadonlySet<string>): boolean {
-  if (node.type === "Identifier" || node.type === "JSXIdentifier") {
-    return typeof node.name === "string" && localNames.has(node.name);
-  }
-  return false;
+  return referencesLocalNames(node, localNames, true);
 }
 
 function fallbackLocalNamesForExport(
@@ -578,34 +467,4 @@ function fallbackLocalNamesForExport(
   }
 
   return [...candidates];
-}
-
-function programBody(program: AstNode): AstNode[] {
-  return astArray(program.body);
-}
-
-function astArray(value: unknown): AstNode[] {
-  return Array.isArray(value) ? (value.filter(isAstNode) as AstNode[]) : [];
-}
-
-function isAstNode(value: unknown): value is AstNode {
-  return Boolean(value && typeof value === "object");
-}
-
-function nodeName(node: AstNode | undefined): string | undefined {
-  if (!node) {
-    return undefined;
-  }
-  if (
-    node.type === "Identifier" ||
-    node.type === "JSXIdentifier" ||
-    node.type === "StringLiteral"
-  ) {
-    return typeof node.name === "string"
-      ? node.name
-      : typeof node.value === "string"
-        ? node.value
-        : undefined;
-  }
-  return undefined;
 }

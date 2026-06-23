@@ -143,6 +143,39 @@ function extractVarFallback(token: string): string | null {
  * `${kf} var(--token) 2s infinite` where `--token: ease-in`. In that case
  * this function returns `null` to signal that the caller should bail.
  */
+/**
+ * Split a CSS `animation` shorthand value into per-animation token groups,
+ * dropping whitespace nodes. Each inner array is the tokens of one
+ * comma-separated animation.
+ */
+export function parseAnimationSegments(value: string): string[][] {
+  const parsed = valueParser(value.trim());
+  const segments: valueParser.Node[][] = [];
+  let current: valueParser.Node[] = [];
+  for (const node of parsed.nodes) {
+    if (node.type === "div" && node.value === ",") {
+      if (current.length > 0) {
+        segments.push(current);
+      }
+      current = [];
+      continue;
+    }
+    current.push(node);
+  }
+  if (current.length > 0) {
+    segments.push(current);
+  }
+  return segments
+    .map((nodes) =>
+      nodes
+        .filter((node) => node.type !== "space")
+        .map((node) => valueParser.stringify(node))
+        .map((token) => token.trim())
+        .filter(Boolean),
+    )
+    .filter((tokens) => tokens.length > 0);
+}
+
 export function classifyAnimationTokens(tokens: string[]): {
   duration: string | null;
   delay: string | null;
@@ -254,36 +287,6 @@ export function tryHandleAnimation(args: {
       return keyframesAliases?.get(expr.name) ?? expr.name;
     }
     return null;
-  };
-
-  const parseAnimationSegments = (raw: string): string[][] => {
-    const parsed = valueParser(raw);
-    const segments: valueParser.Node[][] = [];
-    let current: valueParser.Node[] = [];
-
-    for (const node of parsed.nodes) {
-      if (node.type === "div" && node.value === ",") {
-        if (current.length > 0) {
-          segments.push(current);
-        }
-        current = [];
-        continue;
-      }
-      current.push(node);
-    }
-    if (current.length > 0) {
-      segments.push(current);
-    }
-
-    return segments
-      .map((nodes) =>
-        nodes
-          .filter((n) => n.type !== "space")
-          .map((n) => valueParser.stringify(n))
-          .map((t) => t.trim())
-          .filter(Boolean),
-      )
-      .filter((tokens) => tokens.length > 0);
   };
 
   const buildCommaTemplate = (

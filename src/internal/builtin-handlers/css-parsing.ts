@@ -4,6 +4,7 @@
  */
 import type { API, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import {
+  borderLonghandProps,
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   isStylexStringOnlyCssProp,
@@ -130,8 +131,7 @@ export function parseCssDeclarationBlockWithTemplateExpr(
       hasTemplateValues = true;
 
       // Handle border shorthands specially - expand to longhand properties
-      const borderMatch = property.match(/^border(-top|-right|-bottom|-left)?$/);
-      if (borderMatch) {
+      if (borderLonghandProps(property)) {
         const expanded = expandBorderShorthandWithTemplateExpr(property, valueRaw, j);
         if (!expanded) {
           return null;
@@ -184,19 +184,12 @@ function expandBorderShorthandWithTemplateExpr(
   valueRaw: string,
   j: API["jscodeshift"],
 ): Record<string, unknown> | null {
-  // Extract direction from property (e.g., "border-top" -> "Top")
-  const borderMatch = property.match(/^border(-top|-right|-bottom|-left)?$/);
-  if (!borderMatch) {
+  // Extract directional longhand prop names (e.g., "border-top" -> borderTop*)
+  const longhand = borderLonghandProps(property);
+  if (!longhand) {
     return null;
   }
-  const directionRaw = borderMatch[1] ?? "";
-  const direction = directionRaw
-    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
-    : "";
-
-  const widthProp = `border${direction}Width`;
-  const styleProp = `border${direction}Style`;
-  const colorProp = `border${direction}Color`;
+  const { widthProp, styleProp, colorProp } = longhand;
 
   // Extract static parts (prefix/suffix) around template expressions
   // For "1px solid ${color}", prefix="1px solid ", suffix=""

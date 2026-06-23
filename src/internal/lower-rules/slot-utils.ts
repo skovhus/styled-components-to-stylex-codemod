@@ -32,6 +32,26 @@ export function findArrowSlotExpr(d: any, decl: StyledDecl): { expr: any } | nul
 }
 
 /**
+ * Like `findArrowSlotExpr`, but requires the value to be a *single* slot part —
+ * the whole `${...}` value with no surrounding static text. Returns the
+ * arrow-function expression node, or `null`.
+ */
+export function findSingleSlotArrowExpr(d: any, decl: StyledDecl): any {
+  if (d?.value?.kind !== "interpolated") {
+    return null;
+  }
+  const parts = d.value.parts ?? [];
+  if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+    return null;
+  }
+  const expr = decl.templateExpressions[parts[0].slotId] as any;
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return null;
+  }
+  return expr;
+}
+
+/**
  * Like `findArrowSlotExpr`, but additionally requires the arrow function's
  * first parameter to be a plain Identifier (e.g. `(props) => ...`). Returns
  * the parameter's name alongside the expression.

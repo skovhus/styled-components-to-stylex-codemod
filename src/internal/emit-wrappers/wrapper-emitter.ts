@@ -1951,6 +1951,39 @@ export class WrapperEmitter {
     return seb.buildInterleavedExtraStyleArgs(this.j, this.stylesIdentifier, d, propsArgExprs);
   }
 
+  /**
+   * Build the initial `stylex.props()` style args from a declaration's extra
+   * stylex.props() entries and extra style keys (interleaved via mixinOrder),
+   * returning the base `styleArgs` plus the `afterVariantStyleArgs` that callers
+   * append once variant conditionals have been emitted. When `destructureProps`
+   * is provided, prop bindings discovered while lowering props args are recorded
+   * there for the wrapper's destructuring pattern.
+   */
+  buildStyleArgsWithExtras(
+    d: StyledDecl,
+    destructureProps?: string[],
+  ): { styleArgs: ExpressionKind[]; afterVariantStyleArgs: ExpressionKind[] } {
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? this.buildExtraStylexPropsExprEntries({
+          entries: d.extraStylexPropsArgs,
+          ...(destructureProps ? { destructureProps } : {}),
+        })
+      : [];
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = this.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const styleArgs = seb.buildInitialStyleArgs(
+      this.j,
+      this.stylesIdentifier,
+      d,
+      extraStyleArgs,
+      extraStyleArgsAfterBase,
+    );
+    return { styleArgs, afterVariantStyleArgs };
+  }
+
   splitAttrsInfo(
     attrsInfo: StyledDecl["attrsInfo"],
     bridgeClassVar?: string,

@@ -9,7 +9,7 @@ import {
   getMemberPathFromIdentifier,
 } from "../utilities/jscodeshift-utils.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
-import { findArrowSlotExpr } from "./slot-utils.js";
+import { findArrowSlotExpr, findSingleSlotArrowExpr } from "./slot-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { mergeStyleObjects } from "./utils.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
@@ -176,19 +176,11 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
   const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {
     // Handle: ${(props) => helper(props.appearance)}
     // where `helper` is: const helper = (appearance) => css`... ${() => { switch(appearance) { ... return css`...` }}} ...`
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (d.property) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    if (parts.length !== 1 || parts[0]?.kind !== "slot") {
-      return false;
-    }
-    const slotId = parts[0].slotId;
-    const expr = decl.templateExpressions[slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
+    const expr = findSingleSlotArrowExpr(d, decl);
+    if (!expr) {
       return false;
     }
     const propsParam = expr.params?.[0];

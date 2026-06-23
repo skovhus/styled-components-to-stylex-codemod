@@ -14,6 +14,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import {
   BORDER_STYLES,
+  borderLonghandProps,
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
@@ -93,15 +94,12 @@ export function tryHandleInterpolatedBorder(
   //   border: 2px solid ${(p) => (p.hasError ? "red" : "#ccc")}
   //   border-right: 1px solid ${(p) => p.theme.borderColor}
   const prop = (d.property ?? "").trim();
-  const borderMatch = prop.match(/^border(-top|-right|-bottom|-left)?$/);
-  if (!borderMatch) {
+  // Extract direction suffix (e.g., "Right" from "border-right", or "" from "border")
+  const longhand = borderLonghandProps(prop);
+  if (!longhand) {
     return false;
   }
-  // Extract direction suffix (e.g., "Right" from "border-right", or "" from "border")
-  const directionRaw = borderMatch[1] ?? "";
-  const direction = directionRaw
-    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
-    : "";
+  const { direction } = longhand;
   if (d.value.kind !== "interpolated") {
     return false;
   }
@@ -582,7 +580,7 @@ export function tryHandleInterpolatedBorder(
       registerImports(resolved.imports, resolverImports);
 
       if (resolved.kind === "okStyles") {
-        if (directionRaw) {
+        if (direction) {
           bailUnsupportedWithContext(
             "Directional border helper styles are not supported",
             { property: prop },

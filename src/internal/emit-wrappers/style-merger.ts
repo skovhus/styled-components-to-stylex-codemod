@@ -526,38 +526,23 @@ function emitWithMerger(args: {
   };
 }
 
-function buildMergerClassNameArg(args: {
+type ClassNamePartsArgs = {
   j: JSCodeshift;
   classNameId: Identifier;
   allowClassNameProp: boolean;
   staticClassNameExpr?: ExpressionKind;
-}): ExpressionKind | null {
-  const { j, classNameId, allowClassNameProp, staticClassNameExpr } = args;
-  const parts: ExpressionKind[] = [];
-  if (staticClassNameExpr) {
-    parts.push(staticClassNameExpr);
-  }
-  if (allowClassNameProp) {
-    parts.push(classNameId);
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  if (parts.length === 1) {
-    const first = parts[0];
-    return first ?? null;
-  }
-  // Pass multiple classNames as an array — the merger function handles joining.
-  return j.arrayExpression(parts);
-}
+};
 
-function buildClassNameAttributeExpr(args: {
-  j: JSCodeshift;
-  classNameId: Identifier;
-  allowClassNameProp: boolean;
-  staticClassNameExpr?: ExpressionKind;
-}): ExpressionKind | null {
-  const { j, classNameId, allowClassNameProp, staticClassNameExpr } = args;
+/**
+ * Collect the className expressions to combine (the static className, if any,
+ * then the forwarded `className` prop, if allowed), then return `null` for none,
+ * the sole part for one, or `combineMultiple(parts)` for several.
+ */
+function combineClassNameParts(
+  args: ClassNamePartsArgs,
+  combineMultiple: (parts: ExpressionKind[]) => ExpressionKind,
+): ExpressionKind | null {
+  const { classNameId, allowClassNameProp, staticClassNameExpr } = args;
   const parts: ExpressionKind[] = [];
   if (staticClassNameExpr) {
     parts.push(staticClassNameExpr);
@@ -571,14 +556,26 @@ function buildClassNameAttributeExpr(args: {
   if (parts.length === 1) {
     return parts[0] ?? null;
   }
-  return j.callExpression(
-    j.memberExpression(
-      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
-        j.identifier("Boolean"),
-      ]),
-      j.identifier("join"),
+  return combineMultiple(parts);
+}
+
+function buildMergerClassNameArg(args: ClassNamePartsArgs): ExpressionKind | null {
+  // Pass multiple classNames as an array — the merger function handles joining.
+  return combineClassNameParts(args, (parts) => args.j.arrayExpression(parts));
+}
+
+function buildClassNameAttributeExpr(args: ClassNamePartsArgs): ExpressionKind | null {
+  const { j } = args;
+  return combineClassNameParts(args, (parts) =>
+    j.callExpression(
+      j.memberExpression(
+        j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+          j.identifier("Boolean"),
+        ]),
+        j.identifier("join"),
+      ),
+      [j.literal(" ")],
     ),
-    [j.literal(" ")],
   );
 }
 

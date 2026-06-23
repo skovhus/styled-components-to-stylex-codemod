@@ -2,7 +2,16 @@
  * Prepass helpers for identifying exported components that already apply StyleX.
  * Core concepts: StyleX import bindings, export names, and local binding traces.
  */
-import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
+import { type AstNode } from "./prepass-parser.js";
+import {
+  astArray,
+  localBindings,
+  nodeName,
+  nodeReferencesLocalNames as referencesLocalNames,
+  parseProgram,
+  programBody,
+  walkValueAst,
+} from "./prepass-ast-utils.js";
 
 export function collectStylexExportNames(source: string): Set<string> {
   const parsed = parseProgram(source);
@@ -29,18 +38,6 @@ type StylexUsage = {
   styleObjectNames: Set<string>;
   hasStylexSurface: boolean;
 };
-
-function parseProgram(source: string): AstNode | null {
-  for (const parserName of ["tsx", "babel"] satisfies PrepassParserName[]) {
-    try {
-      const ast = createPrepassParser(parserName).parse(source) as AstNode;
-      return ((ast as { program?: AstNode }).program ?? ast) as AstNode;
-    } catch {
-      // Try the next parser before falling back to conservative behavior.
-    }
-  }
-  return null;
-}
 
 function collectStylexNamedExports(
   program: AstNode,
@@ -219,43 +216,6 @@ function findLocalBindingNode(program: AstNode, localName: string): AstNode | un
   return undefined;
 }
 
-function localBindings(program: AstNode): Array<{ name: string; node: AstNode }> {
-  const bindings: Array<{ name: string; node: AstNode }> = [];
-  for (const stmt of programBody(program)) {
-    const declaration =
-      stmt.type === "ExportNamedDeclaration" ? (stmt.declaration as AstNode | undefined) : stmt;
-    if (!declaration) {
-      continue;
-    }
-
-    const directBinding = localBindingFromDeclaration(declaration);
-    if (directBinding) {
-      bindings.push(directBinding);
-      continue;
-    }
-
-    if (declaration.type === "VariableDeclaration") {
-      for (const declarator of astArray(declaration.declarations)) {
-        const name = nodeName(declarator.id as AstNode | undefined);
-        const init = declarator.init as AstNode | undefined;
-        if (name && init) {
-          bindings.push({ name, node: init });
-        }
-      }
-    }
-  }
-  return bindings;
-}
-
-function localBindingFromDeclaration(declaration: AstNode): { name: string; node: AstNode } | null {
-  if (declaration.type !== "FunctionDeclaration" && declaration.type !== "ClassDeclaration") {
-    return null;
-  }
-  const name = nodeName(declaration.id as AstNode | undefined);
-  const body = declaration.body as AstNode | undefined;
-  return name && body ? { name, node: body } : null;
-}
-
 function referencedLocalNames(program: AstNode, node: AstNode): string[] {
   const localNameSet = new Set(localBindings(program).map((binding) => binding.name));
   const referenced = new Set<string>();
@@ -343,107 +303,10 @@ function isStylexSxAttribute(node: AstNode, styleObjectNames: ReadonlySet<string
   return nodeReferencesLocalNames(expression, styleObjectNames);
 }
 
+/** StyleX surface checks treat a missing node as not referencing the names. */
 function nodeReferencesLocalNames(
   node: AstNode | undefined,
   localNames: ReadonlySet<string>,
 ): boolean {
-  if (!node) {
-    return false;
-  }
-
-  let found = false;
-  walkValueAst(node, (candidate) => {
-    if (!found && isNamedReference(candidate, localNames)) {
-      found = true;
-    }
-  });
-  return found;
-}
-
-function walkValueAst(root: AstNode, visitor: (node: AstNode) => void): void {
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-
-    const astNode = node as AstNode;
-    visitor(astNode);
-    for (const key of Object.keys(astNode)) {
-      if (shouldSkipChild(astNode, key)) {
-        continue;
-      }
-      const child = astNode[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(root);
-}
-
-function shouldSkipChild(node: AstNode, key: string): boolean {
-  if (["loc", "comments", "leadingComments", "trailingComments"].includes(key)) {
-    return true;
-  }
-  if (["typeAnnotation", "typeParameters", "returnType"].includes(key)) {
-    return true;
-  }
-  if (
-    key === "key" &&
-    (node.type === "ObjectProperty" || node.type === "Property") &&
-    (node as { computed?: boolean }).computed !== true
-  ) {
-    return true;
-  }
-  if (
-    key === "property" &&
-    node.type === "MemberExpression" &&
-    (node as { computed?: boolean }).computed !== true
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function isNamedReference(node: AstNode, localNames: ReadonlySet<string>): boolean {
-  if (node.type === "Identifier" || node.type === "JSXIdentifier") {
-    return typeof node.name === "string" && localNames.has(node.name);
-  }
-  return false;
-}
-
-function programBody(program: AstNode): AstNode[] {
-  return astArray(program.body);
-}
-
-function astArray(value: unknown): AstNode[] {
-  return Array.isArray(value) ? (value.filter(isAstNode) as AstNode[]) : [];
-}
-
-function isAstNode(value: unknown): value is AstNode {
-  return Boolean(value && typeof value === "object");
-}
-
-function nodeName(node: AstNode | undefined): string | undefined {
-  if (!node) {
-    return undefined;
-  }
-  if (
-    node.type === "Identifier" ||
-    node.type === "JSXIdentifier" ||
-    node.type === "StringLiteral"
-  ) {
-    return typeof node.name === "string"
-      ? node.name
-      : typeof node.value === "string"
-        ? node.value
-        : undefined;
-  }
-  return undefined;
+  return referencesLocalNames(node, localNames, false);
 }

@@ -278,6 +278,33 @@ export function expandBackgroundShorthandComponents(
   ];
 }
 
+/**
+ * Parse a `border` / `border-<side>` property into its StyleX directional
+ * longhand prop names (and the PascalCase `direction` segment). Returns `null`
+ * for any property that is not a (directional) border shorthand.
+ */
+export function borderLonghandProps(prop: string): {
+  direction: string;
+  widthProp: string;
+  styleProp: string;
+  colorProp: string;
+} | null {
+  const borderMatch = prop.match(/^border(-top|-right|-bottom|-left)?$/);
+  if (!borderMatch) {
+    return null;
+  }
+  const directionRaw = borderMatch[1] ?? "";
+  const direction = directionRaw
+    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
+    : "";
+  return {
+    direction,
+    widthProp: `border${direction}Width`,
+    styleProp: `border${direction}Style`,
+    colorProp: `border${direction}Color`,
+  };
+}
+
 export function parseInterpolatedBorderStaticParts(args: {
   prop: string;
   prefix: string;
@@ -290,17 +317,11 @@ export function parseInterpolatedBorderStaticParts(args: {
   style?: string;
 } | null {
   const { prop, prefix, suffix } = args;
-  const borderMatch = prop.match(/^border(-top|-right|-bottom|-left)?$/);
-  if (!borderMatch) {
+  const longhand = borderLonghandProps(prop);
+  if (!longhand) {
     return null;
   }
-  const directionRaw = borderMatch[1] ?? "";
-  const direction = directionRaw
-    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
-    : "";
-  const widthProp = `border${direction}Width`;
-  const styleProp = `border${direction}Style`;
-  const colorProp = `border${direction}Color`;
+  const { widthProp, styleProp, colorProp } = longhand;
 
   const tokens = `${prefix}${suffix}`.trim().split(/\s+/).filter(Boolean);
   let width: string | undefined;

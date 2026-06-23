@@ -30,6 +30,7 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
+import { findSingleSlotArrowExpr } from "./slot-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { formatObservedVariantCondition } from "../utilities/prop-usage.js";
 import {
@@ -190,19 +191,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
   };
 
   return (d: any, pseudos?: string[] | null, pseudoElement?: string | null): boolean => {
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (d.property) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    if (parts.length !== 1 || parts[0]?.kind !== "slot") {
-      return false;
-    }
-    const slotId = parts[0].slotId;
-    const expr = decl.templateExpressions[slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
+    const expr = findSingleSlotArrowExpr(d, decl);
+    if (!expr) {
       return false;
     }
     const bindings = getArrowFnParamBindings(expr);

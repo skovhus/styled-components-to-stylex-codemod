@@ -31,10 +31,7 @@ import {
   resolveMediaAtRulePlaceholders,
   tryResolveAdapterCall,
 } from "./utils.js";
-import {
-  expandInterpolatedAnimationShorthand,
-  expandStaticAnimationShorthand,
-} from "../keyframes.js";
+import { tryExpandInterpolatedAnimation, expandStaticAnimationShorthand } from "../keyframes.js";
 import { styleValueToExpression } from "./css-conditional-ast-utils.js";
 import type {
   InlineMapPseudoAliases,
@@ -272,14 +269,14 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
       return entries;
     };
 
-    const wrapValueWithResolvedPseudos = (
+    // Append one `[pseudo]: value` (or conditioned `{ default, [cond]: value }`)
+    // property per pseudo entry onto `properties`, returning the object expression.
+    const buildPseudoEntryProperties = (
+      properties: Parameters<typeof j.objectExpression>[0],
       value: ExpressionKind,
       defaultExpr: ExpressionKind,
       pseudoEntries: ResolvedPseudoEntry[],
     ): ExpressionKind => {
-      const properties = [
-        j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind),
-      ];
       for (const entry of pseudoEntries) {
         let entryValue = value;
         if (entry.conditionExpr) {
@@ -302,6 +299,18 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
       return j.objectExpression(properties) as ExpressionKind;
     };
 
+    const wrapValueWithResolvedPseudos = (
+      value: ExpressionKind,
+      defaultExpr: ExpressionKind,
+      pseudoEntries: ResolvedPseudoEntry[],
+    ): ExpressionKind =>
+      buildPseudoEntryProperties(
+        [j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind)],
+        value,
+        defaultExpr,
+        pseudoEntries,
+      );
+
     const appendValueWithResolvedPseudos = (
       existing: ExpressionKind,
       value: ExpressionKind,
@@ -312,27 +321,7 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
         existing.type === "ObjectExpression"
           ? ([...existing.properties] as Parameters<typeof j.objectExpression>[0])
           : [];
-      const properties = existingProperties ?? [];
-      for (const entry of pseudoEntries) {
-        let entryValue = value;
-        if (entry.conditionExpr) {
-          const conditioned = j.objectExpression([
-            j.property(
-              "init",
-              j.identifier("default"),
-              cloneAstNode(defaultExpr) as ExpressionKind,
-            ),
-            (() => {
-              const p = j.property("init", entry.conditionExpr!, value);
-              (p as { computed?: boolean }).computed = true;
-              return p;
-            })(),
-          ]);
-          entryValue = conditioned as ExpressionKind;
-        }
-        properties.push(j.property("init", j.literal(entry.pseudo), entryValue));
-      }
-      return j.objectExpression(properties) as ExpressionKind;
+      return buildPseudoEntryProperties(existingProperties, value, defaultExpr, pseudoEntries);
     };
 
     for (const rule of rules) {
@@ -451,25 +440,19 @@ export function createInlineMapResolver(deps: InlineMapResolverDeps): {
           return null;
         }
         // Resolve interpolated animation declarations referencing keyframes identifiers
-        if (
-          (d.property === "animation" || d.property === "animation-name") &&
-          keyframesNames &&
-          keyframesNames.size > 0
-        ) {
-          const expanded = expandInterpolatedAnimationShorthand({
-            property: d.property,
-            valueRaw: d.valueRaw,
-            slotExprById,
-            keyframesNames: keyframesNames,
-            j,
-            inlineKeyframeNameMap: inlineKeyframeNameMap,
-          });
-          if (expanded) {
-            if (!applyExpandedAnimation(expanded)) {
-              return null;
-            }
-            continue;
+        const expandedAnimation = tryExpandInterpolatedAnimation({
+          property: d.property,
+          valueRaw: d.valueRaw,
+          slotExprById,
+          keyframesNames,
+          j,
+          inlineKeyframeNameMap,
+        });
+        if (expandedAnimation) {
+          if (!applyExpandedAnimation(expandedAnimation)) {
+            return null;
           }
+          continue;
         }
         const parts = d.value.parts ?? [];
         const slotParts = parts.filter(

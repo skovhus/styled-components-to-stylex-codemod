@@ -8,6 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { LowerRulesState } from "./state.js";
 import {
   BORDER_STYLES,
+  borderLonghandProps,
   cssPropertyToStylexProp,
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
@@ -311,11 +312,9 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     };
 
     // Special handling for border shorthand (including directional borders)
-    const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
-    if (borderMatch) {
-      const direction = borderMatch[1]
-        ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
-        : "";
+    const borderLonghand = borderLonghandProps(cssProp);
+    if (borderLonghand) {
+      const { direction } = borderLonghand;
       const tempBucket: Record<string, unknown> = {};
       if (expandBorderShorthand(tempBucket, parsed.exprAst, direction)) {
         for (const [prop, val] of Object.entries(tempBucket)) {
@@ -463,9 +462,6 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     styleObj,
     variantBuckets,
     variantStyleKeys,
-    pseudos,
-    parseExpr,
-    resolverImports,
     warnings,
     setBail,
     bailUnsupported,
@@ -506,37 +502,11 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     return true;
   }
 
-  // Extract static prefix/suffix from CSS value for wrapping resolved values
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
-
-  const parseResolved = (
-    expr: string,
-    imports: any[],
-  ): { exprAst: unknown; imports: any[] } | null =>
-    parseResolvedAdapterExpr({
-      expr,
-      imports,
-      staticPrefix,
-      staticSuffix,
-      parseExpr,
-      decl,
-      warnings,
-    });
-
-  const applyParsed = (
-    target: Record<string, unknown>,
-    parsed: { exprAst: unknown; imports: any[] },
-  ): void => {
-    applyParsedPseudoMap({
-      target,
-      parsed,
-      stylexProp: stylexPropMulti,
-      pseudos,
-      resolverImports,
-      defaultValueFor: (existing) =>
-        unwrapConditionMapDefault(existing ?? styleObj[stylexPropMulti]),
-    });
-  };
+  const { parseResolved, applyParsed } = buildCompoundVariantResolvers(
+    ctx,
+    stylexPropMulti,
+    (existing) => unwrapConditionMapDefault(existing ?? styleObj[stylexPropMulti]),
+  );
 
   // Parse all three branches
   const outerParsed = parseResolved(res.outerTruthyBranch.expr, res.outerTruthyBranch.imports);
@@ -598,19 +568,7 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
 }
 
 export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariantsContext): boolean {
-  const {
-    decl,
-    d,
-    res,
-    variantBuckets,
-    variantStyleKeys,
-    pseudos,
-    parseExpr,
-    resolverImports,
-    warnings,
-    setBail,
-    bailUnsupported,
-  } = ctx;
+  const { decl, d, res, variantBuckets, variantStyleKeys, setBail, bailUnsupported } = ctx;
 
   if (!res || res.type !== "dualBranchCompoundVariantsResolvedValue") {
     return false;
@@ -625,36 +583,11 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
     return true;
   }
 
-  // Extract static prefix/suffix from CSS value for wrapping resolved values
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
-
-  const parseResolved = (
-    expr: string,
-    imports: any[],
-  ): { exprAst: unknown; imports: any[] } | null =>
-    parseResolvedAdapterExpr({
-      expr,
-      imports,
-      staticPrefix,
-      staticSuffix,
-      parseExpr,
-      decl,
-      warnings,
-    });
-
-  const applyParsed = (
-    target: Record<string, unknown>,
-    parsed: { exprAst: unknown; imports: any[] },
-  ): void => {
-    applyParsedPseudoMap({
-      target,
-      parsed,
-      stylexProp,
-      pseudos,
-      resolverImports,
-      defaultValueFor: (existing) => existing ?? null,
-    });
-  };
+  const { parseResolved, applyParsed } = buildCompoundVariantResolvers(
+    ctx,
+    stylexProp,
+    (existing) => existing ?? null,
+  );
 
   // Parse all four branches
   const otitParsed = parseResolved(
@@ -797,6 +730,55 @@ function parseResolvedAdapterExpr(args: {
     return null;
   }
   return { exprAst, imports: imports ?? [] };
+}
+
+/**
+ * Build the `parseResolved`/`applyParsed` closures shared by the compound
+ * variant resolvers: they wrap adapter expressions with the declaration's
+ * static prefix/suffix and apply the parsed result into a variant bucket for
+ * `stylexProp`. Callers differ only in how the pseudo-map `default` slot is
+ * seeded, supplied via `defaultValueFor`.
+ */
+function buildCompoundVariantResolvers(
+  ctx: SplitVariantsContext,
+  stylexProp: string,
+  defaultValueFor: (existing: unknown) => unknown,
+): {
+  parseResolved: (expr: string, imports: any[]) => { exprAst: unknown; imports: any[] } | null;
+  applyParsed: (
+    target: Record<string, unknown>,
+    parsed: { exprAst: unknown; imports: any[] },
+  ) => void;
+} {
+  const { decl, d, parseExpr, resolverImports, warnings, pseudos } = ctx;
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
+
+  const parseResolved = (expr: string, imports: any[]) =>
+    parseResolvedAdapterExpr({
+      expr,
+      imports,
+      staticPrefix,
+      staticSuffix,
+      parseExpr,
+      decl,
+      warnings,
+    });
+
+  const applyParsed = (
+    target: Record<string, unknown>,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
+    applyParsedPseudoMap({
+      target,
+      parsed,
+      stylexProp,
+      pseudos,
+      resolverImports,
+      defaultValueFor,
+    });
+  };
+
+  return { parseResolved, applyParsed };
 }
 
 function unwrapConditionMapDefault(value: unknown): unknown {
