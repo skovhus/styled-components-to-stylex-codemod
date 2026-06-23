@@ -175,11 +175,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gridRow {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-gridTemplateColumns {
   syntax: "*";
   inherits: false
@@ -1400,10 +1395,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x7sv70a:not(#\#):not(#\#) {
   grid-row: 2;
-}
-
-.x33j1x8:not(#\#):not(#\#) {
-  grid-row: var(--x-gridRow);
 }
 
 .xe8uvvx:not(#\#):not(#\#) {
@@ -5115,6 +5106,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x6f73l5:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-color: #bf4f74;
+}
+
+.xnzhmsc:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-color: #ccc;
 }
 
 .xeeq1f2:not(#\#):not(#\#):not(#\#):not(#\#) {
