@@ -704,6 +704,109 @@ describe("TypeScript compiler prepass", () => {
     }
   });
 
+  it("analyzes compiler metadata for transformed intrinsic styled components", async () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-transformed-root-"));
+    const sourcePath = path.join(fixtureDir, "component.tsx");
+    writeFileSync(
+      sourcePath,
+      [
+        'import styled from "styled-components";',
+        "export const Label = styled.div`color: red;`;",
+      ].join("\n"),
+    );
+
+    try {
+      const prepassResult = await runPrepass({
+        filesToTransform: [sourcePath],
+        consumerPaths: [],
+        resolver: createModuleResolver(),
+        parserName: "tsx",
+        createExternalInterface: false,
+      });
+
+      expect(
+        prepassResult.typeScriptMetadata?.files.map((file) =>
+          path.relative(realpathSync(fixtureDir), file.filePath),
+        ),
+      ).toEqual(["component.tsx"]);
+      expect(
+        findTypeScriptComponentMetadata(prepassResult.typeScriptMetadata, sourcePath, ["Label"]),
+      ).toMatchObject({
+        kind: "styled",
+        supportsSxProp: false,
+      });
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("limits TypeScript metadata roots to transformed styled wrappers", async () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-roots-"));
+    writeFileSync(
+      path.join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "react-jsx", moduleResolution: "node" } }),
+    );
+
+    const basePath = path.join(fixtureDir, "base.tsx");
+    const otherPath = path.join(fixtureDir, "other.tsx");
+    const targetPath = path.join(fixtureDir, "target.tsx");
+    const consumerPath = path.join(fixtureDir, "consumer.tsx");
+    writeFileSync(
+      basePath,
+      [
+        "export function Base(props: { sx?: unknown; label?: string }) {",
+        "  return <div>{props.label}</div>;",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      otherPath,
+      [
+        "export function Other(props: { sx?: unknown; label?: string }) {",
+        "  return <div>{props.label}</div>;",
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      targetPath,
+      [
+        'import styled from "styled-components";',
+        'import { Base } from "./base";',
+        "export const WrappedBase = styled(Base)`color: red;`;",
+      ].join("\n"),
+    );
+    writeFileSync(
+      consumerPath,
+      [
+        'import styled from "styled-components";',
+        'import { Other } from "./other";',
+        "export const WrappedOther = styled(Other)`color: blue;`;",
+      ].join("\n"),
+    );
+
+    try {
+      const realFixtureDir = realpathSync(fixtureDir);
+      const prepassResult = await runPrepass({
+        filesToTransform: [targetPath],
+        consumerPaths: [consumerPath],
+        resolver: createModuleResolver(),
+        parserName: "tsx",
+        createExternalInterface: true,
+      });
+
+      expect(
+        prepassResult.typeScriptMetadata?.files.map((file) =>
+          path.relative(realFixtureDir, file.filePath),
+        ),
+      ).toEqual(["base.tsx", "target.tsx"]);
+      expect(prepassResult.consumerAnalysis?.get(`${realpathSync(otherPath)}:Other`)?.styles).toBe(
+        true,
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("extracts sx support from anonymous default function components", async () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-default-fn-"));
     const sourcePath = path.join(fixtureDir, "component.tsx");
