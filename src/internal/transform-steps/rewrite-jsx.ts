@@ -251,7 +251,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             }
           });
       }
-      if (!decl.promotedStyleProps?.length) {
+      if (!decl.promotedStyleProps?.length && !decl.preserveInlineStyleProps) {
         continue;
       }
     }
@@ -269,10 +269,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // For wrapper components, only inline call sites with non-merge promoted styles;
         // plain call sites keep using the wrapper function.
         if (decl.needsWrapperComponent) {
+          const openingMetadata = opening as {
+            __promotedStyleKey?: string;
+            __promotedMergeIntoBase?: boolean;
+            __promotedMergeArgs?: ExpressionKind[];
+            __promotedConditionalVariant?: unknown;
+            __preserveInlineStyleProp?: boolean;
+          };
           const hasPromoted =
-            ((opening as any).__promotedStyleKey && !(opening as any).__promotedMergeIntoBase) ||
-            (opening as any).__promotedMergeArgs ||
-            (opening as any).__promotedConditionalVariant;
+            (openingMetadata.__promotedStyleKey && !openingMetadata.__promotedMergeIntoBase) ||
+            openingMetadata.__promotedMergeArgs ||
+            openingMetadata.__promotedConditionalVariant ||
+            openingMetadata.__preserveInlineStyleProp;
           if (!hasPromoted) {
             return;
           }
@@ -1030,12 +1038,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
         // Handle promoted style props: consume the style attr by adding promoted
         // entries to styleArgs instead of using mergedSx.
-        const promotedKey = (opening as any).__promotedStyleKey as string | undefined;
-        const promotedArgs = (opening as any).__promotedStyleArgs as ExpressionKind[] | undefined;
-        const promotedMerge = (opening as any).__promotedMergeIntoBase as boolean | undefined;
-        const promotedConditionalVariant = (
-          opening as { __promotedConditionalVariant?: { styleKey: string; conditionExpr: unknown } }
-        ).__promotedConditionalVariant;
+        const openingMetadata = opening as {
+          __promotedStyleKey?: string;
+          __promotedStyleArgs?: ExpressionKind[];
+          __promotedMergeIntoBase?: boolean;
+          __promotedConditionalVariant?: { styleKey: string; conditionExpr: unknown };
+          __preserveInlineStyleProp?: boolean;
+        };
+        const promotedKey = openingMetadata.__promotedStyleKey;
+        const promotedArgs = openingMetadata.__promotedStyleArgs;
+        const promotedMerge = openingMetadata.__promotedMergeIntoBase;
+        const promotedConditionalVariant = openingMetadata.__promotedConditionalVariant;
+        const preserveInlineStyleProp = openingMetadata.__preserveInlineStyleProp;
 
         if (promotedKey) {
           const stylesId = ctx.stylesIdentifier ?? "styles";
@@ -1133,8 +1147,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           effectiveClassNameAttr === null &&
           !hasCallerStyleAttr &&
           !hasRestSpreadAttr;
+        const canKeepInlineStyleWithSx =
+          preserveInlineStyleProp === true &&
+          ctx.adapter.useSxProp &&
+          isIntrinsicTag &&
+          effectiveClassNameAttr === null &&
+          styleAttr !== null;
         const needsMerge =
-          effectiveClassNameAttr !== null || (styleAttr !== null && !hasOnlyStaticInlineStyleAttr);
+          effectiveClassNameAttr !== null ||
+          (styleAttr !== null && !hasOnlyStaticInlineStyleAttr && !canKeepInlineStyleWithSx);
         // sx prop requires at least one local stylex.create() reference so the
         // StyleX compiler can verify and transform it. When all styles are external
         // (e.g. only extraStylexPropsArgs mixin lookups), fall back to stylex.props().

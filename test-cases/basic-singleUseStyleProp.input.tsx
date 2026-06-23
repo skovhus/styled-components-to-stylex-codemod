@@ -1,7 +1,9 @@
-// Single-use intrinsic styled component with style prop should inline with mergedSx
+// Intrinsic styled component style props: single-use dynamic promotes, reused dynamic stays inline
 import styled from "styled-components";
 
 const TICK_OFFSET = 4;
+const HEADER_PADDING_RIGHT = 24;
+const ARCHIVED_BG = "#eef2ff";
 
 const Tick = styled.div`
   margin: 3px;
@@ -13,9 +15,21 @@ const Label = styled.span`
   color: navy;
 `;
 
+const DrillHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #ccc;
+`;
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 8 }}>
+  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     <Tick style={{ left: 6 + TICK_OFFSET }}>Tick</Tick>
     <Label className="custom-label">Label</Label>
+    <DrillHeader style={{ paddingRight: HEADER_PADDING_RIGHT }}>Dynamic padding</DrillHeader>
+    <DrillHeader style={{ paddingRight: HEADER_PADDING_RIGHT, backgroundColor: ARCHIVED_BG }}>
+      Dynamic padding and background
+    </DrillHeader>
   </div>
 );

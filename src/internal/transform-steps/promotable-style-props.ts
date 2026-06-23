@@ -2,7 +2,8 @@
  * Promotable style-prop analysis (plus the prop-comment metadata helpers it
  * depends on) extracted from analyze-before-emit. Promotes JSX call-site
  * `style={{ ... }}` objects on intrinsic styled components into proper
- * `stylex.create` entries, expanding shorthands and folding shared ternaries.
+ * `stylex.create` entries when they are static or single-use dynamic, while
+ * leaving multi-use dynamic caller style props inline.
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { PromotedStyleEntry, StyledDecl } from "../transform-types.js";
@@ -66,10 +67,13 @@ export const NON_PROMOTABLE_STYLE_PROPS = new Set<string>([
 
 /**
  * Analyzes JSX call-site `style={{ ... }}` objects for all intrinsic styled components
- * and promotes analyzable style objects to proper `stylex.create` entries.
+ * and promotes analyzable static or single-use dynamic style objects to proper
+ * `stylex.create` entries.
  *
  * This avoids wrapper components and `mergedSx` calls for components whose
- * call-site style props are static objects (or objects with known dynamic values).
+ * call-site style props are static objects. Reused components with dynamic
+ * caller styles keep those dynamic values inline so the exceptional call site
+ * remains local instead of generating extra StyleX function keys.
  */
 export function analyzePromotableStyleProps(
   root: ReturnType<JSCodeshift>,
@@ -141,7 +145,8 @@ export function analyzePromotableStyleProps(
       continue;
     }
 
-    // Check if ALL call sites with style props are promotable.
+    // Check if ALL call sites with style props are safe to inline. Static style
+    // props can be promoted; dynamic style props will be preserved verbatim.
     let allPromotable = true;
     const siteAnalyses: Array<{
       opening: any;
@@ -289,10 +294,11 @@ export function analyzePromotableStyleProps(
       continue;
     }
 
-    // All call sites are promotable. Generate entries and tag JSX nodes.
+    // All call sites are safe to inline. Generate static entries and tag JSX nodes.
     const promotedEntries: PromotedStyleEntry[] = [];
     const usageCount = getJsxUsageCount(decl.localName);
     const usedKeyNames = new Set<string>();
+    let preservedInlineStylePropCount = 0;
 
     for (const site of siteAnalyses) {
       if (!site.styleAttr || site.properties.length === 0) {
@@ -331,6 +337,16 @@ export function analyzePromotableStyleProps(
           (site.opening as any).__promotedStyleKey = styleKey;
         }
       } else if (hasDynamic) {
+        if (usageCount > 1) {
+          // Reused components read better when the exceptional dynamic caller
+          // style stays at the call site instead of generating an extra StyleX
+          // function/key alongside the shared wrapper/base style.
+          (site.opening as { __preserveInlineStyleProp?: boolean }).__preserveInlineStyleProp =
+            true;
+          preservedInlineStylePropCount += 1;
+          continue;
+        }
+
         // Mixed static+dynamic or all-dynamic: create a dynamic style function.
         // Build static part of the style object and collect dynamic params.
         const inlineStaticObj: Record<string, unknown> = {};
@@ -354,7 +370,7 @@ export function analyzePromotableStyleProps(
         );
         const baseObj = resolvedStyleObjects.get(decl.styleKey);
         const baseIsSimpleObject = isPlainStyleObject(baseObj);
-        const isReusable = usageCount > 1 || decl.isExported === true;
+        const isReusable = decl.isExported === true;
 
         // Shared-ternary promotion: when every dynamic value is the same
         // conditional `cond ? a : b` with literal branches, fold the alternate
@@ -462,7 +478,6 @@ export function analyzePromotableStyleProps(
           }
         }
 
-        // Build arrow function params
         const params = paramEntries.map((pe) => {
           const id = j.identifier(pe.paramName);
           const typeNode =
@@ -475,11 +490,10 @@ export function analyzePromotableStyleProps(
           return id;
         });
 
-        // Build object expression body with merged base + inline properties
         const bodyProperties: ReturnType<typeof j.property>[] = [];
         for (const sp of mergedStaticProps) {
           const val = isAstNode(sp.value)
-            ? (sp.value as ExpressionKind) // Already an AST node — use directly
+            ? (sp.value as ExpressionKind)
             : typeof sp.value === "string"
               ? j.stringLiteral(sp.value)
               : typeof sp.value === "number"
@@ -501,13 +515,11 @@ export function analyzePromotableStyleProps(
         const fnNode = j.arrowFunctionExpression(params, j.objectExpression(bodyProperties));
 
         if (canMergeDynamic) {
-          // Replace the base static entry with the merged function.
           promotedEntries.push({
             styleKey: decl.styleKey,
             styleValue: fnNode as unknown as Record<string, unknown>,
             mergeIntoBase: true,
           });
-          // Tag JSX: merge consumes the style attr, and the base key becomes a fn call.
           (site.opening as any).__promotedMergeIntoBase = true;
           (site.opening as any).__promotedMergeArgs = dynamicParams.map((dp) =>
             isStylexStringOnlyCssProp(dp.cssProp)
@@ -515,16 +527,12 @@ export function analyzePromotableStyleProps(
               : dp.expr,
           );
         } else {
-          // Store the AST node directly in resolvedStyleObjects (emitter handles AST nodes).
           promotedEntries.push({
             styleKey,
             styleValue: fnNode as unknown as Record<string, unknown>,
           });
 
-          // Tag the JSX node with the style key and call arguments.
           (site.opening as any).__promotedStyleKey = styleKey;
-          // The call args are the actual expressions from the style object.
-          // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
           const callArgs = dynamicParams.map((dp) =>
             isStylexStringOnlyCssProp(dp.cssProp)
               ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
@@ -537,6 +545,10 @@ export function analyzePromotableStyleProps(
 
     if (promotedEntries.length > 0) {
       decl.promotedStyleProps = promotedEntries;
+    }
+    if (preservedInlineStylePropCount > 0) {
+      decl.preserveInlineStyleProps = true;
+      decl.preservedInlineStylePropCount = preservedInlineStylePropCount;
     }
   }
 }
@@ -1190,8 +1202,8 @@ function hasPropertyOverlap(incoming: Record<string, unknown>, base: unknown): b
 
 /**
  * Returns true if any value in the base resolved style object contains `!important`.
- * When the base uses `!important`, style props must stay as inline styles (via mergedSx)
- * to preserve the semantics where `!important` CSS beats inline `style` attributes.
+ * When the base uses `!important`, caller style props must stay inline to
+ * preserve the semantics where `!important` CSS beats inline `style` attributes.
  */
 function baseStyleHasImportant(base: unknown): boolean {
   if (!base || typeof base !== "object" || isAstNode(base)) {
