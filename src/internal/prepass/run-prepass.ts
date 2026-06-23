@@ -70,6 +70,17 @@ interface ForwardedAsConsumerEntry {
   targetPath: string;
 }
 
+interface StyledCallUsage {
+  file: string;
+  name: string;
+}
+
+interface StyledWrapperUsage {
+  file: string;
+  localStyledName: string;
+  wrappedName: string;
+}
+
 interface PrepassResult {
   crossFileInfo: CrossFileInfo;
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
@@ -175,7 +186,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   // Consumer analysis state (if createExternalInterface)
   const asUsages = new Map<string, Set<string>>();
   const refUsages = new Map<string, Set<string>>();
-  const styledCallUsages: { file: string; name: string }[] = [];
+  const styledCallUsages: StyledCallUsage[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
   const stylexComponentFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, ConsumerUsageRef[]>();
@@ -184,7 +195,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const elementPropUsages = new Map<string, ConsumerUsageRef[]>();
   const spreadPropUsages = new Map<string, ConsumerUsageRef[]>();
   const propUsageCandidates = new Map<string, ConsumerStaticPropUsage[]>();
-  const styledWrapperUsages: { file: string; localStyledName: string; wrappedName: string }[] = [];
+  const styledWrapperUsages: StyledWrapperUsage[] = [];
 
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
   const fileContents = new Map<string, string>();
@@ -602,15 +613,18 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  const typeScriptAnalysisFiles = enableTypeScriptAnalysis
+    ? collectTypeScriptAnalysisFiles({
+        transformSet,
+        styledCallUsages,
+        styledWrapperUsages,
+        cachedRead,
+        resolve,
+      })
+    : [];
   const typeScriptMetadata = enableTypeScriptAnalysis
     ? (await loadTypeScriptAnalysis()).analyzeTypeScriptProgram({
-        files: collectTypeScriptAnalysisFiles({
-          transformSet,
-          styledCallUsages,
-          styledWrapperUsages,
-          cachedRead,
-          resolve,
-        }),
+        files: typeScriptAnalysisFiles,
       })
     : undefined;
 
@@ -690,20 +704,26 @@ async function loadTypeScriptAnalysis(): Promise<typeof import("./typescript-ana
 
 function collectTypeScriptAnalysisFiles(args: {
   transformSet: ReadonlySet<string>;
-  styledCallUsages: readonly { file: string; name: string }[];
-  styledWrapperUsages: readonly { file: string; wrappedName: string }[];
+  styledCallUsages: readonly StyledCallUsage[];
+  styledWrapperUsages: readonly StyledWrapperUsage[];
   cachedRead: (path: string) => string;
   resolve: Resolve;
 }): string[] {
   const { transformSet, styledCallUsages, styledWrapperUsages, cachedRead, resolve } = args;
   const files = new Set(transformSet);
   for (const { file, name } of styledCallUsages) {
+    if (!transformSet.has(file)) {
+      continue;
+    }
     const definition = resolveDefinitionFile({ file, localName: name, cachedRead, resolve });
     if (definition) {
       files.add(definition.defFile);
     }
   }
   for (const { file, wrappedName } of styledWrapperUsages) {
+    if (!transformSet.has(file)) {
+      continue;
+    }
     const definition = resolveDefinitionFile({ file, localName: wrappedName, cachedRead, resolve });
     if (definition) {
       files.add(definition.defFile);
