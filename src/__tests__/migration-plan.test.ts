@@ -96,7 +96,11 @@ describe("analyzeMigrationPlan", () => {
 
     const report = formatMigrationPlan(plan);
     expect(report).toContain("1 of 3 file(s) need manual conversion");
-    expect(report).toContain("unblocks 2 file(s) for automatic migration");
+    expect(report).toContain(
+      "Direct payoff: converting all listed blockers lets 2 file(s) auto-migrate",
+    );
+    expect(report).toContain("directly unlocks 2 file(s)");
+    expect(report).not.toContain("chain context:");
     expect(report).toContain("Base.tsx");
     expect(report).toContain("Convert these exports: Base (used by 2)");
   });
@@ -266,6 +270,11 @@ describe("analyzeMigrationPlan", () => {
     expect(token.soleBlockerFileCount).toBe(0);
     // Base does cascade-bail on token, so token is still in token's blocker chain.
     expect(token.blockedFileCount).toBe(1);
+
+    const report = formatMigrationPlan(plan);
+    expect(report).toContain("directly unlocks 0 file(s)");
+    expect(report).toContain("chain context: 1 file(s) bail through this file");
+    expect(report).toContain("not unlocked by it alone");
   });
 
   it("throws instead of returning a partial plan when analysis exceeds the pass cap", async () => {
@@ -379,6 +388,14 @@ describe("analyzeMigrationPlan", () => {
     // Consumer is not itself a blocker; converting both Base and Other unblocks it.
     expect(plan.manualConversionFiles.some((f) => f.filePath.endsWith("Consumer.tsx"))).toBe(false);
     expect(plan.unlocksFileCount).toBe(1);
+
+    const report = formatMigrationPlan(plan);
+    expect(report).toContain(
+      "Direct payoff: converting all listed blockers lets 1 file(s) auto-migrate",
+    );
+    expect(report).toContain("directly unlocks 0 file(s)");
+    expect(report).toContain("chain context: 1 file(s) bail through this file");
+    expect(report).toContain("not unlocked by it alone");
   });
 
   it("reports the source export name through an aliased barrel re-export", async () => {

@@ -152,7 +152,40 @@ export function transformWithWarnings(
 ): TransformResult {
   // Extract per-file cross-file info from the global prepass result
   const enrichedOptions = extractCrossFileInfoForFile(file.path, options);
-  const ctx = new TransformContext(file, api, enrichedOptions);
+
+  if (shouldAttemptStrictFullConversionFirst(file, api, enrichedOptions)) {
+    const strictResult = runTransformPipeline(file, api, {
+      ...enrichedOptions,
+      allowPartialMigration: false,
+    });
+    if (strictResult.code !== null) {
+      return strictResult;
+    }
+  }
+
+  return runTransformPipeline(file, api, enrichedOptions);
+}
+
+// --- Non-exported helpers ---
+
+function shouldAttemptStrictFullConversionFirst(
+  file: FileInfo,
+  api: API,
+  options: TransformOptions,
+): boolean {
+  return (
+    options.allowPartialMigration === true &&
+    options.transformMode !== "leavesOnly" &&
+    !hasImportedRootStyledStaticAssignment(file, api)
+  );
+}
+
+function runTransformPipeline(
+  file: FileInfo,
+  api: API,
+  options: TransformOptions,
+): TransformResult {
+  const ctx = new TransformContext(file, api, options);
   const pipeline: TransformStep[] = [
     preflight,
     applyPolicyGates,
@@ -198,7 +231,183 @@ export function transformWithWarnings(
   return finalize(ctx);
 }
 
-// --- Non-exported helpers ---
+type AstLike = {
+  type?: string;
+  name?: string;
+  value?: unknown;
+  source?: AstLike;
+  specifiers?: AstLike[];
+  local?: AstLike;
+  imported?: AstLike;
+  init?: AstLike | null;
+  id?: AstLike | null;
+  tag?: AstLike;
+  callee?: AstLike;
+  arguments?: AstLike[];
+  object?: AstLike;
+  expression?: AstLike;
+  left?: AstLike;
+};
+
+function hasImportedRootStyledStaticAssignment(file: FileInfo, api: API): boolean {
+  const j = api.jscodeshift;
+  const root = j(file.source);
+  const styledLocalNames = collectStyledImportLocalNames(root, j);
+  if (styledLocalNames.size === 0) {
+    return false;
+  }
+
+  const importedLocalNames = collectImportedLocalNames(root, j);
+  if (importedLocalNames.size === 0) {
+    return false;
+  }
+
+  const importedRootStyledDecls = collectImportedRootStyledDeclNames({
+    root,
+    j,
+    styledLocalNames,
+    importedLocalNames,
+  });
+  if (importedRootStyledDecls.size === 0) {
+    return false;
+  }
+
+  let hasAssignment = false;
+  root.find(j.AssignmentExpression).forEach((path) => {
+    if (hasAssignment) {
+      return;
+    }
+    const left = unwrapAstExpression(path.node.left as AstLike);
+    if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+      return;
+    }
+    const object = unwrapAstExpression(left.object);
+    if (object.type === "Identifier" && object.name && importedRootStyledDecls.has(object.name)) {
+      hasAssignment = true;
+    }
+  });
+
+  return hasAssignment;
+}
+
+function collectStyledImportLocalNames(
+  root: ReturnType<API["jscodeshift"]>,
+  j: API["jscodeshift"],
+): Set<string> {
+  const names = new Set<string>();
+  root.find(j.ImportDeclaration).forEach((path) => {
+    const node = path.node as AstLike;
+    if (node.source?.value !== "styled-components") {
+      return;
+    }
+    for (const specifier of node.specifiers ?? []) {
+      if (specifier.type === "ImportDefaultSpecifier" && specifier.local?.name) {
+        names.add(specifier.local.name);
+        continue;
+      }
+      if (
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported?.name === "styled" &&
+        specifier.local?.name
+      ) {
+        names.add(specifier.local.name);
+      }
+    }
+  });
+  return names;
+}
+
+function collectImportedLocalNames(
+  root: ReturnType<API["jscodeshift"]>,
+  j: API["jscodeshift"],
+): Set<string> {
+  const names = new Set<string>();
+  root.find(j.ImportDeclaration).forEach((path) => {
+    const node = path.node as AstLike;
+    if (node.source?.value === "styled-components") {
+      return;
+    }
+    for (const specifier of node.specifiers ?? []) {
+      if (specifier.local?.name) {
+        names.add(specifier.local.name);
+      }
+    }
+  });
+  return names;
+}
+
+function collectImportedRootStyledDeclNames(args: {
+  root: ReturnType<API["jscodeshift"]>;
+  j: API["jscodeshift"];
+  styledLocalNames: Set<string>;
+  importedLocalNames: Set<string>;
+}): Set<string> {
+  const { root, j, styledLocalNames, importedLocalNames } = args;
+  const names = new Set<string>();
+  root.find(j.VariableDeclarator).forEach((path) => {
+    const node = path.node as AstLike;
+    if (node.id?.type !== "Identifier" || !node.id.name || !node.init) {
+      return;
+    }
+    const styledArg = findStyledCallArgument(node.init, styledLocalNames);
+    const rootName = styledArg ? rootIdentifierName(styledArg) : undefined;
+    if (rootName && importedLocalNames.has(rootName)) {
+      names.add(node.id.name);
+    }
+  });
+  return names;
+}
+
+function findStyledCallArgument(node: AstLike, styledLocalNames: Set<string>): AstLike | undefined {
+  const current = unwrapAstExpression(node);
+  if (current.type === "TaggedTemplateExpression" && current.tag) {
+    return findStyledCallArgument(current.tag, styledLocalNames);
+  }
+  if (current.type === "CallExpression") {
+    const callee = current.callee ? unwrapAstExpression(current.callee) : undefined;
+    if (callee?.type === "Identifier" && callee.name && styledLocalNames.has(callee.name)) {
+      return current.arguments?.[0];
+    }
+    if (callee) {
+      return findStyledCallArgument(callee, styledLocalNames);
+    }
+  }
+  if (
+    (current.type === "MemberExpression" || current.type === "OptionalMemberExpression") &&
+    current.object
+  ) {
+    return findStyledCallArgument(current.object, styledLocalNames);
+  }
+  return undefined;
+}
+
+function rootIdentifierName(node: AstLike): string | undefined {
+  const current = unwrapAstExpression(node);
+  if (current.type === "Identifier") {
+    return current.name;
+  }
+  if (
+    (current.type === "MemberExpression" || current.type === "OptionalMemberExpression") &&
+    current.object
+  ) {
+    return rootIdentifierName(current.object);
+  }
+  return undefined;
+}
+
+function unwrapAstExpression(node: AstLike | undefined): AstLike {
+  let current = node;
+  while (
+    current?.type === "TSAsExpression" ||
+    current?.type === "TSInstantiationExpression" ||
+    current?.type === "TSNonNullExpression" ||
+    current?.type === "TypeCastExpression" ||
+    current?.type === "ParenthesizedExpression"
+  ) {
+    current = current.expression;
+  }
+  return current ?? {};
+}
 
 /**
  * Shape of the global prepass result attached to jscodeshift options by runTransform.

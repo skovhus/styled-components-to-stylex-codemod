@@ -384,7 +384,7 @@ await runTransform({
 
 ### Planning manual conversions
 
-`analyzeMigrationPlan` runs the codemod in analysis-only mode (it never writes files) and returns the bottom-up ordered list of files you must convert by hand — the genuine blockers the codemod can't convert — each with its consumer count, the exports to convert, how many files it unblocks, and the bail reasons. `formatMigrationPlan` renders it as a report (high-impact files first).
+`analyzeMigrationPlan` runs the codemod in analysis-only mode (it never writes files) and returns the bottom-up ordered list of files you must convert by hand — the genuine blockers the codemod can't convert — each with its consumer count, the exports to convert, direct auto-migration payoff, secondary blocker-chain context, and the bail reasons. `formatMigrationPlan` renders it as a report with direct unlocks emphasized first so raw chain involvement is not mistaken for files unlocked by one blocker alone.
 
 ```ts
 import { analyzeMigrationPlan, formatMigrationPlan } from "styled-components-to-stylex-codemod";

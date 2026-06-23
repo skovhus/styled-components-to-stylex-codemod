@@ -1168,6 +1168,76 @@ export const App = () => (
     expect(result.code).not.toContain("customText:");
   });
 
+  it("prefers full conversion in partial migration when an imported member root is convertible", () => {
+    const source = `
+import styled from "styled-components";
+import { motion } from "./lib/framer-motion";
+
+const Controls = styled(motion.div)\`
+  flex: none;
+  border-left: 1px solid red;
+  border-bottom-right-radius: 12px;
+\`;
+
+export const App = () => (
+  <Controls animate={{ width: "50%" }}>
+    Panel
+  </Controls>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-convertibleImportedMemberRoot.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(PARTIAL_MIGRATION_INCOMPLETE_WARNING);
+    expect(result.code).toContain("<motion.div");
+    expect(result.code).toContain("styles.controls");
+    expect(result.code).not.toContain("styled-components");
+  });
+
+  it("falls back to partial migration when a typed imported root has static assignments", () => {
+    const source = `
+import styled from "styled-components";
+import { Text } from "./lib/text";
+
+type TitleProps = {
+  variant?: "small" | "large";
+};
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const Title = styled(Text)<TitleProps>\`
+  color: red;
+\`;
+
+Title.defaultProps = {
+  variant: "small",
+};
+
+export const App = () => (
+  <Notice>
+    <Title>Panel</Title>
+  </Notice>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-importedRootStatics.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("<div sx={styles.notice}>");
+    expect(result.code).toMatch(/const\s+Title\s*=\s*styled\(Text\)<TitleProps>`/);
+    expect(result.code).toContain("Title.defaultProps = {");
+    expect(result.code).not.toContain("title:");
+  });
+
   it("does not emit inline keyframes from skipped imported roots in partial migration", () => {
     const source = `
 import styled from "styled-components";
@@ -1184,6 +1254,10 @@ const CustomPanel = styled(ImportedPanel)\`
   }
   animation: shimmer 1s linear infinite;
 \`;
+
+CustomPanel.defaultProps = {
+  theme: { mode: "dark" },
+};
 
 export const App = () => (
   <>
@@ -4488,6 +4562,10 @@ const Title = styled(Text)\`
   color: #1d4ed8;
 \`;
 
+Title.defaultProps = {
+  theme: { mode: "dark" },
+};
+
 export const App = () => (
   <Notice>
     <Title>Imported root with helper</Title>
@@ -4558,6 +4636,10 @@ const Title = styled(Text)\`
   color: #1d4ed8;
 \`;
 
+Title.defaultProps = {
+  theme: { mode: "dark" },
+};
+
 export const App = () => (
   <Notice>
     <Title>Imported root with shared helper</Title>
@@ -4598,6 +4680,10 @@ const Title = styled(Text)\`
   color: #1d4ed8;
 \`;
 
+Title.defaultProps = {
+  theme: { mode: "dark" },
+};
+
 export const App = () => <Title>Imported root with object-member helper</Title>;
 `;
     const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
@@ -4631,6 +4717,10 @@ const Title = styled(Text)\`
   \${mixins.root}
   color: #1d4ed8;
 \`;
+
+Title.defaultProps = {
+  theme: { mode: "dark" },
+};
 
 export const App = () => <Title>Imported root with object-member helper</Title>;
 `;

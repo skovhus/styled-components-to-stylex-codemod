@@ -263,7 +263,10 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
   lines.push(`${manualConversionFiles.length} of ${totalFiles} file(s) need manual conversion.`);
   if (unlocksFileCount > 0) {
     lines.push(
-      `Focus on the ${priority.length} file(s) below — converting them unblocks ${unlocksFileCount} file(s) for automatic migration.`,
+      `Focus on the ${priority.length} file(s) below. Direct payoff: converting all listed blockers lets ${unlocksFileCount} file(s) auto-migrate.`,
+    );
+    lines.push(
+      `Per-file "directly unlocks" counts are sole-blocker payoffs; chain context is secondary and may need other blockers or manual fixes too.`,
     );
   }
   lines.push("");
@@ -446,11 +449,15 @@ function appendFileEntry(
 ): void {
   lines.push(`${position}. ${file.filePath}`);
   const impact: string[] = [];
-  if (file.soleBlockerFileCount > 0) {
-    impact.push(`sole blocker for ${file.soleBlockerFileCount} file(s)`);
-  }
   if (file.blockedFileCount > 0) {
-    impact.push(`in blocker chain for ${file.blockedFileCount} file(s)`);
+    impact.push(`directly unlocks ${file.soleBlockerFileCount} file(s)`);
+  }
+  const chainOnlyFileCount = file.blockedFileCount - file.soleBlockerFileCount;
+  if (chainOnlyFileCount > 0) {
+    const prefix = file.soleBlockerFileCount > 0 ? "also " : "";
+    impact.push(
+      `chain context: ${chainOnlyFileCount} file(s) ${prefix}bail through this file but are not unlocked by it alone`,
+    );
   }
   if (file.consumerCount > 0) {
     impact.push(`imported by ${file.consumerCount} file(s)`);
