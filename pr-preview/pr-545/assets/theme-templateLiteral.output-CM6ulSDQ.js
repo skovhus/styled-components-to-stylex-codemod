@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{display:`flex`,gap:12,padding:16},children:(0,t.jsx)(`div`,{className:`x1tamke2 x56w1b4 x1o403v5`,children:`Template literal with theme`})});export{n as App};
