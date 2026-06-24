@@ -705,17 +705,10 @@ function tryResolveArrowFnCurriedHelperCallWithPropFallback(
     return null;
   }
 
-  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree([innerArgs[0]], {
-    kind: "simple",
-    paramName,
-  });
-  if (!hasUsableProps) {
-    return null;
-  }
-  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
-    return null;
-  }
-  return { type: "emitStyleFunctionFromPropsObject", props };
+  return emitStyleFunctionFromCollectedProps(
+    node,
+    collectPropsFromExprTree([innerArgs[0]], { kind: "simple", paramName }),
+  );
 }
 
 function tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(
@@ -1044,6 +1037,24 @@ function collectPropsFromExprTree(
 }
 
 /**
+ * Builds an `emitStyleFunctionFromPropsObject` result from collected prop usage,
+ * bailing when no usable props were found or when non-transient props would be
+ * handled by the `shouldForwardProp` fallback in lower-rules.ts.
+ */
+function emitStyleFunctionFromCollectedProps(
+  node: DynamicNode,
+  collected: ReturnType<typeof collectPropsFromExprTree>,
+): HandlerResult | null {
+  if (!collected.hasUsableProps) {
+    return null;
+  }
+  if (collected.hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
+    return null;
+  }
+  return { type: "emitStyleFunctionFromPropsObject", props: collected.props };
+}
+
+/**
  * Checks whether the param name is used as a bare identifier anywhere in the
  * expression tree (i.e., not as the `object` of a non-computed MemberExpression
  * like `props.X`). This detects patterns like `helper(props)` or computed access
@@ -1103,20 +1114,7 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
   if (expressions.length === 0) {
     return null;
   }
-  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
-    expressions,
-    bindings,
-  );
-  if (!hasUsableProps) {
-    return null;
-  }
-  // For non-transient props: if shouldForwardProp is configured, let the fallback in
-  // lower-rules.ts handle it (creates style functions that take props as argument).
-  // Otherwise, emit style functions here.
-  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
-    return null;
-  }
-  return { type: "emitStyleFunctionFromPropsObject", props };
+  return emitStyleFunctionFromCollectedProps(node, collectPropsFromExprTree(expressions, bindings));
 }
 
 /**
@@ -1173,20 +1171,7 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
     }
   }
 
-  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
-    [body],
-    bindings,
-  );
-  if (!hasUsableProps) {
-    return null;
-  }
-  // For non-transient props: if shouldForwardProp is configured, let the fallback in
-  // lower-rules.ts handle it (creates style functions that take props as argument).
-  // Otherwise, emit style functions here.
-  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
-    return null;
-  }
-  return { type: "emitStyleFunctionFromPropsObject", props };
+  return emitStyleFunctionFromCollectedProps(node, collectPropsFromExprTree([body], bindings));
 }
 
 /**
@@ -1296,17 +1281,7 @@ function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | nul
   if (hasBareParamUsage(body, paramName)) {
     return null;
   }
-  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
-    [body],
-    bindings,
-  );
-  if (!hasUsableProps) {
-    return null;
-  }
-  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
-    return null;
-  }
-  return { type: "emitStyleFunctionFromPropsObject", props };
+  return emitStyleFunctionFromCollectedProps(node, collectPropsFromExprTree([body], bindings));
 }
 
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {

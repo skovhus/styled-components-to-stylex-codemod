@@ -5,6 +5,7 @@
  * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { buildOmittedStyleProps } from "./props-type-text.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import { withLeadingComments } from "./comments.js";
@@ -73,16 +74,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const typeText = (() => {
         const base = "React.ComponentPropsWithRef<C>";
         // Omit className/style only when we don't want to support them.
-        const omitted: string[] = [];
-        if (!allowClassNameProp) {
-          omitted.push('"className"');
-        }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        if (!allowSxProp) {
-          omitted.push('"sx"');
-        }
+        const omitted = buildOmittedStyleProps({ allowClassNameProp, allowStyleProp, allowSxProp });
         // When there's a custom props type, omit its keys from element props
         // so custom props take precedence over native element props
         if (explicit) {

@@ -4,6 +4,7 @@
  */
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
+import type { WarningType } from "../logger.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
@@ -109,6 +110,23 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       ? getComposedDefaultValue(propName)
       : (ctx.getWrappedComponentBaseDefaultValue(propName) ?? null);
 
+  // Bails the current declaration and records an unsupported-selector warning at the
+  // selector's source location. Centralizes the markBail + warnings.push idiom used
+  // throughout this file. `warnDecl` defaults to the declaration under processing but
+  // can be overridden (e.g. a resolved element selector's parent component).
+  const bailWithSelectorWarning = (
+    type: WarningType,
+    rule: (typeof decl.rules)[number],
+    warnDecl: StyledDecl = decl,
+  ): void => {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type,
+      loc: computeSelectorWarningLoc(warnDecl.loc, warnDecl.rawCss, rule.selector),
+    });
+  };
+
   /**
    * Attempts to resolve an element selector (e.g., `& svg`, `& > button`) to a
    * styled component override. Returns "break" to bail, "continue" to skip to next
@@ -121,12 +139,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
   ): "break" | "continue" | null => {
     const elementResult = resolveElementSelectorTarget(selectorStr, parentDecl, root, j);
     if (typeof elementResult === "string") {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: ELEMENT_BAIL_WARNING_MAP[elementResult],
-        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(ELEMENT_BAIL_WARNING_MAP[elementResult], rule, parentDecl);
       return "break";
     }
     if (!elementResult) {
@@ -135,22 +148,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const { tagName, ancestorPseudo, childPseudo, directOnly } = elementResult;
 
     if (rule.atRuleStack.length > 0) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: descendant/child/sibling selector",
-        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(
+        "Unsupported selector: descendant/child/sibling selector",
+        rule,
+        parentDecl,
+      );
       return "break";
     }
 
     if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: ELEMENT_BAIL_WARNING_MAP["bail-dynamic"],
-        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(ELEMENT_BAIL_WARNING_MAP["bail-dynamic"], rule, parentDecl);
       return "break";
     }
     if (
@@ -161,12 +168,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         childPseudo,
       )
     ) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
-        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"], rule, parentDecl);
       return "break";
     }
 
@@ -185,12 +187,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       { bailOnUnresolved: true },
     );
     if (result === "bail") {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: unresolved interpolation in element selector",
-        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(
+        "Unsupported selector: unresolved interpolation in element selector",
+        rule,
+        parentDecl,
+      );
       return "break";
     }
     const pseudoBuckets = new Map<string | null, Record<string, unknown>>();
@@ -241,12 +242,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         state,
       );
       if (selectorWithStaticAttrs === null) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: unresolved interpolation in attribute selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Unsupported selector: unresolved interpolation in attribute selector",
+          rule,
+        );
         break;
       }
       rule.selector = selectorWithStaticAttrs;
@@ -269,21 +268,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Only double-ampersand is collapsed; triple-or-more (&&&) bails.
       const specificityResult = normalizeSpecificityHacks(rule.selector);
       if (specificityResult.hasHigherTier) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          rule,
+        );
         break;
       }
       if (specificityResult.wasStripped && decl.base.kind === "component") {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          rule,
+        );
         break;
       }
       const selectorForAnalysis = specificityResult.normalized;
@@ -308,12 +303,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
         );
         if (!pseudoSlotMatch) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: interpolated pseudo selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: interpolated pseudo selector", rule);
           break;
         }
 
@@ -329,12 +319,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         );
 
         if (pseudoResolved === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: interpolated pseudo selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: interpolated pseudo selector", rule);
           break;
         }
 
@@ -344,12 +329,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (hasEnabledCompoundPseudoSelector(s)) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: compound pseudo selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning("Unsupported selector: compound pseudo selector", rule);
         break;
       }
 
@@ -387,12 +367,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // normalizeInterpolatedSelector would collapse this to "&:not(:disabled)" which
       // has completely different semantics. We must bail on these patterns.
       if (/&\s+:/.test(rule.selector)) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: descendant pseudo selector (space before pseudo)",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Unsupported selector: descendant pseudo selector (space before pseudo)",
+          rule,
+        );
         break;
       }
 
@@ -405,23 +383,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           parsed.kind !== "pseudoElements" &&
           parsed.kind !== "ancestorAttribute"
         ) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning(
+            "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements",
+            rule,
+          );
           break;
         }
       } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
         // Class selector on same element like &.active
         // Note: Specificity hacks (&&, &&&) bail early in transform.ts
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: class selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning("Unsupported selector: class selector", rule);
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
         // General-sibling selectors (`~`) can map to siblingBefore(). Adjacent sibling
@@ -441,14 +412,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           }
           continue;
         }
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: /\+/.test(s)
+        bailWithSelectorWarning(
+          /\+/.test(s)
             ? "Unsupported selector: adjacent sibling combinator"
             : "Unsupported selector: sibling combinator",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+          rule,
+        );
         break;
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
         // Before bailing on descendant selectors, try to resolve element selectors
@@ -463,12 +432,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Fall through to existing bail for descendant selectors
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: descendant/child/sibling selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning("Unsupported selector: descendant/child/sibling selector", rule);
         break;
       }
     }
@@ -531,12 +495,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           const hasDifferentComponents = allLocal.some((name) => name !== otherLocal);
           if (hasDifferentComponents) {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: grouped reverse selector references different components",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
+            bailWithSelectorWarning(
+              "Unsupported selector: grouped reverse selector references different components",
+              rule,
+            );
             break;
           }
         }
@@ -546,12 +508,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           ? state.crossFileSelectorsByLocal.get(otherLocal)
           : undefined;
         if (!parentDecl && !crossFileParent) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unknown component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: unknown component selector", rule);
           break;
         }
 
@@ -562,12 +519,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           ? [":is(*)"]
           : extractReverseSelectorPseudos(rule.selector);
         if (ancestorPseudos.length === 0) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unknown component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: unknown component selector", rule);
           break;
         }
 
@@ -659,12 +611,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             markerVarName: reverseMarkerVarName,
           });
           if (!dynamicHandled) {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: unresolved interpolation in reverse component selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
+            bailWithSelectorWarning(
+              "Unsupported selector: unresolved interpolation in reverse component selector",
+              rule,
+            );
             break;
           }
           continue;
@@ -693,12 +643,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         !/[+~]\s*&/.test(selTrim2) &&
         /__SC_EXPR_\d+__:[a-z-]+(?:\([^)]*\))?/i.test(selTrim2)
       ) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: component selector with child pseudo",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning("Unsupported selector: component selector with child pseudo", rule);
         break;
       }
       const isComponentSelectorPattern =
@@ -719,12 +664,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             ? extractParentPseudosForNestedComponentBlock(decl.rawCss, slotId)
             : null);
         if (!childDecl && !crossFileUsage) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unknown component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: unknown component selector", rule);
           break;
         }
 
@@ -743,12 +683,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           !decl.isCssHelper &&
           !hasPatchableDescendantJsx(root, j, decl.localName, jsxLocalName)
         ) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: component selector target has no patchable JSX usage under selector parent",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning(
+            "Unsupported selector: component selector target has no patchable JSX usage under selector parent",
+            rule,
+          );
           break;
         }
 
@@ -805,14 +743,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           ) {
             continue;
           }
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: crossFileUsage
+          bailWithSelectorWarning(
+            crossFileUsage
               ? "Unsupported selector: unresolved interpolation in cross-file component selector"
               : "Unsupported selector: unresolved interpolation in descendant component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+            rule,
+          );
           break;
         }
 
@@ -841,12 +777,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const combinator = crossComponentSiblingMatch[2] as "+" | "~";
 
         if (combinator === "+") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: adjacent sibling combinator",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: adjacent sibling combinator", rule);
           break;
         }
 
@@ -856,12 +787,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           // the marker infrastructure for imported components requires relation-override
           // metadata that rewrite-jsx uses to patch JSX by element name. Without this,
           // the marker would never be injected into the imported component's JSX.
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unknown component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning("Unsupported selector: unknown component selector", rule);
           break;
         }
 
@@ -885,12 +811,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (sibResult === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unresolved interpolation in cross-component sibling selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning(
+            "Unsupported selector: unresolved interpolation in cross-component sibling selector",
+            rule,
+          );
           break;
         }
 
@@ -922,12 +846,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (otherLocal && !isCssHelperPlaceholder && isHasPattern) {
         const referencedDecl = declByLocalName.get(otherLocal);
         if (!referencedDecl) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: cross-file :has() component selector not yet supported",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning(
+            "Unsupported selector: cross-file :has() component selector not yet supported",
+            rule,
+          );
           break;
         }
 
@@ -951,12 +873,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (hasResult === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unresolved interpolation in :has() component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
+          bailWithSelectorWarning(
+            "Unsupported selector: unresolved interpolation in :has() component selector",
+            rule,
+          );
           break;
         }
 
@@ -1029,12 +949,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     let media = findSupportedAtRule(rule.atRuleStack);
     if (hasUnsupportedAtRule(rule.atRuleStack)) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(
+        "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
+        rule,
+      );
       break;
     }
 
@@ -1073,12 +991,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         },
       );
       if (resolved === null) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+          rule,
+        );
         break;
       }
       if (resolved.kind === "static") {
@@ -1110,12 +1026,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: descendant/child/sibling selector",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning("Unsupported selector: descendant/child/sibling selector", rule);
       break;
     }
 
@@ -1155,12 +1066,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     const pseudoElementsToValidate = pseudoElement ? [pseudoElement] : pseudoElementsList;
     if (pseudoElementsToValidate?.some((pe) => !isStylexCompilerPseudoElement(pe))) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: unsupported pseudo-element",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning("Unsupported selector: unsupported pseudo-element", rule);
       break;
     }
 
@@ -1186,12 +1092,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // support attr wrappers (e.g., [readonly] on <textarea>). Without this check,
     // the declarations would fall through unconditionally into the base style object.
     if (attrSel && !attrWrapperKind) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: attribute selector on unsupported element",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
+      bailWithSelectorWarning(
+        "Unsupported selector: attribute selector on unsupported element",
+        rule,
+      );
       break;
     }
 
@@ -1519,12 +1423,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // cannot be nested inside an ancestor computed key — bail to avoid silently dropping
       // the breakpoint condition.
       if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length && resolvedSelectorMedia) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: computed media query inside ancestor attribute selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailWithSelectorWarning(
+          "Unsupported selector: computed media query inside ancestor attribute selector",
+          rule,
+        );
         return;
       }
       if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length) {

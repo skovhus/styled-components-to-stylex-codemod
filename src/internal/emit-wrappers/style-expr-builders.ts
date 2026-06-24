@@ -428,7 +428,7 @@ export function buildStaticClassNameExpr(
   return j.templateLiteral(quasis, expressions);
 }
 
-function buildClassNameJoinExpr(j: JSCodeshift, parts: ExpressionKind[]): ExpressionKind {
+export function buildClassNameJoinExpr(j: JSCodeshift, parts: ExpressionKind[]): ExpressionKind {
   return j.callExpression(
     j.memberExpression(
       j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [

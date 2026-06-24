@@ -6,6 +6,7 @@
  */
 import type { JSCodeshift, Property, RestElement } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { buildOmittedStyleProps } from "./props-type-text.js";
 import type { ExpressionKind } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { withLeadingComments } from "./comments.js";
@@ -212,14 +213,11 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       explicit ??
         (() => {
           const base = "React.InputHTMLAttributes<HTMLInputElement>";
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          omitted.push('"sx"');
+          const omitted = buildOmittedStyleProps({
+            allowClassNameProp,
+            allowStyleProp,
+            allowSxProp: false,
+          });
           return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         })(),
       includesForwardedAs,
@@ -300,14 +298,11 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
         emitter.withChildren(
           (() => {
             const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-            const omitted: string[] = [];
-            if (!allowClassNameProp) {
-              omitted.push('"className"');
-            }
-            if (!allowStyleProp) {
-              omitted.push('"style"');
-            }
-            omitted.push('"sx"');
+            const omitted = buildOmittedStyleProps({
+              allowClassNameProp,
+              allowStyleProp,
+              allowSxProp: false,
+            });
             return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
           })(),
         ),

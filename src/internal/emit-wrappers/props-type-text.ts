@@ -19,6 +19,28 @@ export function buildOmitUnion(parts: string[]): string {
   return [...new Set(parts)].join(" | ");
 }
 
+/**
+ * Builds the list of quoted prop keys (`"className"`, `"style"`, `"sx"`) that must be
+ * omitted from a base element-props type because the wrapper does not allow them.
+ */
+export function buildOmittedStyleProps(args: {
+  allowClassNameProp?: boolean;
+  allowStyleProp?: boolean;
+  allowSxProp?: boolean;
+}): string[] {
+  const omitted: string[] = [];
+  if (!args.allowClassNameProp) {
+    omitted.push('"className"');
+  }
+  if (!args.allowStyleProp) {
+    omitted.push('"style"');
+  }
+  if (!args.allowSxProp) {
+    omitted.push('"sx"');
+  }
+  return omitted;
+}
+
 export function transformExplicitPropsTypeText(args: {
   canMutateExplicitType: boolean;
   explicitAttrsOmitUnion: string | null;

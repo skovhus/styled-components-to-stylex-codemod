@@ -35,6 +35,7 @@ import {
   handleDualBranchCompoundVariantsResolvedValue,
   handleSplitMultiPropVariantsResolvedValue,
   handleSplitVariantsResolvedValue,
+  type SplitVariantsContext,
 } from "./interpolated-variant-resolvers.js";
 import {} from "./inline-style-props.js";
 import { cssValueIsImportant } from "./important-values.js";
@@ -713,78 +714,38 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
     return true;
   }
 
-  if (
-    handleSplitVariantsResolvedValue({
-      j,
-      decl,
-      d,
-      res,
-      styleObj,
-      variantBuckets,
-      variantStyleKeys,
-      pseudos,
-      media,
-      resolvedSelectorMedia,
-      parseExpr,
-      resolverImports,
-      warnings,
-      setBail: () => {
-        flags.bail = true;
-      },
-      bailUnsupported: bailUnsupportedLocal,
-    })
-  ) {
+  const splitVariantsContext: SplitVariantsContext = {
+    j,
+    decl,
+    d,
+    res,
+    styleObj,
+    variantBuckets,
+    variantStyleKeys,
+    pseudos,
+    media,
+    resolvedSelectorMedia,
+    parseExpr,
+    resolverImports,
+    warnings,
+    setBail: () => {
+      flags.bail = true;
+    },
+    bailUnsupported: bailUnsupportedLocal,
+  };
+
+  if (handleSplitVariantsResolvedValue(splitVariantsContext)) {
     if (res?.type === "splitVariantsResolvedValue") {
       markThemeHookForVariants(decl, res.variants);
     }
     return true;
   }
 
-  if (
-    handleSplitMultiPropVariantsResolvedValue({
-      j,
-      decl,
-      d,
-      res,
-      styleObj,
-      variantBuckets,
-      variantStyleKeys,
-      pseudos,
-      media,
-      resolvedSelectorMedia,
-      parseExpr,
-      resolverImports,
-      warnings,
-      setBail: () => {
-        flags.bail = true;
-      },
-      bailUnsupported: bailUnsupportedLocal,
-    })
-  ) {
+  if (handleSplitMultiPropVariantsResolvedValue(splitVariantsContext)) {
     return true;
   }
 
-  if (
-    handleDualBranchCompoundVariantsResolvedValue({
-      j,
-      decl,
-      d,
-      res,
-      styleObj,
-      variantBuckets,
-      variantStyleKeys,
-      pseudos,
-      media,
-      resolvedSelectorMedia,
-      parseExpr,
-      resolverImports,
-      warnings,
-      setBail: () => {
-        flags.bail = true;
-      },
-      bailUnsupported: bailUnsupportedLocal,
-    })
-  ) {
+  if (handleDualBranchCompoundVariantsResolvedValue(splitVariantsContext)) {
     return true;
   }
 

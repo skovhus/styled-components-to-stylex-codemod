@@ -271,16 +271,16 @@ export function subtractLaterStaticOverrides(args: {
         }
         // A background shorthand resets both image and color layers, even when
         // cssDeclarationToStylexDeclarations() maps the authored value to one longhand.
-        if (currentDecl.important && !laterDecl.important) {
-          if (ignoreUnsafeOverlaps) {
-            continue;
-          }
-          return false;
+        const verdict = overlapResetVerdict(
+          currentDecl,
+          laterDecl,
+          context.unconditional,
+          ignoreUnsafeOverlaps,
+        );
+        if (verdict === "skip") {
+          continue;
         }
-        if (!context.unconditional || laterDecl.value.kind !== "static") {
-          if (ignoreUnsafeOverlaps) {
-            continue;
-          }
+        if (verdict === "bail") {
           return false;
         }
         for (const branch of branchStyles) {
@@ -296,20 +296,16 @@ export function subtractLaterStaticOverrides(args: {
         if (!overlapped.length) {
           continue;
         }
-        // An earlier `!important` declaration wins over a later non-important one
-        // regardless of source order. Subtracting it would drop the conditional
-        // branch and let the later declaration clobber the base, inverting the
-        // cascade — bail instead so the important branches are preserved.
-        if (currentDecl.important && !laterDecl.important) {
-          if (ignoreUnsafeOverlaps) {
-            continue;
-          }
-          return false;
+        const verdict = overlapResetVerdict(
+          currentDecl,
+          laterDecl,
+          context.unconditional,
+          ignoreUnsafeOverlaps,
+        );
+        if (verdict === "skip") {
+          continue;
         }
-        if (!context.unconditional || laterDecl.value.kind !== "static") {
-          if (ignoreUnsafeOverlaps) {
-            continue;
-          }
+        if (verdict === "bail") {
           return false;
         }
         for (const branch of branchStyles) {
@@ -325,6 +321,31 @@ export function subtractLaterStaticOverrides(args: {
 
 function sameAtRuleStack(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+
+/**
+ * Decides how a later overlapping declaration affects the current branch:
+ * "skip" the override, "bail" out of the whole subtraction, or "proceed" with removal.
+ *
+ * An earlier `!important` declaration wins over a later non-important one
+ * regardless of source order. Subtracting it would drop the conditional branch
+ * and let the later declaration clobber the base, inverting the cascade — bail
+ * instead so the important branches are preserved. A conditional context or a
+ * dynamic later value likewise cannot be subtracted safely.
+ */
+function overlapResetVerdict(
+  currentDecl: CssDeclarationIR,
+  laterDecl: CssDeclarationIR,
+  unconditional: boolean,
+  ignoreUnsafeOverlaps: boolean,
+): "skip" | "bail" | "proceed" {
+  if (currentDecl.important && !laterDecl.important) {
+    return ignoreUnsafeOverlaps ? "skip" : "bail";
+  }
+  if (!unconditional || laterDecl.value.kind !== "static") {
+    return ignoreUnsafeOverlaps ? "skip" : "bail";
+  }
+  return "proceed";
 }
 
 /** True for the `border` / `border-<side>` shorthands (not the longhands). */

@@ -5,6 +5,7 @@
  * AST for the remaining props.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { buildOmittedStyleProps } from "./props-type-text.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { isValidIdentifierName } from "../utilities/string-utils.js";
@@ -250,16 +251,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           );
         }
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
-        if (!allowClassNameProp) {
-          omitted.push('"className"');
-        }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        if (!allowSxProp) {
-          omitted.push('"sx"');
-        }
+        const omitted = buildOmittedStyleProps({ allowClassNameProp, allowStyleProp, allowSxProp });
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         return emitter.joinIntersection(extrasTypeText, consumedPropsTypeText, baseWithOmit);
       }
@@ -327,16 +319,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           return slimBaseTypeText;
         }
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
-        if (!allowClassNameProp) {
-          omitted.push('"className"');
-        }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        if (!allowSxProp) {
-          omitted.push('"sx"');
-        }
+        const omitted = buildOmittedStyleProps({ allowClassNameProp, allowStyleProp, allowSxProp });
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
       if (explicitIsExistingTypeRef) {
