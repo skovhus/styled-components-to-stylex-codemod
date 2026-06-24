@@ -24,7 +24,7 @@ import { capitalize } from "../utilities/string-utils.js";
 import { appendImportantToStyleValue } from "./important-values.js";
 import { registerImports } from "./utils.js";
 
-type SplitVariantsContext = Pick<
+export type SplitVariantsContext = Pick<
   LowerRulesState,
   "j" | "warnings" | "parseExpr" | "resolverImports"
 > & {

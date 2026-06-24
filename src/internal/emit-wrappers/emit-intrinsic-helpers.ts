@@ -6,6 +6,7 @@
  * wrappers and their props types.
  */
 import type { ASTNode, Collection, Identifier, JSCodeshift, Property } from "jscodeshift";
+import { buildOmittedStyleProps } from "./props-type-text.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { appendCompoundVariantStyleArgs } from "./compound-variants.js";
@@ -310,16 +311,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     // React.ComponentPropsWithRef<C> & { customProps; as?: C }
     // Note: Custom props come AFTER base to ensure they override any conflicting types
     // Omit className/style when not allowed
-    const omitted: string[] = [];
-    if (!allowClassNameProp) {
-      omitted.push('"className"');
-    }
-    if (!allowStyleProp) {
-      omitted.push('"style"');
-    }
-    if (!allowSxProp) {
-      omitted.push('"sx"');
-    }
+    const omitted = buildOmittedStyleProps({ allowClassNameProp, allowStyleProp, allowSxProp });
     const base =
       omitted.length > 0
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`

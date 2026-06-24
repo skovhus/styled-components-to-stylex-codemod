@@ -5,6 +5,7 @@
  * but do not require specialized or polymorphic handling.
  */
 import type { JSCodeshift } from "jscodeshift";
+import { buildOmittedStyleProps } from "./props-type-text.js";
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { isValidIdentifierName } from "../utilities/string-utils.js";
@@ -644,16 +645,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
-        if (!allowClassNameProp) {
-          omitted.push('"className"');
-        }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        if (!allowSxProp) {
-          omitted.push('"sx"');
-        }
+        const omitted = buildOmittedStyleProps({ allowClassNameProp, allowStyleProp, allowSxProp });
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
 
@@ -1377,16 +1369,7 @@ function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
   ) {
     return args.typeText;
   }
-  const omitted: string[] = [];
-  if (!args.allowClassNameProp) {
-    omitted.push('"className"');
-  }
-  if (!args.allowStyleProp) {
-    omitted.push('"style"');
-  }
-  if (!args.allowSxProp) {
-    omitted.push('"sx"');
-  }
+  const omitted = buildOmittedStyleProps(args);
   return omitted.length > 0 ? `Omit<${args.typeText}, ${omitted.join(" | ")}>` : args.typeText;
 }
 

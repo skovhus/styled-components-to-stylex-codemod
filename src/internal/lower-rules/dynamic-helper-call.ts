@@ -879,6 +879,39 @@ function isUnsupportedCurriedHelperCall(
   );
 }
 
+// Resolve an imported helper call to its adapter `resolveCall` result, narrowed to the
+// `"expr"` variant. Shared by the curried/inner and direct helper-call resolvers.
+function resolveImportedHelperCall(
+  ctx: DynamicHelperCallContext,
+  callee: unknown,
+  argumentsNode: unknown[] | undefined,
+) {
+  const calleeInfo = extractRootAndPath(callee);
+  if (!calleeInfo) {
+    return false as const;
+  }
+
+  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
+  if (!imp) {
+    return false as const;
+  }
+
+  const result = ctx.resolveCall({
+    callSiteFilePath: ctx.filePath,
+    calleeImportedName: imp.importedName,
+    calleeSource: imp.source,
+    args: callArgsFromNode(argumentsNode),
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
+    ...(ctx.loc ? { loc: ctx.loc } : {}),
+    cssProperty: ctx.cssProperty,
+  });
+  if (!result || !("expr" in result)) {
+    return false as const;
+  }
+
+  return { calleeInfo, result };
+}
+
 function tryResolveDynamicHelperCall(
   callExpr: CallExpressionLike,
   ctx: DynamicHelperCallContext,
@@ -892,28 +925,11 @@ function tryResolveDynamicHelperCall(
   }
 
   const { innerCall, dynamicArg } = helperCall;
-  const calleeInfo = extractRootAndPath(innerCall.callee);
-  if (!calleeInfo) {
+  const resolved = resolveImportedHelperCall(ctx, innerCall.callee, innerCall.arguments);
+  if (!resolved) {
     return false;
   }
-
-  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
-  if (!imp) {
-    return false;
-  }
-
-  const result = ctx.resolveCall({
-    callSiteFilePath: ctx.filePath,
-    calleeImportedName: imp.importedName,
-    calleeSource: imp.source,
-    args: callArgsFromNode(innerCall.arguments),
-    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
-    ...(ctx.loc ? { loc: ctx.loc } : {}),
-    cssProperty: ctx.cssProperty,
-  });
-  if (!result || !("expr" in result)) {
-    return false;
-  }
+  const { calleeInfo, result } = resolved;
 
   const dynamicProp = unwrapParamMemberArg(
     ctx.j,
@@ -954,28 +970,11 @@ function tryResolveDirectHelperCall(
   callExpr: CallExpressionLike,
   ctx: DynamicHelperCallContext,
 ): DynamicHelperCallResult | false | null {
-  const calleeInfo = extractRootAndPath(callExpr.callee);
-  if (!calleeInfo) {
+  const resolved = resolveImportedHelperCall(ctx, callExpr.callee, callExpr.arguments);
+  if (!resolved) {
     return false;
   }
-
-  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
-  if (!imp) {
-    return false;
-  }
-
-  const result = ctx.resolveCall({
-    callSiteFilePath: ctx.filePath,
-    calleeImportedName: imp.importedName,
-    calleeSource: imp.source,
-    args: callArgsFromNode(callExpr.arguments),
-    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
-    ...(ctx.loc ? { loc: ctx.loc } : {}),
-    cssProperty: ctx.cssProperty,
-  });
-  if (!result || !("expr" in result)) {
-    return false;
-  }
+  const { calleeInfo, result } = resolved;
 
   const args = callExpr.arguments ?? [];
   if (args.length !== 1) {

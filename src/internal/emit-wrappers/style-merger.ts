@@ -7,6 +7,7 @@ import type { StyleMergerConfig } from "../../adapter.js";
 import type { InlineStyleProp } from "./types.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
+import { buildClassNameJoinExpr } from "./style-expr-builders.js";
 import { isUndefinedIdentifier } from "../utilities/jscodeshift-utils.js";
 
 /**
@@ -632,15 +633,7 @@ function emitVerbosePattern(args: {
       j.memberExpression(j.identifier(sxVarName), j.identifier("className")),
       ...(allowClassNameProp ? [classNameId] : []),
     ];
-    classNameAttr = j.callExpression(
-      j.memberExpression(
-        j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
-          j.identifier("Boolean"),
-        ]),
-        j.identifier("join"),
-      ),
-      [j.literal(" ")],
-    );
+    classNameAttr = buildClassNameJoinExpr(j, parts);
   }
 
   // Create style merging expression if needed

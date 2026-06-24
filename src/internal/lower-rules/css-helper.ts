@@ -578,6 +578,78 @@ export function createCssHelperResolver(args: {
         return mergeIntoPseudoContext(value, currentPseudoClass, existing);
       };
 
+      // Fills `targetStyle` with the StyleX declarations for a statically-resolved CSS
+      // value, including background shorthand expansion. Returns false when a border
+      // shorthand could not be expanded to all three longhands (caller must bail).
+      const populateResolvedStaticStyle = (
+        targetStyle: Record<string, unknown>,
+        d: (typeof rule.declarations)[number],
+        rawValue: string,
+      ): boolean => {
+        for (const mapped of cssDeclarationToStylexDeclarations({
+          ...d,
+          value: { kind: "static", value: rawValue },
+          valueRaw: rawValue,
+        })) {
+          setStyleObjectValue(
+            targetStyle,
+            mapped.prop,
+            mergeIntoContext(
+              cssValueToJs(mapped.value, d.important, mapped.prop),
+              mapped.prop,
+              target as any,
+            ),
+          );
+        }
+        const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
+        if (borderMatch) {
+          const direction = borderMatch[1]
+            ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
+            : "";
+          if (
+            !(`border${direction}Width` in targetStyle) ||
+            !(`border${direction}Style` in targetStyle) ||
+            !(`border${direction}Color` in targetStyle)
+          ) {
+            return false;
+          }
+        }
+        if (d.property?.trim() === "background") {
+          if ("backgroundImage" in targetStyle && !("backgroundColor" in targetStyle)) {
+            targetStyle.backgroundColor = mergeIntoContext(
+              cssValueToJs(
+                { kind: "static", value: "transparent" },
+                d.important,
+                "backgroundColor",
+              ),
+              "backgroundColor",
+              target as any,
+            );
+          }
+          if ("backgroundColor" in targetStyle && !("backgroundImage" in targetStyle)) {
+            const imageResetValue = [
+              "inherit",
+              "initial",
+              "unset",
+              "revert",
+              "revert-layer",
+            ].includes(rawValue.trim())
+              ? rawValue.trim()
+              : "none";
+            targetStyle.backgroundImage = mergeIntoContext(
+              cssValueToJs(
+                { kind: "static", value: imageResetValue },
+                d.important,
+                "backgroundImage",
+              ),
+              "backgroundImage",
+              target as any,
+            );
+          }
+        }
+        return true;
+      };
+
       // Snapshot existing keys so we only duplicate NEW properties set by this rule
       // (not stale state accumulated from earlier rules).
       const preRuleKeys =
@@ -798,66 +870,8 @@ export function createCssHelperResolver(args: {
             ) {
               return null;
             }
-            for (const mapped of cssDeclarationToStylexDeclarations({
-              ...d,
-              value: { kind: "static", value: rawValue },
-              valueRaw: rawValue,
-            })) {
-              setStyleObjectValue(
-                branchStyle,
-                mapped.prop,
-                mergeIntoContext(
-                  cssValueToJs(mapped.value, d.important, mapped.prop),
-                  mapped.prop,
-                  target as any,
-                ),
-              );
-            }
-            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
-            if (borderMatch) {
-              const direction = borderMatch[1]
-                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
-                : "";
-              if (
-                !(`border${direction}Width` in branchStyle) ||
-                !(`border${direction}Style` in branchStyle) ||
-                !(`border${direction}Color` in branchStyle)
-              ) {
-                return null;
-              }
-            }
-            if (d.property?.trim() === "background") {
-              if ("backgroundImage" in branchStyle && !("backgroundColor" in branchStyle)) {
-                branchStyle.backgroundColor = mergeIntoContext(
-                  cssValueToJs(
-                    { kind: "static", value: "transparent" },
-                    d.important,
-                    "backgroundColor",
-                  ),
-                  "backgroundColor",
-                  target as any,
-                );
-              }
-              if ("backgroundColor" in branchStyle && !("backgroundImage" in branchStyle)) {
-                const imageResetValue = [
-                  "inherit",
-                  "initial",
-                  "unset",
-                  "revert",
-                  "revert-layer",
-                ].includes(rawValue.trim())
-                  ? rawValue.trim()
-                  : "none";
-                branchStyle.backgroundImage = mergeIntoContext(
-                  cssValueToJs(
-                    { kind: "static", value: imageResetValue },
-                    d.important,
-                    "backgroundImage",
-                  ),
-                  "backgroundImage",
-                  target as any,
-                );
-              }
+            if (!populateResolvedStaticStyle(branchStyle, d, rawValue)) {
+              return null;
             }
             return branchStyle;
           }
@@ -1013,75 +1027,11 @@ export function createCssHelperResolver(args: {
               );
             }
             const resolvedStaticStyle: Record<string, unknown> = {};
-            for (const mapped of cssDeclarationToStylexDeclarations({
-              ...d,
-              value: { kind: "static", value: rawValue },
-              valueRaw: rawValue,
-            })) {
-              setStyleObjectValue(
-                resolvedStaticStyle,
-                mapped.prop,
-                mergeIntoContext(
-                  cssValueToJs(mapped.value, d.important, mapped.prop),
-                  mapped.prop,
-                  target as any,
-                ),
+            if (!populateResolvedStaticStyle(resolvedStaticStyle, d, rawValue)) {
+              return bail(
+                "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                { property: d.property },
               );
-            }
-            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
-            if (borderMatch) {
-              const direction = borderMatch[1]
-                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
-                : "";
-              if (
-                !(`border${direction}Width` in resolvedStaticStyle) ||
-                !(`border${direction}Style` in resolvedStaticStyle) ||
-                !(`border${direction}Color` in resolvedStaticStyle)
-              ) {
-                return bail(
-                  "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
-                  { property: d.property },
-                );
-              }
-            }
-            if (d.property?.trim() === "background") {
-              if (
-                "backgroundImage" in resolvedStaticStyle &&
-                !("backgroundColor" in resolvedStaticStyle)
-              ) {
-                resolvedStaticStyle.backgroundColor = mergeIntoContext(
-                  cssValueToJs(
-                    { kind: "static", value: "transparent" },
-                    d.important,
-                    "backgroundColor",
-                  ),
-                  "backgroundColor",
-                  target as any,
-                );
-              }
-              if (
-                "backgroundColor" in resolvedStaticStyle &&
-                !("backgroundImage" in resolvedStaticStyle)
-              ) {
-                const imageResetValue = [
-                  "inherit",
-                  "initial",
-                  "unset",
-                  "revert",
-                  "revert-layer",
-                ].includes(rawValue.trim())
-                  ? rawValue.trim()
-                  : "none";
-                resolvedStaticStyle.backgroundImage = mergeIntoContext(
-                  cssValueToJs(
-                    { kind: "static", value: imageResetValue },
-                    d.important,
-                    "backgroundImage",
-                  ),
-                  "backgroundImage",
-                  target as any,
-                );
-              }
             }
             for (const [prop, value] of Object.entries(resolvedStaticStyle)) {
               setStyleObjectValue(target as Record<string, unknown>, prop, value);
