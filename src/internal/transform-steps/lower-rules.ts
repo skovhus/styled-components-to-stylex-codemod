@@ -599,6 +599,16 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
       }
       preservedNames.add(childDecl.localName);
       changed = true;
+      // A reveal child preserved as raw styled-components keeps its template
+      // verbatim. If it also holds a *cross-file* `${ImportedChild}` selector whose
+      // target converts to StyleX in its own file, that selector would break: the
+      // imported component is no longer a styled-component, and because this file is
+      // "transformed" the consumer bridge patcher skips it. The cross-file marker
+      // path that conversion would have used is gone. Bail the whole file so the
+      // original cross-file selector behavior is preserved.
+      if (childReferencesCrossFileSelector(state, childDecl)) {
+        state.bail = true;
+      }
       state.warnings.push({
         severity: "warning",
         type: PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING,
@@ -607,6 +617,23 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
       });
     }
   }
+}
+
+/**
+ * True when the (newly preserved) reveal child's template interpolates an imported
+ * component as a selector. Preserving the child raw would strand that cross-file
+ * selector if its target converted to StyleX, so the caller bails the file.
+ */
+function childReferencesCrossFileSelector(state: LowerRulesState, childDecl: StyledDecl): boolean {
+  if (state.crossFileSelectorsByLocal.size === 0) {
+    return false;
+  }
+  for (const ref of collectTemplateSelectorIdentifiers(childDecl)) {
+    if (state.crossFileSelectorsByLocal.has(ref)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectPreservedReferencedStyledDecls(

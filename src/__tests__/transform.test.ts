@@ -1547,6 +1547,76 @@ export const App = () => (
     expect(result.code).not.toContain("when.ancestor");
   });
 
+  it("bails when a preserved reveal child also holds a cross-file selector", () => {
+    // `Card` is skipped (unsupported descendant), so `Actions` (`${Card}:hover &`)
+    // is preserved as raw styled-components. But `Actions` also interpolates the
+    // imported `${ImportedChild}` as a selector — and `ImportedChild` may have been
+    // converted to StyleX in its own file. Since this file is otherwise transformed
+    // (Footer converts), the consumer bridge patcher would skip it, stranding the
+    // cross-file selector. The whole file must bail to preserve that behavior.
+    const source = `
+import styled from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+const Card = styled.div\`
+  padding: 8px;
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions>
+        <ImportedChild />
+      </Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    // Whole-file bail: the file is returned unchanged rather than partially
+    // converted with a stranded cross-file selector in the preserved child.
+    expect(result.code).toBeNull();
+  });
+
   it("prunes derived after-base mixin keys of a component preserved via reference", () => {
     // `Button` composes an after-base css mixin with a contextual (`&:hover`)
     // override, which `postProcessAfterBaseMixins` lowers into a per-use derived
