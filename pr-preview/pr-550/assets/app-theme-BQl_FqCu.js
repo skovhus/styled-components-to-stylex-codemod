@@ -1,0 +1,1 @@
+function e(){return{name:`Generic theme`}}export{e as t};
