@@ -46,7 +46,6 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   ctx.crossFileMarkers = lowered.crossFileMarkers;
   ctx.siblingMarkerKeys = lowered.siblingMarkerKeys;
   ctx.parentsNeedingDefaultMarker = lowered.parentsNeedingDefaultMarker;
-  ctx.ancestorAttrsByStyleKey = lowered.ancestorAttrsByStyleKey;
 
   if (lowered.bail || ctx.resolveValueBailRef.value) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
@@ -126,8 +125,6 @@ type LowerRulesResult = {
   crossFileMarkers: Map<string, string>;
   siblingMarkerKeys: Set<string>;
   parentsNeedingDefaultMarker: Set<string>;
-  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
-  ancestorAttrsByStyleKey: Map<string, Set<string>>;
   preservedReferencedStyledDecls: Set<string>;
   bail: boolean;
 };
@@ -282,7 +279,6 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     crossFileMarkers,
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     parentsNeedingDefaultMarker,
-    ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
     preservedReferencedStyledDecls,
     bail: state.bail,
   };
@@ -353,7 +349,6 @@ type StateSnapshot = {
   siblingMarkerNames: Array<[string, string]>;
   relationOverridePseudoKeys: Set<string>;
   childPseudoKeys: Set<string>;
-  ancestorAttrKeys: Set<string>;
   usedCssHelperFunctions: Set<string>;
   resolverImportKeys: Set<string>;
 };
@@ -375,7 +370,6 @@ function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
     siblingMarkerNames: [...state.siblingMarkerNames.entries()],
     relationOverridePseudoKeys: new Set(state.relationOverridePseudoBuckets.keys()),
     childPseudoKeys: new Set(state.childPseudoMarkers.keys()),
-    ancestorAttrKeys: new Set(state.ancestorAttrsByStyleKey.keys()),
     usedCssHelperFunctions: new Set(state.usedCssHelperFunctions),
     resolverImportKeys: new Set(state.resolverImports.keys()),
   };
@@ -465,7 +459,6 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
     state.resolvedStyleObjects.delete(key);
     state.relationOverridePseudoBuckets.delete(key);
     state.childPseudoMarkers.delete(key);
-    state.ancestorAttrsByStyleKey.delete(key);
     state.ancestorSelectorParents.delete(key);
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
@@ -546,7 +539,6 @@ function prunePreservedReferencedDeclsFromState(
     state.resolvedStyleObjects.delete(key);
     state.relationOverridePseudoBuckets.delete(key);
     state.childPseudoMarkers.delete(key);
-    state.ancestorAttrsByStyleKey.delete(key);
     state.ancestorSelectorParents.delete(key);
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
@@ -628,7 +620,6 @@ function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void
   }
   pruneMapKeysNotIn(state.relationOverridePseudoBuckets, snap.relationOverridePseudoKeys);
   pruneMapKeysNotIn(state.childPseudoMarkers, snap.childPseudoKeys);
-  pruneMapKeysNotIn(state.ancestorAttrsByStyleKey, snap.ancestorAttrKeys);
   resetSet(state.usedCssHelperFunctions, snap.usedCssHelperFunctions);
   pruneMapKeysNotIn(state.resolverImports, snap.resolverImportKeys);
 }
