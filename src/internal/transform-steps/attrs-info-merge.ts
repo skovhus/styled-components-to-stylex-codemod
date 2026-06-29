@@ -50,7 +50,13 @@ export function mergeInheritedAttrsInfo(
   };
 }
 
-function collectAttrsInfoAttrNames(attrsInfo: StyledDecl["attrsInfo"]): Set<string> {
+/**
+ * All attr names a decl's own `.attrs()` defines, across every attr category
+ * (static, default, dynamic, conditional, inverted-bool). These names take
+ * precedence over a base's attrs on inheritance — used both by the attrs merge
+ * and by callers that need to know which inherited keys a decl shadows.
+ */
+export function collectAttrsInfoAttrNames(attrsInfo: StyledDecl["attrsInfo"]): Set<string> {
   const names = new Set<string>();
   for (const key of Object.keys(attrsInfo?.staticAttrs ?? {})) {
     names.add(key);

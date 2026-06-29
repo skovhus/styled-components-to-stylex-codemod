@@ -13136,6 +13136,39 @@ export const App = () => <Box>Box</Box>;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("does not bail when a child overrides an inherited object attr with a primitive", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number } | string; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base).attrs({ transition: "none" })\`
+  transition-property: \${(p: any) => p.transition};
+\`;
+
+export const App = () => <Child>x</Child>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Child overrides the inherited \`transition\` object attr with a primitive, so the
+    // effective value is \`"none"\` — a lowerable primitive, not an object. The
+    // unsupported-attrs scan must honor that override (as the attrs merge does) and
+    // not bail on the base's shadowed object literal: the CSS read resolves to the
+    // primitive and lowers.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('transition="none"');
+    expect(result.code).toContain('transitionProperty: "none"');
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";

@@ -12,6 +12,7 @@ import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
 import { expressionsReferenceAnyPath } from "../utilities/member-expression-paths.js";
+import { collectAttrsInfoAttrNames } from "./attrs-info-merge.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -324,8 +325,16 @@ function effectiveObjectAttrKeys(
   if (decl.base?.kind === "component") {
     const baseDecl = declByLocalName.get(decl.base.ident);
     if (baseDecl) {
+      // The attrs merge lets a child's own attr override a base attr by name, so a
+      // base object key the child redefines (e.g. with a primitive `transition:
+      // "none"`) is no longer an object attr on the child. Mirror that precedence —
+      // skip inherited keys the child shadows — so the effective value, not the
+      // base's object literal, drives the unsupported-attrs scan.
+      const ownAttrNames = collectAttrsInfoAttrNames(decl.attrsInfo);
       for (const key of effectiveObjectAttrKeys(baseDecl, declByLocalName, seen)) {
-        keys.add(key);
+        if (!ownAttrNames.has(key)) {
+          keys.add(key);
+        }
       }
     }
   }
