@@ -4474,7 +4474,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: .5;
 }
 
-.x1ebjnwd.x1ebjnwd:where(.x-default-marker[aria-checked="mixed"] *):not(#\#):not(#\#):not(#\#), .x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#), .x1ovnoem.x1ovnoem:where(.x-default-marker[aria-checked="true"] *):not(#\#):not(#\#):not(#\#), .x1r7fyky[data-open="true"]:not(#\#):not(#\#):not(#\#), .x1vnpe2c.x1vnpe2c:where(.x-default-marker[data-focused="true"] *):not(#\#):not(#\#):not(#\#), .x1w4b5j8.x1w4b5j8:where(.x-default-marker[aria-selected="true"] *):not(#\#):not(#\#):not(#\#), .xhgmygg.xhgmygg:where(.x-default-marker[data-state="active"][data-size="lg"] *):not(#\#):not(#\#):not(#\#), .xvlev87.xvlev87:where(.x-default-marker[data-active="true"] *):not(#\#):not(#\#):not(#\#) {
+.x15gmwlt:is([data-state="active"][data-size="lg"] *):not(#\#):not(#\#):not(#\#), .x17s2skc:is([aria-selected="true"] *):not(#\#):not(#\#):not(#\#), .x1jbqb7s:is([aria-checked="true"] *):not(#\#):not(#\#):not(#\#), .x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#), .x1r7fyky[data-open="true"]:not(#\#):not(#\#):not(#\#), .x1wlx6x0:is([data-active="true"] *):not(#\#):not(#\#):not(#\#), .x1xufyyf:is([aria-checked="mixed"] *):not(#\#):not(#\#):not(#\#), .xaojdw0:is([data-focused="true"] *):not(#\#):not(#\#):not(#\#) {
   opacity: 1;
 }
 
