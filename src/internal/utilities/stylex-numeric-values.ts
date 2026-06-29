@@ -141,6 +141,41 @@ export function buildStylexValueWithStaticParts(
   ) {
     return prefix === "-" ? (j.unaryExpression("-", expr, true) as ExpressionKind) : expr;
   }
+  // A literal CSS unit suffix (e.g. the `px` in `${cond ? calc(...) : 40}px`)
+  // must not be appended to a branch that already forms a complete CSS length,
+  // or the result is invalid CSS (`calc(40px + 8px)px`). When a conditional
+  // mixes such a length branch with a bare-numeric branch, distribute the suffix
+  // into each branch so only the numeric branch receives the unit.
+  if (prefix === "" && isCssUnitSuffix(suffix)) {
+    if (expr.type === "ConditionalExpression" && conditionalHasCompleteCssLengthBranch(expr)) {
+      return {
+        ...expr,
+        consequent: buildStylexValueWithStaticParts(
+          j,
+          expr.consequent as ExpressionKind,
+          prefix,
+          suffix,
+          stylexProp,
+          buildTemplate,
+          important,
+          options,
+        ),
+        alternate: buildStylexValueWithStaticParts(
+          j,
+          expr.alternate as ExpressionKind,
+          prefix,
+          suffix,
+          stylexProp,
+          buildTemplate,
+          important,
+          options,
+        ),
+      } as ExpressionKind;
+    }
+    if (expressionIsCompleteCssLength(expr)) {
+      return expr;
+    }
+  }
   return buildTemplate(expr, prefix, suffix);
 }
 
@@ -309,6 +344,59 @@ export function isNumericStylexExpression(
 function isExpressionNode(value: unknown): value is ExpressionKind {
   return Boolean(
     value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string",
+  );
+}
+
+// A pure CSS unit affix such as `px`, `rem`, or `%` — distinguishes a unit
+// suffix (which must not be doubled onto an existing length) from arbitrary
+// trailing text or `!important` modifiers.
+function isCssUnitSuffix(suffix: string): boolean {
+  return /^[a-zA-Z%]+$/.test(suffix);
+}
+
+// A value that already constitutes a complete CSS length: a CSS math/var
+// function (`calc(...)`, `min(...)`, `clamp(...)`, `var(...)`, …) or any string
+// that ends with a unit/percentage/closing paren. Appending another unit suffix
+// to such a value produces invalid CSS, so the suffix must be dropped instead.
+function expressionIsCompleteCssLength(node: ExpressionKind): boolean {
+  if (
+    node.type === "StringLiteral" ||
+    (node.type === "Literal" && typeof node.value === "string")
+  ) {
+    return stringIsCompleteCssLength(String(node.value));
+  }
+  if (node.type === "TemplateLiteral") {
+    const quasis = node.quasis ?? [];
+    const head = quasis[0]?.value.cooked ?? quasis[0]?.value.raw ?? "";
+    const lastQuasi = quasis[quasis.length - 1];
+    const tail = lastQuasi?.value.cooked ?? lastQuasi?.value.raw ?? "";
+    return startsWithCssValueFunction(head) || (tail.trim() !== "" && endsWithCssUnit(tail));
+  }
+  return false;
+}
+
+function stringIsCompleteCssLength(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed !== "" && (startsWithCssValueFunction(trimmed) || endsWithCssUnit(trimmed));
+}
+
+function startsWithCssValueFunction(text: string): boolean {
+  return /^\s*(?:calc|min|max|clamp|minmax|var|env)\s*\(/i.test(text);
+}
+
+// A unit-bearing value ends with an alphabetic unit, a percentage, or a `)`
+// that closes a CSS math function (e.g. `8px`, `100%`, `calc(... )`).
+function endsWithCssUnit(text: string): boolean {
+  return /[a-zA-Z%)]$/.test(text.trimEnd());
+}
+
+function conditionalHasCompleteCssLengthBranch(node: ExpressionKind): boolean {
+  if (node.type !== "ConditionalExpression") {
+    return expressionIsCompleteCssLength(node);
+  }
+  return (
+    conditionalHasCompleteCssLengthBranch(node.consequent as ExpressionKind) ||
+    conditionalHasCompleteCssLengthBranch(node.alternate as ExpressionKind)
   );
 }
 
