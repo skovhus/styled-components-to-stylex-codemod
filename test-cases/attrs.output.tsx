@@ -598,9 +598,10 @@ function Motion(props: {
   animate?: string;
   transition?: { duration: number };
   keyframes?: number[];
+  tabIndex?: number;
   children?: React.ReactNode;
 }) {
-  const { className, initial, animate, transition, keyframes, children } = props;
+  const { className, initial, animate, transition, keyframes, tabIndex, children } = props;
   return (
     <div
       className={className}
@@ -608,6 +609,7 @@ function Motion(props: {
       data-animate={animate}
       data-duration={transition?.duration}
       data-keyframes={keyframes?.join(",")}
+      tabIndex={tabIndex}
     >
       {children}
     </div>
@@ -644,6 +646,29 @@ function FadeBox(props: { children?: React.ReactNode }) {
         duration: 0.4,
       }}
       {...stylex.props(styles.fadeBox)}
+    />
+  );
+}
+
+// Pattern 17c: an extension whose own attrs are function-form still inherits the base's
+// object-form literal. The inherited literal must keep referencing the base's hoisted
+// const (stable reference), not be re-inlined in the derived wrapper.
+function TabbableAnimatedBox(
+  props: Omit<
+    React.ComponentPropsWithRef<typeof Motion>,
+    "className" | "style" | "initial" | "animate" | "transition" | "keyframes"
+  >,
+) {
+  const { tabIndex, ...rest } = props;
+  return (
+    <Motion
+      tabIndex={tabIndex ?? 0}
+      {...rest}
+      initial="hidden"
+      animate="visible"
+      transition={animatedBoxTransition}
+      keyframes={animatedBoxKeyframes}
+      {...stylex.props(styles.animatedBox, styles.tabbableAnimatedBox)}
     />
   );
 }
@@ -712,6 +737,7 @@ export const App = () => (
     </div>
     <AnimatedBox>Animated box</AnimatedBox>
     <FadeBox>Fade box</FadeBox>
+    <TabbableAnimatedBox>Tabbable animated box</TabbableAnimatedBox>
   </>
 );
 
@@ -949,5 +975,8 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "#fae8ff",
     color: "#86198f",
+  },
+  tabbableAnimatedBox: {
+    backgroundColor: "#ddd6fe",
   },
 });

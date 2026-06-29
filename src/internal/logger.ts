@@ -72,6 +72,7 @@ export type WarningType =
   | "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))"
   | "Unsupported conditional test in shouldForwardProp"
   | "Unsupported .attrs() callback pattern"
+  | "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
   | "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)"
   | "Unsupported interpolation: arrow function"
   | "Unsupported interpolation: call expression"

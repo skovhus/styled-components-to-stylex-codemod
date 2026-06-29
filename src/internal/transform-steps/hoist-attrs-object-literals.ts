@@ -14,8 +14,13 @@
  * alone: styled-components re-invokes the callback on every render, so those
  * literals are already fresh per render and inlining them matches the original
  * semantics.
+ *
+ * This runs *before* `analyzeBeforeEmitStep` (which merges a base decl's attrs
+ * into extending decls) so an inherited base literal is already rewritten to its
+ * hoisted reference before the merge copies it into the extender — keeping the
+ * stable reference even when the extender's own attrs are function-form.
  */
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
 
@@ -26,8 +31,26 @@ const SKIP_ATTR_KEYS = new Set(["style", "sx", "as", "forwardedAs"]);
 export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult {
   const { j } = ctx;
   const decls = (ctx.styledDecls ?? []) as StyledDecl[];
-  if (!decls.some((d) => d.attrsInfo?.sourceKind === "object")) {
+  const declsWithLiteralAttrs = decls.filter(hasReferenceLiteralAttr);
+  if (declsWithLiteralAttrs.length === 0) {
     return CONTINUE;
+  }
+
+  // A styled component sharing a multi-declarator statement (`const a = ..., X =
+  // styled(...)`) becomes a wrapper whose emission replaces the whole declaration,
+  // dropping the sibling declarators. A preserved object/array attrs literal (and
+  // any sibling it references) can no longer be represented safely there, so bail
+  // the file rather than emit a dangling reference.
+  for (const decl of declsWithLiteralAttrs) {
+    const loc = multiDeclaratorStatementLoc(ctx, decl.localName);
+    if (loc) {
+      ctx.warnings.push({
+        severity: "warning",
+        type: "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement",
+        loc,
+      });
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
   }
 
   const reservedNames = collectReservedNames(ctx);
@@ -67,6 +90,17 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
   return CONTINUE;
 }
 
+/** True when any non-special attrs value is an object/array literal AST node. */
+function hasReferenceLiteralAttr(decl: StyledDecl): boolean {
+  const staticAttrs = decl.attrsInfo?.staticAttrs;
+  if (!staticAttrs) {
+    return false;
+  }
+  return Object.entries(staticAttrs).some(
+    ([key, value]) => !SKIP_ATTR_KEYS.has(key) && isReferenceLiteralNode(value),
+  );
+}
+
 /** True when `value` is an object/array literal AST node (optionally `as`-cast). */
 function isReferenceLiteralNode(value: unknown): boolean {
   const node = unwrapTsWrappers(value);
@@ -85,6 +119,36 @@ function unwrapTsWrappers(value: unknown): unknown {
     node = (node as { expression?: unknown }).expression;
   }
   return node;
+}
+
+/**
+ * Returns the source location of the styled component's declaration statement
+ * when it shares a `VariableDeclaration` with other declarators, else null.
+ */
+function multiDeclaratorStatementLoc(
+  ctx: TransformContext,
+  localName: string,
+): { line: number; column: number } | null {
+  const { j, root } = ctx;
+  let result: { line: number; column: number } | null = null;
+  root
+    .find(j.VariableDeclaration)
+    .filter((path) =>
+      path.node.declarations.some(
+        (dcl) =>
+          dcl.type === "VariableDeclarator" &&
+          dcl.id?.type === "Identifier" &&
+          dcl.id.name === localName,
+      ),
+    )
+    .forEach((path) => {
+      if (result || path.node.declarations.length <= 1) {
+        return;
+      }
+      const start = path.node.loc?.start;
+      result = { line: start?.line ?? 0, column: start?.column ?? 0 };
+    });
+  return result;
 }
 
 /** Collect identifier names already present so generated consts never collide. */
