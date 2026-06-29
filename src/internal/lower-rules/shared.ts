@@ -38,21 +38,16 @@ export function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string
 }
 
 /**
- * True when a decl's template interpolates an imported component as a selector.
- * A reveal child preserved as raw styled-components would strand that cross-file
- * selector if its target converted to StyleX in its own file (the consumer
- * bridge patcher skips files that otherwise transform), so callers bail.
+ * True when a decl's template interpolates an imported component as a selector —
+ * directly or transitively through a css helper. A reveal child preserved as raw
+ * styled-components would strand that cross-file selector if its target converted
+ * to StyleX in its own file (the consumer bridge patcher skips files that
+ * otherwise transform), so callers bail. Reads the precomputed
+ * `crossFileSelectorReferrers` set (built once before rule processing) so the
+ * check stays helper-aware in both the early and late preservation paths.
  */
 export function declReferencesCrossFileSelector(state: LowerRulesState, decl: StyledDecl): boolean {
-  if (state.crossFileSelectorsByLocal.size === 0) {
-    return false;
-  }
-  for (const ref of collectTemplateSelectorIdentifiers(decl)) {
-    if (state.crossFileSelectorsByLocal.has(ref)) {
-      return true;
-    }
-  }
-  return false;
+  return state.crossFileSelectorReferrers.has(decl.localName);
 }
 
 export function findPlaceholderBlock(

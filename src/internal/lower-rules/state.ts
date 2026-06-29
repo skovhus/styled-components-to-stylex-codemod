@@ -409,6 +409,14 @@ export function createLowerRulesState(ctx: TransformContext) {
     isIdentifierShadowed,
     enumValueMap,
     crossFileSelectorsByLocal,
+    /**
+     * Local names of decls whose template references an imported component as a
+     * selector — directly or transitively through a css helper. Precomputed once
+     * (template references are static) so the early rule-processing and the
+     * post-lowering preservation paths share one helper-aware check when deciding
+     * whether preserving a reveal child would strand a cross-file selector.
+     */
+    crossFileSelectorReferrers: new Set<string>(),
     propUsageByComponent,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     /**

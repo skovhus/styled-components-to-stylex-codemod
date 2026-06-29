@@ -165,6 +165,14 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   }
   state.inlineKeyframeNameMap = ctx.inlineKeyframeNameMap;
 
+  // Precompute which decls reference an imported component as a selector, looking
+  // through css helpers (`${mix}` where `mix = css\`${ImportedChild} { ... }\``).
+  // The preservation guards consult this so a preserved reveal child whose
+  // cross-file selector hides behind a helper still bails instead of silently
+  // stranding the import. Template selector references are static, so one pass
+  // before rule processing suffices for both the early and late guard paths.
+  state.crossFileSelectorReferrers = computeCrossFileSelectorReferrers(state, ctx.cssLocal);
+
   for (const decl of state.styledDecls) {
     if (state.bail) {
       break;
@@ -838,6 +846,34 @@ function collectRemovableCssHelperFunctions(
     }
   }
   return removable;
+}
+
+function computeCrossFileSelectorReferrers(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Set<string> {
+  const referrers = new Set<string>();
+  if (state.crossFileSelectorsByLocal.size === 0) {
+    return referrers;
+  }
+  const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
+  for (const decl of state.styledDecls) {
+    const referencedNames = collectTemplateSelectorIdentifiers(decl);
+    // Expand through css helpers the decl interpolates, so a cross-file selector
+    // hidden inside `${mix}` counts as referenced by this decl.
+    for (const helperName of collectTemplateExpressionIdentifiers(decl)) {
+      for (const selectorName of helperSelectorIdentifiers.get(helperName) ?? []) {
+        referencedNames.add(selectorName);
+      }
+    }
+    for (const ref of referencedNames) {
+      if (state.crossFileSelectorsByLocal.has(ref)) {
+        referrers.add(decl.localName);
+        break;
+      }
+    }
+  }
+  return referrers;
 }
 
 function collectCssHelperFunctionSelectorIdentifiers(

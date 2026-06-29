@@ -1682,6 +1682,72 @@ export const App = () => (
     expect(result.code).toBeNull();
   });
 
+  it("bails when a preserved reveal child holds a cross-file selector via a css helper", () => {
+    // The cross-file selector is hidden behind a css helper: `Actions` only
+    // interpolates `${mix}`, and `mix` is the one that interpolates the imported
+    // `${ImportedChild}`. A naive scan of `Actions`'s own template sees only the
+    // `mix` identifier (a value interpolation, not a selector), so the guard must
+    // expand through the helper to find the stranded cross-file selector and bail.
+    const source = `
+import styled, { css } from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+export const mix = css\`
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const Card = styled.div\`
+  padding: 8px;
+  & a.active {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${mix}
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <a className="active">link</a>
+    <Actions>
+      <ImportedChild />
+    </Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("prunes derived after-base mixin keys of a component preserved via reference", () => {
     // `Button` composes an after-base css mixin with a contextual (`&:hover`)
     // override, which `postProcessAfterBaseMixins` lowers into a per-use derived
