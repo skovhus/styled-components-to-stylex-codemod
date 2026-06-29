@@ -1598,6 +1598,62 @@ export const App = () => (
     );
   });
 
+  it("preserves a no-pseudo scoped-marker reveal child when its ancestor is preserved via reference", () => {
+    // The no-pseudo reverse form `${Card} &` uses a scoped marker, so its override
+    // is flagged `crossFile` even though `Card` is same-file. The post-lowering
+    // propagation must still preserve `Actions` when `Card` is preserved via a
+    // skipped sibling — distinguishing genuine cross-file overrides by ancestor
+    // resolution, not the `crossFile` flag — so the `${Card} &` style isn't lost.
+    const source = `
+import styled from "styled-components";
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0.5;
+
+  \${Card} & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Card>
+      <Actions>A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-noPseudoRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and Actions stay styled-components so the `${Card} &` reveal works.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No leftover StyleX keys for the preserved child (base or scoped-marker override).
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

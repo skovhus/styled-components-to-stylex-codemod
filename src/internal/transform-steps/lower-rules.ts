@@ -549,9 +549,11 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
   while (changed) {
     changed = false;
     for (const override of state.relationOverrides) {
-      if (override.crossFile) {
-        continue;
-      }
+      // Don't gate on `override.crossFile`: the no-pseudo reverse form (`${Card} &`)
+      // is flagged crossFile because it uses a scoped marker, yet its ancestor is a
+      // same-file decl that still needs this propagation. Genuine cross-file reveals
+      // are filtered instead by ancestor resolution below — their imported ancestor
+      // has no local decl, so `ancestorDecl` is undefined and the override is skipped.
       const ancestorDecl = resolveOverrideDecl(override.parentLocalName, override.parentStyleKey);
       const childDecl = resolveOverrideDecl(override.childLocalName, override.childStyleKey);
       if (!ancestorDecl || !childDecl || !isPreserved(ancestorDecl) || isPreserved(childDecl)) {
