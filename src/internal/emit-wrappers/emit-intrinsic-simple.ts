@@ -413,8 +413,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ...emitter.buildAttrsFromAttrsInfo({
         attrsInfo,
         propExprFor: (prop) => j.identifier(prop),
+        includeStatic: false,
       }),
       j.jsxSpreadAttribute(restId),
+      // Static attrs override caller props (styled-components semantics), so they
+      // must be emitted after `{...rest}` — otherwise a caller's same-named prop in
+      // `rest` would override the attr.
+      ...emitter.buildStaticAttrsFromRecord(attrsInfo?.staticAttrs ?? {}),
       ...emitter.buildDynamicAttrsFromProps({
         dynamicAttrs: attrsInfo?.dynamicAttrs ?? [],
         propExprFor: (prop) => j.identifier(prop),
@@ -1190,11 +1195,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...emitter.buildAttrsFromAttrsInfo({
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
+          // With a `{...rest}` spread, static attrs override caller props and must
+          // follow it (emitted below); without one they stay inline here.
+          includeStatic: !restId,
         }),
         ...(shouldForwardRefExplicitly
           ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
           : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+        ...(restId
+          ? emitter.buildStaticAttrsFromRecord(attrsInfoWithoutForwardedAsStatic?.staticAttrs ?? {})
+          : []),
         ...emitter.buildDynamicAttrsFromProps({
           dynamicAttrs: attrsInfoWithoutForwardedAsStatic?.dynamicAttrs ?? [],
           propExprFor: (prop) => j.identifier(prop),

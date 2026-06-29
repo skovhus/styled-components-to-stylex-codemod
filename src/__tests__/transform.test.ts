@@ -13353,6 +13353,35 @@ export const App = () => <Box size={1} data-size={2} />;
     expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
   });
 
+  it("emits intrinsic static attrs after rest spreads so attrs override caller props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+// Exported so the wrapper accepts arbitrary DOM props and spreads \`{...rest}\`.
+export const HtmlBox = styled.div.attrs({
+  dangerouslySetInnerHTML: { __html: "<b>fixed</b>" },
+})<{ $pad?: number }>\`
+  padding: \${(props) => props.$pad ?? 0}px;
+\`;
+
+export const App = () => <HtmlBox $pad={4} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The transient \`$pad\` forces a \`{...rest}\` spread. The static object attr must be
+    // emitted *after* \`{...rest}\` so a caller's \`dangerouslySetInnerHTML\` (still part
+    // of \`rest\`) cannot override it — styled-components object-form attrs always win.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /\{\.\.\.rest\}\s+dangerouslySetInnerHTML=\{htmlBoxDangerouslySetInnerHTML\}/,
+    );
+    expect(result.code).not.toMatch(
+      /dangerouslySetInnerHTML=\{htmlBoxDangerouslySetInnerHTML\}\s+\{\.\.\.rest\}/,
+    );
+  });
+
   it("places shared dynamic attrs after rest spreads so attrs override target props", () => {
     const source = `
 import styled from "styled-components";

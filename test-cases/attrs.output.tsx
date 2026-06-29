@@ -107,8 +107,8 @@ function Input(props: InputProps) {
   return (
     <input
       size={small ? 5 : undefined}
-      type="text"
       {...rest}
+      type="text"
       sx={[styles.input, padding != null && styles.inputPadding(padding)]}
     />
   );
