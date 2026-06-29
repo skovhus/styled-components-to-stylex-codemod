@@ -234,7 +234,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     // first; otherwise the child would stay converted with the reveal dropped.
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
     preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
-    pruneSkippedDeclsFromState(state);
+    pruneSkippedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
@@ -442,8 +442,18 @@ function collectOwnedDeclStyleKeys(decl: StyledDecl): Set<string> {
   return keys;
 }
 
-function pruneSkippedDeclsFromState(state: LowerRulesState): void {
-  const skipped = state.styledDecls.filter((d: StyledDecl) => d.skipTransform);
+function pruneSkippedDeclsFromState(
+  state: LowerRulesState,
+  preservedReferencedNames: Set<string> = new Set(),
+): void {
+  // A reveal child added to `preservedReferencedNames` will be preserved as
+  // styled-components, but its `decl.skipTransform` isn't set until `lowerRules`
+  // returns. Treat it as skipped here so it neither survives in the output nor
+  // keeps a skipped ancestor's keys alive via the keep set (e.g. a later-assigned
+  // `extendsStyleKey`/`extraStyleKeys` pointing at the ancestor).
+  const willBePreserved = (d: StyledDecl): boolean =>
+    d.skipTransform || preservedReferencedNames.has(d.localName);
+  const skipped = state.styledDecls.filter(willBePreserved);
   if (skipped.length === 0) {
     return;
   }
@@ -453,7 +463,7 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   // and mixin style keys that appear in multiple decls' owned key sets.
   const keepKeys = new Set<string>();
   for (const d of state.styledDecls) {
-    if (d.skipTransform) {
+    if (willBePreserved(d)) {
       continue;
     }
     for (const key of declStyleKeysForPruning(d)) {
