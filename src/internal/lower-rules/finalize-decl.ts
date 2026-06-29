@@ -169,21 +169,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj[sel] = obj;
   }
 
-  // Bail when a property mixes a computed at-rule key (from resolveSelector, stored in
-  // __computedKeys and always emitted last) with a static at-rule key on the same property.
-  // StyleX breaks ties between same-tier at-rules by source order, so appending the computed
-  // key last would silently reverse the original CSS cascade — not lossless. Static pseudo
-  // keys are unaffected (they sit in a different priority tier), so they don't trigger this.
-  for (const bucket of [styleObj, ...variantBuckets.values(), ...extraStyleObjects.values()]) {
-    if (hasComputedAndStaticAtRuleConflict(bucket)) {
-      state.bailUnsupported(
-        decl,
-        "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved",
-      );
-      return;
-    }
-  }
-
   const baseRawEntries = Object.entries(styleObj);
   resolveBoxShorthandConflicts(styleObj);
   resolveDirectionalConflicts(styleObj);
@@ -203,6 +188,25 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     bucketBaseKeySnapshot: bucketSnapshotLookup(decl, variantBuckets),
     bucketSourceOrder: bucketSourceOrderLookup(decl, variantBuckets),
   });
+
+  // Bail when a property mixes a computed at-rule key (from resolveSelector, stored in
+  // __computedKeys and always emitted last) with a static at-rule key on the same property.
+  // StyleX breaks ties between same-tier at-rules by source order, so appending the computed
+  // key last would silently reverse the original CSS cascade — not lossless. Static pseudo
+  // keys are unaffected (they sit in a different priority tier), so they don't trigger this.
+  //
+  // Runs AFTER shorthand/directional/border resolution so it also catches conflicts created
+  // when a shorthand/axis property (e.g. computed `@container` on `padding-inline`) is merged
+  // with a side longhand (e.g. static `@media` on `padding-left`) into the same map.
+  for (const bucket of [styleObj, ...variantBuckets.values(), ...extraStyleObjects.values()]) {
+    if (hasComputedAndStaticAtRuleConflict(bucket)) {
+      state.bailUnsupported(
+        decl,
+        "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved",
+      );
+      return;
+    }
+  }
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
 
