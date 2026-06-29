@@ -16,6 +16,10 @@ import { addPropComments } from "./comments.js";
 import { markProvenSingleTokenValue } from "./utils.js";
 import { isDirectionalThemeResult } from "./theme.js";
 import { maybeOmitPxUnitFromStylexValue } from "./inline-styles.js";
+import {
+  isRecognizedCssUnitSuffix,
+  startsWithCssValueFunction,
+} from "../utilities/stylex-numeric-values.js";
 
 /**
  * Regex matching border-color properties where the border handler already extracted
@@ -95,8 +99,15 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
   // Check if expr is a string literal (matches "..." or '...')
   const stringMatch = expr.match(/^["'](.*)["']$/);
   if (stringMatch) {
+    const content = stringMatch[1] ?? "";
+    // A CSS math/var function (`calc(...)`) is already a complete length, so a
+    // trailing unit suffix must not be appended (it would yield invalid CSS like
+    // `calc(40px + 8px)px`). Keep the value as-is in that case.
+    if (prefix === "" && isRecognizedCssUnitSuffix(suffix) && startsWithCssValueFunction(content)) {
+      return JSON.stringify(content);
+    }
     // Combine into a single string literal for cleaner output
-    return JSON.stringify(prefix + stringMatch[1] + suffix);
+    return JSON.stringify(prefix + content + suffix);
   }
 
   // Check if expr is a numeric literal (e.g., 34, 3.14, -42)

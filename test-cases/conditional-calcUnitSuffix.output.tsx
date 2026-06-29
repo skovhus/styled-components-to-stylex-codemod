@@ -26,6 +26,17 @@ export function Spacer(props: SpacerProps) {
   return <div {...rest} sx={styles.spacer(wide, size)} />;
 }
 
+type ToggleProps = React.PropsWithChildren<{
+  big: boolean;
+}>;
+
+// Literal prop-conditional branches (string calc vs bare number) lower to static
+// variants; the `px` suffix must still be kept off the calc() variant branch.
+export function Toggle(props: ToggleProps) {
+  const { big, ...rest } = props;
+  return <div {...rest} sx={[styles.toggle, big && styles.toggleBig]} />;
+}
+
 // Only the numeric branches are rendered for visual comparison: the original
 // styled-components input emits invalid CSS for the `calc(...)` branch (the
 // trailing `px` corrupts it), so input and output cannot render identically
@@ -36,6 +47,7 @@ export const App = () => (
     <Spacer wide={false} size={48}>
       Fixed size
     </Spacer>
+    <Toggle big={false}>Toggle</Toggle>
   </div>
 );
 
@@ -48,4 +60,11 @@ const styles = stylex.create({
     backgroundColor: "lightgreen",
     width: wide ? `calc(100% - ${size}px)` : size,
   }),
+  toggle: {
+    height: 40,
+    backgroundColor: "khaki",
+  },
+  toggleBig: {
+    height: "calc(40px + 8px)",
+  },
 });

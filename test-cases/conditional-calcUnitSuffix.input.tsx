@@ -16,6 +16,13 @@ export const Spacer = styled.div<{ $wide: boolean; $size: number }>`
   background-color: lightgreen;
 `;
 
+// Literal prop-conditional branches (string calc vs bare number) lower to static
+// variants; the `px` suffix must still be kept off the calc() variant branch.
+export const Toggle = styled.div<{ $big: boolean }>`
+  height: ${(props) => (props.$big ? "calc(40px + 8px)" : 40)}px;
+  background-color: khaki;
+`;
+
 // Only the numeric branches are rendered for visual comparison: the original
 // styled-components input emits invalid CSS for the `calc(...)` branch (the
 // trailing `px` corrupts it), so input and output cannot render identically
@@ -26,5 +33,6 @@ export const App = () => (
     <Spacer $wide={false} $size={48}>
       Fixed size
     </Spacer>
+    <Toggle $big={false}>Toggle</Toggle>
   </div>
 );
