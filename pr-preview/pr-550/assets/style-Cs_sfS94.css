@@ -5436,6 +5436,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   height: calc(100vh - 60px);
 }
 
+.xb2sohu:not(#\#):not(#\#):not(#\#):not(#\#) {
+  height: 48px;
+}
+
 .x2tgbz4:not(#\#):not(#\#):not(#\#):not(#\#) {
   height: var(--fooBar);
 }
