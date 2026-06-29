@@ -142,15 +142,16 @@ export function buildStylexValueWithStaticParts(
     return prefix === "-" ? (j.unaryExpression("-", expr, true) as ExpressionKind) : expr;
   }
   // A literal CSS unit suffix (e.g. the `px` in `${cond ? calc(...) : 40}px`)
-  // must not be appended to a branch that already forms a complete CSS length,
-  // or the result is invalid CSS (`calc(40px + 8px)px`). When a conditional
-  // mixes such a length branch with a bare-numeric branch, distribute the suffix
-  // into each branch so only the numeric branch receives the unit. This only
-  // applies to length-valued properties — on identifier/string properties such
-  // as `animation-name` a trailing token like `in` is part of the value, not a
-  // CSS unit, so it must be left attached.
-  if (suffixIsAuthoredCssUnit(stylexProp, prefix, suffix)) {
-    if (expr.type === "ConditionalExpression" && conditionalHasCompleteCssLengthBranch(expr)) {
+  // must not be appended to a branch that is a CSS math/var function such as
+  // `calc(...)`, or the result is invalid CSS (`calc(40px + 8px)px`). When a
+  // conditional mixes such a function branch with a bare-numeric branch,
+  // distribute the suffix into each branch so only the numeric branch receives
+  // the unit. Triggering only on math/var functions keeps this away from
+  // identifier-valued properties (e.g. `animation-name: ${...}in`), where the
+  // trailing token is part of the value rather than a unit, and needs no
+  // per-property length classification.
+  if (prefix === "" && isRecognizedCssUnitSuffix(suffix)) {
+    if (expr.type === "ConditionalExpression" && conditionalHasCssMathFunctionBranch(expr)) {
       return {
         ...expr,
         consequent: buildStylexValueWithStaticParts(
@@ -175,7 +176,7 @@ export function buildStylexValueWithStaticParts(
         ),
       } as ExpressionKind;
     }
-    if (expressionIsCompleteCssLength(expr)) {
+    if (isCssMathFunctionExpression(expr)) {
       return expr;
     }
   }
@@ -350,65 +351,50 @@ function isExpressionNode(value: unknown): value is ExpressionKind {
   );
 }
 
-// The trailing static text after an interpolation is an authored CSS unit only
-// when it is a bare unit affix (`px`, `rem`, `%`, …) AND the property is
-// length-valued. On identifier/string properties (e.g. `animation-name`,
-// `grid-template-areas`) a trailing token like `in` belongs to the value rather
-// than being a unit, so the suffix must never be split off there.
-function suffixIsAuthoredCssUnit(stylexProp: string, prefix: string, suffix: string): boolean {
-  return prefix === "" && /^[a-zA-Z%]+$/.test(suffix) && STYLEX_PX_IMPLICIT_PROPS.has(stylexProp);
+// The trailing static text after an interpolation is treated as a CSS unit only
+// when it is a recognized unit token (`px`, `rem`, `%`, …). Arbitrary trailing
+// text (e.g. `!important` modifiers or identifier fragments) must never trigger
+// suffix splitting.
+function isRecognizedCssUnitSuffix(suffix: string): boolean {
+  return suffix === "%" || (/^[a-zA-Z]+$/.test(suffix) && CSS_UNITS.has(suffix.toLowerCase()));
 }
 
-// A value that already constitutes a complete CSS length: a CSS math/var
-// function (`calc(...)`, `min(...)`, `clamp(...)`, `var(...)`, …) or any string
-// that ends with a unit/percentage/closing paren. Appending another unit suffix
-// to such a value produces invalid CSS, so the suffix must be dropped instead.
-function expressionIsCompleteCssLength(node: ExpressionKind): boolean {
+// A CSS math or variable function such as `calc(...)`, `min(...)`, `clamp(...)`,
+// or `var(...)`. Such a value is already a complete length, so appending a unit
+// suffix to it yields invalid CSS (`calc(40px + 8px)px`). It also never appears
+// inside identifier-valued properties (e.g. `animation-name`), which makes it an
+// unambiguous, property-agnostic trigger for distributing/dropping the suffix.
+function isCssMathFunctionExpression(node: ExpressionKind): boolean {
   if (
     node.type === "StringLiteral" ||
     (node.type === "Literal" && typeof node.value === "string")
   ) {
-    return stringIsCompleteCssLength(String(node.value));
+    return startsWithCssValueFunction(String(node.value));
   }
   if (node.type === "TemplateLiteral") {
-    const quasis = node.quasis ?? [];
-    const head = quasis[0]?.value.cooked ?? quasis[0]?.value.raw ?? "";
-    const lastQuasi = quasis[quasis.length - 1];
-    const tail = lastQuasi?.value.cooked ?? lastQuasi?.value.raw ?? "";
-    return startsWithCssValueFunction(head) || (tail.trim() !== "" && endsWithCssUnit(tail));
+    const head = node.quasis[0]?.value.cooked ?? node.quasis[0]?.value.raw ?? "";
+    return startsWithCssValueFunction(head);
   }
   return false;
-}
-
-function stringIsCompleteCssLength(value: string): boolean {
-  const trimmed = value.trim();
-  return trimmed !== "" && (startsWithCssValueFunction(trimmed) || endsWithCssUnit(trimmed));
 }
 
 function startsWithCssValueFunction(text: string): boolean {
   return /^\s*(?:calc|min|max|clamp|minmax|var|env)\s*\(/i.test(text);
 }
 
-// A unit-bearing value ends with `)` (a CSS math function), `%`, or a complete
-// recognized CSS unit token (e.g. `8px`, `1.5rem`, `200ms`). A bare alphabetic
-// tail that is NOT a complete unit (e.g. the `m` in `200m`, which still needs an
-// `s` suffix to become `200ms`) is intentionally excluded so its suffix is kept.
-function endsWithCssUnit(text: string): boolean {
-  const trimmed = text.trimEnd();
-  if (trimmed === "") {
-    return false;
+function conditionalHasCssMathFunctionBranch(node: ExpressionKind): boolean {
+  if (node.type !== "ConditionalExpression") {
+    return isCssMathFunctionExpression(node);
   }
-  const lastChar = trimmed[trimmed.length - 1]!;
-  if (lastChar === ")" || lastChar === "%") {
-    return true;
-  }
-  const unit = /[a-zA-Z]+$/.exec(trimmed)?.[0]?.toLowerCase();
-  return unit !== undefined && CSS_UNITS.has(unit);
+  return (
+    conditionalHasCssMathFunctionBranch(node.consequent as ExpressionKind) ||
+    conditionalHasCssMathFunctionBranch(node.alternate as ExpressionKind)
+  );
 }
 
 // Recognized CSS unit tokens (length, time, angle, frequency, resolution, and
-// flexible-length). Used to decide whether a value already carries a complete
-// unit so an adjacent unit suffix must be dropped rather than doubled.
+// flexible-length). Used to decide whether a trailing suffix is an authored CSS
+// unit at all.
 const CSS_UNITS = new Set([
   "px",
   "rem",
@@ -456,16 +442,6 @@ const CSS_UNITS = new Set([
   "dpcm",
   "dppx",
 ]);
-
-function conditionalHasCompleteCssLengthBranch(node: ExpressionKind): boolean {
-  if (node.type !== "ConditionalExpression") {
-    return expressionIsCompleteCssLength(node);
-  }
-  return (
-    conditionalHasCompleteCssLengthBranch(node.consequent as ExpressionKind) ||
-    conditionalHasCompleteCssLengthBranch(node.alternate as ExpressionKind)
-  );
-}
 
 function memberExpressionRootIdentifier(value: ExpressionKind): string | null {
   if (value.type === "Identifier") {

@@ -65,8 +65,10 @@ describe("buildStylexValueWithStaticParts", () => {
     );
   });
 
-  it("does not append a unit suffix to a percentage string-literal branch", () => {
-    expect(build('cond ? "100%" : size', "", "px", "width")).toBe('cond ? "100%" : `${size}px`');
+  it("does not append a unit suffix to a min() math-function branch", () => {
+    expect(build('cond ? "min(100%, 200px)" : size', "", "px", "width")).toBe(
+      'cond ? "min(100%, 200px)" : `${size}px`',
+    );
   });
 
   it("distributes a non-px unit suffix into branches", () => {
@@ -77,13 +79,18 @@ describe("buildStylexValueWithStaticParts", () => {
     );
   });
 
-  it("treats a non-px length unit branch as already complete", () => {
-    expect(build('cond ? "10vh" : size', "", "px", "height")).toBe('cond ? "10vh" : `${size}px`');
+  it("fixes a calc() branch on a length prop excluded from the px-implicit set", () => {
+    // `line-height` accepts lengths but is not px-implicit (a bare number is a
+    // unitless multiplier). The math-function trigger still applies, so the
+    // calc() branch is preserved instead of becoming invalid `calc(...)px`.
+    expect(build("cond ? `calc(${h}px + 4px)` : h", "", "px", "lineHeight")).toBe(
+      "cond ? `calc(${h}px + 4px)` : `${h}px`",
+    );
   });
 
-  it("keeps wrapping the whole conditional when no branch is a complete CSS length", () => {
-    // Both branches are bare numerics — distributing is unnecessary, so the
-    // original whole-expression wrapping behavior is preserved.
+  it("keeps wrapping the whole conditional when no branch is a CSS math function", () => {
+    // Neither branch is a calc()/min()/var() function, so the original
+    // whole-expression wrapping behavior is preserved.
     expect(build("cond ? a : b", "", "px", "height")).toBe("`${cond ? a : b}px`");
   });
 
@@ -91,18 +98,18 @@ describe("buildStylexValueWithStaticParts", () => {
     expect(build("`calc(${x}px + 8px)`", "", "px", "height")).toBe("`calc(${x}px + 8px)`");
   });
 
-  it("does not split the suffix on identifier-valued properties", () => {
-    // `animation-name` is not length-valued: the trailing `in` is part of the
-    // identifier, so the whole conditional stays wrapped (`fade-1pxin` /
-    // `slide-in`) rather than `in` being treated as a CSS unit.
+  it("does not split the suffix on identifier values with no math-function branch", () => {
+    // Neither `fade-1px` nor `slide-` is a CSS math function, so the whole
+    // conditional stays wrapped (`animation-name` yields `fade-1pxin` /
+    // `slide-in`) rather than `in` being mistaken for a CSS unit.
     expect(build('cond ? "fade-1px" : "slide-"', "", "in", "animationName")).toBe(
       '`${cond ? "fade-1px" : "slide-"}in`',
     );
   });
 
-  it("leaves non-length properties whole so a partial unit still completes", () => {
-    // `transition-duration` is not a gated length property, so the whole
-    // conditional is wrapped and the `s` still completes `200m` to `200ms`.
+  it("leaves plain-string branches whole so a partial unit still completes", () => {
+    // `200m` is not a math function, so the whole conditional is wrapped and the
+    // `s` still completes it to `200ms`.
     expect(build('cond ? "200m" : delay', "", "s", "transitionDuration")).toBe(
       '`${cond ? "200m" : delay}s`',
     );
