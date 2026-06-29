@@ -108,6 +108,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       imports,
       staticPrefix,
       staticSuffix,
+      cssProperty: cssProp,
       parseExpr,
       decl,
       warnings,
@@ -726,12 +727,14 @@ function parseResolvedAdapterExpr(args: {
   imports: any[];
   staticPrefix: string;
   staticSuffix: string;
+  cssProperty?: string;
   parseExpr: (source: string) => unknown;
   decl: StyledDecl;
   warnings: WarningLog[];
 }): { exprAst: unknown; imports: any[] } | null {
-  const { expr, imports, staticPrefix, staticSuffix, parseExpr, decl, warnings } = args;
-  const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+  const { expr, imports, staticPrefix, staticSuffix, cssProperty, parseExpr, decl, warnings } =
+    args;
+  const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix, cssProperty);
   const exprAst = parseExpr(wrappedExpr);
   if (!exprAst) {
     warnings.push({
@@ -765,6 +768,7 @@ function buildCompoundVariantResolvers(
 } {
   const { decl, d, parseExpr, resolverImports, warnings, pseudos } = ctx;
   const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
+  const cssProperty = (d.property ?? "").trim();
 
   const parseResolved = (expr: string, imports: any[]) =>
     parseResolvedAdapterExpr({
@@ -772,6 +776,7 @@ function buildCompoundVariantResolvers(
       imports,
       staticPrefix,
       staticSuffix,
+      cssProperty,
       parseExpr,
       decl,
       warnings,

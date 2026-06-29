@@ -16,6 +16,10 @@ import { addPropComments } from "./comments.js";
 import { markProvenSingleTokenValue } from "./utils.js";
 import { isDirectionalThemeResult } from "./theme.js";
 import { maybeOmitPxUnitFromStylexValue } from "./inline-styles.js";
+import {
+  isRecognizedCssUnitSuffix,
+  startsWithCssValueFunction,
+} from "../utilities/stylex-numeric-values.js";
 
 /**
  * Regex matching border-color properties where the border handler already extracted
@@ -87,16 +91,46 @@ export type ResolveImportedValueOptions =
   | boolean
   | { allowCssCalc?: boolean; cssCalcUnit?: string; negate?: boolean };
 
-export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: string): string {
+export function wrapExprWithStaticParts(
+  expr: string,
+  prefix: string,
+  suffix: string,
+  cssProperty?: string,
+): string {
   if (!prefix && !suffix) {
     return expr;
   }
 
+  // Split a trailing `!important` off the suffix so a calc()/var() value can drop
+  // the unit while keeping importance (e.g. `px !important` → unit `px` plus a
+  // preserved ` !important`).
+  const importantMatch = suffix.match(/^([^\s!]*)(\s*!important)$/i);
+  const unitPart = importantMatch ? (importantMatch[1] ?? "") : suffix;
+  const importantPart = importantMatch ? (importantMatch[2] ?? "") : "";
+
+  // A CSS math/var function (`calc(...)`) is already a complete length, so a
+  // trailing unit suffix must not be appended (it would yield invalid CSS like
+  // `calc(40px + 8px)px`). This requires knowing the property: custom properties
+  // (`--*`) are excluded because their value is an opaque token stream where a
+  // trailing token (even after `var()`) may be intentional, and callers that
+  // cannot supply the property keep the suffix to stay safe.
+  const dropsUnitAfterCssFunction = (content: string): boolean =>
+    prefix === "" &&
+    cssProperty !== undefined &&
+    !cssProperty.startsWith("--") &&
+    isRecognizedCssUnitSuffix(unitPart) &&
+    startsWithCssValueFunction(content);
+
   // Check if expr is a string literal (matches "..." or '...')
   const stringMatch = expr.match(/^["'](.*)["']$/);
   if (stringMatch) {
+    const content = stringMatch[1] ?? "";
+    if (dropsUnitAfterCssFunction(content)) {
+      // Drop the unit but keep any `!important`.
+      return JSON.stringify(content + importantPart);
+    }
     // Combine into a single string literal for cleaner output
-    return JSON.stringify(prefix + stringMatch[1] + suffix);
+    return JSON.stringify(prefix + content + suffix);
   }
 
   // Check if expr is a numeric literal (e.g., 34, 3.14, -42)
@@ -104,6 +138,16 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
   const numericMatch = expr.match(/^-?\d*\.?\d+$/);
   if (numericMatch) {
     return JSON.stringify(prefix + expr + suffix);
+  }
+
+  // A template-literal source that is already a CSS math/var function
+  // (e.g. `calc(${x}px + 8px)`) is kept as-is rather than nested inside another
+  // template with the unit appended. Only template literals qualify: `expr` is a
+  // JS expression source, so a bare `min(size, fallback)` is a function call, not
+  // CSS text, and must still receive its unit suffix.
+  if (expr.startsWith("`") && dropsUnitAfterCssFunction(expr.slice(1))) {
+    // Drop the unit but keep any `!important`, splicing it before the closing backtick.
+    return importantPart ? `${expr.slice(0, -1)}${importantPart}\`` : expr;
   }
 
   // Use template literal for non-literal expressions

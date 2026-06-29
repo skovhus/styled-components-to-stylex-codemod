@@ -141,6 +141,52 @@ export function buildStylexValueWithStaticParts(
   ) {
     return prefix === "-" ? (j.unaryExpression("-", expr, true) as ExpressionKind) : expr;
   }
+  // A literal CSS unit suffix (e.g. the `px` in `${cond ? calc(...) : 40}px`)
+  // must not be appended to a branch that is a CSS math/var function such as
+  // `calc(...)`, or the result is invalid CSS (`calc(40px + 8px)px`). When a
+  // conditional mixes such a function branch with a bare-numeric branch,
+  // distribute the suffix into each branch so only the numeric branch receives
+  // the unit. Triggering only on math/var functions keeps this away from
+  // identifier-valued properties (e.g. `animation-name: ${...}in`), where the
+  // trailing token is part of the value rather than a unit, and needs no
+  // per-property length classification. Custom properties (`--*`) are excluded:
+  // their value is an opaque token stream where a trailing token (even after a
+  // `var()`) may be intentional (e.g. `var(--prefix)in`).
+  if (prefix === "" && !stylexProp.startsWith("--") && isRecognizedCssUnitSuffix(suffix)) {
+    // See through transparent TS wrappers (`as`, `satisfies`, `!`, parens) so a
+    // wrapped conditional or function branch is still recognized; the wrapper is
+    // restored around the rewritten value.
+    const inner = unwrapTransparentExpression(expr);
+    if (inner.type === "ConditionalExpression" && conditionalHasCssMathFunctionBranch(inner)) {
+      const distributed = {
+        ...inner,
+        consequent: buildStylexValueWithStaticParts(
+          j,
+          inner.consequent as ExpressionKind,
+          prefix,
+          suffix,
+          stylexProp,
+          buildTemplate,
+          important,
+          options,
+        ),
+        alternate: buildStylexValueWithStaticParts(
+          j,
+          inner.alternate as ExpressionKind,
+          prefix,
+          suffix,
+          stylexProp,
+          buildTemplate,
+          important,
+          options,
+        ),
+      } as ExpressionKind;
+      return rewrapTransparentExpression(expr, distributed);
+    }
+    if (isCssMathFunctionExpression(expr)) {
+      return expr;
+    }
+  }
   return buildTemplate(expr, prefix, suffix);
 }
 
@@ -309,6 +355,82 @@ export function isNumericStylexExpression(
 function isExpressionNode(value: unknown): value is ExpressionKind {
   return Boolean(
     value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string",
+  );
+}
+
+// Whether the trailing static text has the shape of a CSS unit affix — a bare
+// run of letters (`px`, `rem`, `svmin`, …) or `%`. This intentionally matches by
+// shape rather than against a fixed unit list: the only callers gate it behind a
+// CSS math/var-function branch, where appending ANY trailing token yields invalid
+// CSS, so an exhaustive unit whitelist is unnecessary (and would be a maintenance
+// hazard). Multi-token suffixes (e.g. `px !important`) do not match and are kept.
+export function isRecognizedCssUnitSuffix(suffix: string): boolean {
+  return /^[a-zA-Z%]+$/.test(suffix);
+}
+
+// A CSS math or variable function such as `calc(...)`, `min(...)`, `clamp(...)`,
+// or `var(...)`. Such a value is already a complete length, so appending a unit
+// suffix to it yields invalid CSS (`calc(40px + 8px)px`). It also never appears
+// inside identifier-valued properties (e.g. `animation-name`), which makes it an
+// unambiguous, property-agnostic trigger for distributing/dropping the suffix.
+function isCssMathFunctionExpression(node: ExpressionKind): boolean {
+  const inner = unwrapTransparentExpression(node);
+  if (
+    inner.type === "StringLiteral" ||
+    (inner.type === "Literal" && typeof inner.value === "string")
+  ) {
+    return startsWithCssValueFunction(String(inner.value));
+  }
+  if (inner.type === "TemplateLiteral") {
+    const head = inner.quasis[0]?.value.cooked ?? inner.quasis[0]?.value.raw ?? "";
+    return startsWithCssValueFunction(head);
+  }
+  return false;
+}
+
+// Transparent TS/grouping wrappers that do not change a value's runtime form.
+function isTransparentWrapper(node: ExpressionKind): boolean {
+  return (
+    node.type === "TSAsExpression" ||
+    node.type === "TSSatisfiesExpression" ||
+    node.type === "TSNonNullExpression" ||
+    node.type === "ParenthesizedExpression"
+  );
+}
+
+function unwrapTransparentExpression(node: ExpressionKind): ExpressionKind {
+  return isTransparentWrapper(node)
+    ? unwrapTransparentExpression((node as { expression: ExpressionKind }).expression)
+    : node;
+}
+
+// Rebuilds the transparent-wrapper chain of `node` around `inner`, preserving
+// the original `as`/`satisfies`/`!`/parens once the inner value is rewritten.
+function rewrapTransparentExpression(node: ExpressionKind, inner: ExpressionKind): ExpressionKind {
+  if (!isTransparentWrapper(node)) {
+    return inner;
+  }
+  return {
+    ...node,
+    expression: rewrapTransparentExpression(
+      (node as { expression: ExpressionKind }).expression,
+      inner,
+    ),
+  } as ExpressionKind;
+}
+
+export function startsWithCssValueFunction(text: string): boolean {
+  return /^\s*(?:calc|min|max|clamp|minmax|var|env)\s*\(/i.test(text);
+}
+
+function conditionalHasCssMathFunctionBranch(node: ExpressionKind): boolean {
+  const inner = unwrapTransparentExpression(node);
+  if (inner.type !== "ConditionalExpression") {
+    return isCssMathFunctionExpression(inner);
+  }
+  return (
+    conditionalHasCssMathFunctionBranch(inner.consequent as ExpressionKind) ||
+    conditionalHasCssMathFunctionBranch(inner.alternate as ExpressionKind)
   );
 }
 
