@@ -86,4 +86,20 @@ describe("buildStylexValueWithStaticParts", () => {
   it("does not append a unit suffix to a standalone calc() value", () => {
     expect(build("`calc(${x}px + 8px)`", "", "px", "height")).toBe("`calc(${x}px + 8px)`");
   });
+
+  it("keeps the suffix on an incomplete unit fragment", () => {
+    // `200m` is not a complete unit — the `s` suffix completes it to `200ms`.
+    // No branch is a complete length, so the whole conditional stays wrapped.
+    expect(build('cond ? "200m" : delay', "", "s", "transitionDuration")).toBe(
+      '`${cond ? "200m" : delay}s`',
+    );
+  });
+
+  it("does not double a complete time-unit branch", () => {
+    // `1s` already carries a complete unit, so the `s` suffix is dropped there
+    // while the numeric branch still receives it.
+    expect(build('cond ? "1s" : delay', "", "s", "transitionDuration")).toBe(
+      'cond ? "1s" : `${delay}s`',
+    );
+  });
 });

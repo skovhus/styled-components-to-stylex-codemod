@@ -384,11 +384,73 @@ function startsWithCssValueFunction(text: string): boolean {
   return /^\s*(?:calc|min|max|clamp|minmax|var|env)\s*\(/i.test(text);
 }
 
-// A unit-bearing value ends with an alphabetic unit, a percentage, or a `)`
-// that closes a CSS math function (e.g. `8px`, `100%`, `calc(... )`).
+// A unit-bearing value ends with `)` (a CSS math function), `%`, or a complete
+// recognized CSS unit token (e.g. `8px`, `1.5rem`, `200ms`). A bare alphabetic
+// tail that is NOT a complete unit (e.g. the `m` in `200m`, which still needs an
+// `s` suffix to become `200ms`) is intentionally excluded so its suffix is kept.
 function endsWithCssUnit(text: string): boolean {
-  return /[a-zA-Z%)]$/.test(text.trimEnd());
+  const trimmed = text.trimEnd();
+  if (trimmed === "") {
+    return false;
+  }
+  const lastChar = trimmed[trimmed.length - 1]!;
+  if (lastChar === ")" || lastChar === "%") {
+    return true;
+  }
+  const unit = /[a-zA-Z]+$/.exec(trimmed)?.[0]?.toLowerCase();
+  return unit !== undefined && CSS_UNITS.has(unit);
 }
+
+// Recognized CSS unit tokens (length, time, angle, frequency, resolution, and
+// flexible-length). Used to decide whether a value already carries a complete
+// unit so an adjacent unit suffix must be dropped rather than doubled.
+const CSS_UNITS = new Set([
+  "px",
+  "rem",
+  "em",
+  "ex",
+  "ch",
+  "cap",
+  "ic",
+  "lh",
+  "rlh",
+  "vw",
+  "vh",
+  "vi",
+  "vb",
+  "vmin",
+  "vmax",
+  "svw",
+  "svh",
+  "lvw",
+  "lvh",
+  "dvw",
+  "dvh",
+  "cqw",
+  "cqh",
+  "cqi",
+  "cqb",
+  "cqmin",
+  "cqmax",
+  "cm",
+  "mm",
+  "q",
+  "in",
+  "pt",
+  "pc",
+  "fr",
+  "s",
+  "ms",
+  "deg",
+  "grad",
+  "rad",
+  "turn",
+  "hz",
+  "khz",
+  "dpi",
+  "dpcm",
+  "dppx",
+]);
 
 function conditionalHasCompleteCssLengthBranch(node: ExpressionKind): boolean {
   if (node.type !== "ConditionalExpression") {
