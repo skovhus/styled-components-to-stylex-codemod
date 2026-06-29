@@ -12820,6 +12820,29 @@ export const App = () => <Box />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when an object-form attr is read by a CSS interpolation", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The CSS reads `p.transition.duration`, but the lowering only substitutes
+    // *primitive* static attrs into interpolations — so it would emit a style that
+    // reads the (omitted) caller prop and throws at runtime, instead of feeding the
+    // attr's `0.2` into the CSS the way styled-components does. Bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";

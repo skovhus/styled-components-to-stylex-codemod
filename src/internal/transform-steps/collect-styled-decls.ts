@@ -109,11 +109,16 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   // Both function- and object-form attrs bail when they carry a value we cannot
   // represent (e.g. spreads/getters, inline functions). Object-form unsupported
   // values used to fall through and silently drop the attr, which is lossy.
+  // Object/array attrs read by a CSS interpolation (`${p => p.transition.duration}`)
+  // also bail: the lowering only substitutes primitive static attrs into
+  // interpolations, so the emitted style would read the caller's prop (or throw on
+  // an omitted one) while the attr is applied separately — diverging from
+  // styled-components, which feeds the attr value into the CSS.
   const unsupportedAttrsDecls = styledDecls.filter(
     (d) =>
       !d.skipTransform &&
       (d.attrsInfo?.sourceKind === "function" || d.attrsInfo?.sourceKind === "object") &&
-      d.attrsInfo.hasUnsupportedValues,
+      (d.attrsInfo.hasUnsupportedValues || objectAttrConsumedByCss(d)),
   );
   if (unsupportedAttrsDecls.length > 0) {
     for (const d of unsupportedAttrsDecls) {
@@ -214,5 +219,76 @@ function markUniversalSelectorCssHelperConsumersSkipped(
     if (expressionsReferenceAnyPath(decl.templateExpressions, universalCssHelperNames)) {
       decl.skipTransform = true;
     }
+  }
+}
+
+type StyledDeclLike = NonNullable<TransformContext["styledDecls"]>[number];
+
+/**
+ * True when an object/array static attr's key is read via member access in a CSS
+ * interpolation (e.g. `${p => p.transition.duration}` with a `transition` object
+ * attr). The lowering only substitutes primitive static attrs into interpolations,
+ * so the emitted style would read the caller's prop (or throw on an omitted one)
+ * while the attr is applied separately — diverging from styled-components, which
+ * feeds the attr value into the CSS. These cases bail.
+ */
+function objectAttrConsumedByCss(decl: StyledDeclLike): boolean {
+  const attrsInfo = decl.attrsInfo;
+  if (attrsInfo?.sourceKind !== "object") {
+    return false;
+  }
+  const objectKeys = new Set<string>();
+  for (const [key, value] of Object.entries(attrsInfo.staticAttrs ?? {})) {
+    // jscodeshift AST nodes are loosely typed; unwrap TS casts to reach the literal.
+    let node = value as { type?: string; expression?: unknown };
+    while (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+      node = node.expression as { type?: string; expression?: unknown };
+    }
+    if (node?.type === "ObjectExpression" || node?.type === "ArrayExpression") {
+      objectKeys.add(key);
+    }
+  }
+  if (objectKeys.size === 0) {
+    return false;
+  }
+  const memberNames = new Set<string>();
+  for (const expr of decl.templateExpressions ?? []) {
+    collectMemberPropertyNames(expr, memberNames);
+  }
+  return [...objectKeys].some((key) => memberNames.has(key));
+}
+
+/** Collects non-computed member-access property names (`a.b` → "b") from an AST subtree. */
+function collectMemberPropertyNames(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectMemberPropertyNames(child, out);
+    }
+    return;
+  }
+  const n = node as Record<string, unknown>;
+  const property = n.property as { type?: string; name?: unknown } | undefined;
+  if (
+    (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+    n.computed !== true &&
+    property?.type === "Identifier" &&
+    typeof property.name === "string"
+  ) {
+    out.add(property.name);
+  }
+  for (const key of Object.keys(n)) {
+    if (
+      key === "loc" ||
+      key === "start" ||
+      key === "end" ||
+      key === "range" ||
+      key === "comments"
+    ) {
+      continue;
+    }
+    collectMemberPropertyNames(n[key], out);
   }
 }
