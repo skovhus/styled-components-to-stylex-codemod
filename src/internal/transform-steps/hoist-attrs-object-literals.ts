@@ -64,14 +64,14 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
       continue;
     }
 
-    const hoisted: Array<{ name: string; valueNode: unknown }> = [];
+    const hoisted: Array<{ name: string; key: string; valueNode: unknown }> = [];
     for (const [key, value] of Object.entries(attrsInfo.staticAttrs)) {
       if (SKIP_ATTR_KEYS.has(key) || !isReferenceLiteralNode(value)) {
         continue;
       }
       const name = uniqueName(`${decl.styleKey}${pascalCase(key)}`, reservedNames);
       reservedNames.add(name);
-      hoisted.push({ name, valueNode: value });
+      hoisted.push({ name, key, valueNode: value });
       attrsInfo.staticAttrs[key] = j.identifier(name);
     }
 
@@ -79,18 +79,63 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
       continue;
     }
 
-    const constDecls = hoisted.map(({ name, valueNode }) =>
-      j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.identifier(name),
-          valueNode as Parameters<typeof j.variableDeclarator>[1],
-        ),
-      ]),
-    );
+    const constDecls = hoisted.map(({ name, key, valueNode }) => {
+      const id = j.identifier(name);
+      // Annotate with the wrapped component's contextual prop type so the literal
+      // is not widened away from a literal-union/tuple the target prop expects
+      // (e.g. `{ type: "spring" }` or `[number, number]`).
+      const typeAnnotation = buildAttrPropTypeAnnotation(ctx, decl, key);
+      if (typeAnnotation) {
+        (id as { typeAnnotation?: unknown }).typeAnnotation = typeAnnotation;
+      }
+      return j.variableDeclaration("const", [
+        j.variableDeclarator(id, valueNode as Parameters<typeof j.variableDeclarator>[1]),
+      ]);
+    });
     insertBeforeStyledDecl(ctx, decl.localName, constDecls);
   }
 
   return CONTINUE;
+}
+
+/**
+ * Builds a type annotation that pins the hoisted const to the wrapped
+ * component's prop type, e.g. `React.ComponentPropsWithRef<typeof Base>["key"]`.
+ * Without it, lifting a literal into an unannotated `const` widens it (e.g.
+ * `{ type: "spring" }` → `{ type: string }`, `[0, 1]` → `number[]`), which can
+ * fail TypeScript when the prop expects a literal union or tuple. Returns null
+ * for JS output, polymorphic `as` overrides, or unresolvable bases.
+ */
+function buildAttrPropTypeAnnotation(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  key: string,
+): unknown {
+  const filePath = ctx.file.path;
+  if (!filePath.endsWith(".ts") && !filePath.endsWith(".tsx")) {
+    return null;
+  }
+  // With an `as` override the rendered component (and thus the prop type) differs
+  // from the base, so skip rather than risk an incorrect annotation.
+  if (decl.attrsInfo?.attrsAsTag) {
+    return null;
+  }
+  const base = decl.base;
+  const baseProps =
+    base.kind === "component"
+      ? `React.ComponentPropsWithRef<typeof ${base.ident}>`
+      : base.kind === "intrinsic"
+        ? `React.ComponentPropsWithRef<${JSON.stringify(base.tagName)}>`
+        : null;
+  if (!baseProps) {
+    return null;
+  }
+  try {
+    return ctx.j(`const _x: ${baseProps}[${JSON.stringify(key)}] = null`).get().node.program.body[0]
+      .declarations[0].id.typeAnnotation;
+  } catch {
+    return null;
+  }
 }
 
 /** True when any non-special attrs value is an object/array literal AST node. */

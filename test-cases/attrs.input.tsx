@@ -485,7 +485,9 @@ function Motion(props: {
   className?: string;
   initial?: string;
   animate?: string;
-  transition?: { duration: number };
+  // `ease` is a literal union: hoisting the attrs object must keep it from
+  // widening to `string`, so the hoisted const is annotated with this prop type.
+  transition?: { duration: number; ease?: "linear" | "easeIn" };
   keyframes?: number[];
   tabIndex?: number;
   children?: React.ReactNode;
@@ -497,6 +499,7 @@ function Motion(props: {
       data-initial={initial}
       data-animate={animate}
       data-duration={transition?.duration}
+      data-ease={transition?.ease}
       data-keyframes={keyframes?.join(",")}
       tabIndex={tabIndex}
     >
@@ -508,7 +511,7 @@ function Motion(props: {
 const AnimatedBox = styled(Motion).attrs({
   initial: "hidden",
   animate: "visible",
-  transition: { duration: 0.2 },
+  transition: { duration: 0.2, ease: "easeIn" },
   keyframes: [0, 0.5, 1],
 })`
   padding: 8px;
