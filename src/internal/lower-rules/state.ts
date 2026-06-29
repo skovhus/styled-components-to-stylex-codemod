@@ -51,6 +51,14 @@ export type RelationOverride = {
   markerVarName?: string;
   /** Local name of the imported cross-file component (child in forward, parent in reverse) */
   crossFileComponentLocalName?: string;
+  /**
+   * Immutable local names of the same-file decls this override relates, recorded at
+   * registration. Style keys can be rewritten after registration (e.g. enum/string-
+   * mapping variants rewrite `decl.styleKey` to a derived base key), so post-lowering
+   * passes resolve the decls by local name instead of the now-stale style keys.
+   */
+  childLocalName?: string;
+  parentLocalName?: string;
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;

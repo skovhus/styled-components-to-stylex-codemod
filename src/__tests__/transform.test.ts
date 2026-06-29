@@ -1537,6 +1537,67 @@ export const App = () => (
     expect(result.code).not.toContain("hoverStylesInButton");
   });
 
+  it("preserves an enum-variant reveal child when its ancestor is preserved via reference", () => {
+    // `Actions` is lowered as an enum/string-mapping variant, so finalizeDeclProcessing
+    // rewrites `decl.styleKey` (`actions` → `actionsBase`) *after* the reverse
+    // `${Card}:hover &` override was registered with the original key. The
+    // post-lowering preservation propagation must still associate that override
+    // back to `Actions` (by local name) so it is preserved alongside the
+    // reference-preserved `Card`, rather than staying converted with a dropped reveal.
+    const source = `
+import styled from "styled-components";
+
+const pickColor = (v: string) => (v === "primary" ? "crimson" : "navy");
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Actions = styled.div<{ $variant: "primary" | "secondary" }>\`
+  opacity: 0;
+  background: \${(p) => pickColor(p.$variant)};
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Card>
+      <Actions $variant="primary">A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-enumRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and the enum-variant Actions are preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // None of the enum child's StyleX keys (base/variant/reveal) may leak.
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

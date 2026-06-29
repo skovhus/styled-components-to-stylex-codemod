@@ -588,6 +588,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           jsxParentName,
         );
 
+        // Record immutable local names so post-lowering preservation propagation
+        // can resolve these decls even after finalize rewrites their style keys
+        // (e.g. an enum/string-mapping child's `decl.styleKey` becomes its base key).
+        for (const o of relationOverrides) {
+          if (o.overrideStyleKey === overrideStyleKey) {
+            o.childLocalName = decl.localName;
+            if (parentDecl) {
+              o.parentLocalName = parentDecl.localName;
+            }
+          }
+        }
+
         // For same-file no-pseudo reverse, set markerVarName on the override so
         // finalizeRelationOverrides emits stylex.when.ancestor(":is(*)", Marker).
         // This must also handle pre-existing overrides (e.g., when ${Parent}:hover &

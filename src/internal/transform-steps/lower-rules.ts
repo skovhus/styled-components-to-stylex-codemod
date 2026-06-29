@@ -540,6 +540,11 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
   }
   const isPreserved = (decl: StyledDecl): boolean =>
     decl.skipTransform || preservedNames.has(decl.localName);
+  // Prefer the immutable local name (style keys may have been rewritten after the
+  // override was registered — e.g. enum/string-mapping variants), falling back to
+  // the style key for overrides that predate local-name tagging.
+  const resolveOverrideDecl = (localName: string | undefined, styleKey: string) =>
+    (localName ? state.declByLocalName.get(localName) : undefined) ?? declByStyleKey.get(styleKey);
   let changed = true;
   while (changed) {
     changed = false;
@@ -547,8 +552,8 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
       if (override.crossFile) {
         continue;
       }
-      const ancestorDecl = declByStyleKey.get(override.parentStyleKey);
-      const childDecl = declByStyleKey.get(override.childStyleKey);
+      const ancestorDecl = resolveOverrideDecl(override.parentLocalName, override.parentStyleKey);
+      const childDecl = resolveOverrideDecl(override.childLocalName, override.childStyleKey);
       if (!ancestorDecl || !childDecl || !isPreserved(ancestorDecl) || isPreserved(childDecl)) {
         continue;
       }
