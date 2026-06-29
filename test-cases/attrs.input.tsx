@@ -476,6 +476,42 @@ const PlainTemplateTitle = styled.div.attrs({
   background-color: #fff1f2;
 `;
 
+// Pattern 17: static attrs with object/array values must be preserved (not dropped)
+// Non-style attrs that are object or array literals are hoisted verbatim onto the
+// rendered component, alongside the merged className/style.
+function Motion(props: {
+  className?: string;
+  initial?: string;
+  animate?: string;
+  transition?: { duration: number };
+  keyframes?: number[];
+  children?: React.ReactNode;
+}) {
+  const { className, initial, animate, transition, keyframes, children } = props;
+  return (
+    <div
+      className={className}
+      data-initial={initial}
+      data-animate={animate}
+      data-duration={transition?.duration}
+      data-keyframes={keyframes?.join(",")}
+    >
+      {children}
+    </div>
+  );
+}
+
+const AnimatedBox = styled(Motion).attrs({
+  initial: "hidden",
+  animate: "visible",
+  transition: { duration: 0.2 },
+  keyframes: [0, 0.5, 1],
+})`
+  padding: 8px;
+  background-color: #ede9fe;
+  color: #5b21b6;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -534,5 +570,6 @@ export const App = () => (
     <AttrsSxButton>Attrs sx</AttrsSxButton>
     <EscapedTemplateTitle>Escaped template title (hover to see)</EscapedTemplateTitle>
     <PlainTemplateTitle>Plain template title (hover to see)</PlainTemplateTitle>
+    <AnimatedBox>Animated box</AnimatedBox>
   </>
 );

@@ -178,7 +178,11 @@ function collectStyledDeclsImpl(args: {
           continue;
         }
 
-        if (isStaticAttrExpression(v, attrsParamInfo)) {
+        // Hoist static value expressions (module-scope references plus object/
+        // array literals composed of static parts) verbatim. The `style` key is
+        // intentionally excluded so the stylex extraction below stays
+        // authoritative for inline style objects.
+        if (key !== "style" && isStaticValueExpression(v, attrsParamInfo)) {
           out.staticAttrs[key] = cloneAstNode(v);
           continue;
         }
@@ -1694,6 +1698,55 @@ function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): bool
     !attrsParamInfo.rootNames.has(rootName) &&
     !attrsParamInfo.localNames.has(rootName)
   );
+}
+
+/**
+ * Returns true when `node` is a value expression that can be hoisted verbatim
+ * into the rendered JSX as an attribute value. This covers primitive literals,
+ * static references (module-scope identifiers/members), and object/array
+ * literals composed only of such hoistable parts. None of these reference the
+ * attrs callback's props, so styled-components and the inlined JSX attribute
+ * resolve them to the same value — making the hoist lossless.
+ */
+function isStaticValueExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (node.type === "TSAsExpression" || node.type === "TSSatisfiesExpression") {
+    return isStaticValueExpression(node.expression, attrsParamInfo);
+  }
+  // Primitive literals (strings, numbers, booleans, null, unary numbers, static templates, ...).
+  if (literalStaticValueFromNode(node) !== undefined) {
+    return true;
+  }
+  // Module-scope identifier / member references (e.g. an imported component).
+  if (isStaticAttrExpression(node, attrsParamInfo)) {
+    return true;
+  }
+  if (node.type === "ArrayExpression") {
+    return (node.elements ?? []).every(
+      (el: any) =>
+        // Array holes (`[,]`) are represented as null elements.
+        el == null ||
+        (el.type !== "SpreadElement" &&
+          el.type !== "RestElement" &&
+          isStaticValueExpression(el, attrsParamInfo)),
+    );
+  }
+  if (node.type === "ObjectExpression") {
+    return (node.properties ?? []).every((prop: any) => {
+      if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
+        // Spread elements, getters/setters, etc. are not safely hoistable.
+        return false;
+      }
+      // Computed keys could reference props; only accept statically-named keys.
+      if (prop.computed) {
+        return false;
+      }
+      return isStaticValueExpression(prop.value, attrsParamInfo);
+    });
+  }
+  return false;
 }
 
 function getStaticAttrExpressionRootName(node: any): string | null {

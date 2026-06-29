@@ -587,6 +587,46 @@ function AttrsSxButton(props: { children?: React.ReactNode }) {
   return <SxAwareButton {...props} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]} />;
 }
 
+// Pattern 17: static attrs with object/array values must be preserved (not dropped)
+// Non-style attrs that are object or array literals are hoisted verbatim onto the
+// rendered component, alongside the merged className/style.
+function Motion(props: {
+  className?: string;
+  initial?: string;
+  animate?: string;
+  transition?: { duration: number };
+  keyframes?: number[];
+  children?: React.ReactNode;
+}) {
+  const { className, initial, animate, transition, keyframes, children } = props;
+  return (
+    <div
+      className={className}
+      data-initial={initial}
+      data-animate={animate}
+      data-duration={transition?.duration}
+      data-keyframes={keyframes?.join(",")}
+    >
+      {children}
+    </div>
+  );
+}
+
+function AnimatedBox(props: { children?: React.ReactNode }) {
+  return (
+    <Motion
+      {...props}
+      initial="hidden"
+      animate="visible"
+      transition={{
+        duration: 0.2,
+      }}
+      keyframes={[0, 0.5, 1]}
+      {...stylex.props(styles.animatedBox)}
+    />
+  );
+}
+
 export const App = () => (
   <>
     <Input small placeholder="Small" />
@@ -649,6 +689,7 @@ export const App = () => (
     <div title="Plain template" sx={styles.plainTemplateTitle}>
       Plain template title (hover to see)
     </div>
+    <AnimatedBox>Animated box</AnimatedBox>
   </>
 );
 
@@ -876,5 +917,10 @@ const styles = stylex.create({
   plainTemplateTitle: {
     padding: 8,
     backgroundColor: "#fff1f2",
+  },
+  animatedBox: {
+    padding: 8,
+    backgroundColor: "#ede9fe",
+    color: "#5b21b6",
   },
 });
