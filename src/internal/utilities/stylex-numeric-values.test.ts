@@ -122,4 +122,12 @@ describe("buildStylexValueWithStaticParts", () => {
       '`${cond ? "var(--prefix)" : "slide-"}in`',
     );
   });
+
+  it("sees through TypeScript wrappers on a math-function branch", () => {
+    // A calc() branch wrapped in `as const` (or satisfies/!/parens) is still a
+    // complete length and must keep the suffix off, like the unwrapped form.
+    expect(build("cond ? (`calc(${h}px + 4px)` as const) : h", "", "px", "height")).toBe(
+      "cond ? (`calc(${h}px + 4px)` as const) : `${h}px`",
+    );
+  });
 });

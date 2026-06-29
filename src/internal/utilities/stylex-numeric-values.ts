@@ -368,6 +368,14 @@ function isRecognizedCssUnitSuffix(suffix: string): boolean {
 // unambiguous, property-agnostic trigger for distributing/dropping the suffix.
 function isCssMathFunctionExpression(node: ExpressionKind): boolean {
   if (
+    node.type === "TSAsExpression" ||
+    node.type === "TSSatisfiesExpression" ||
+    node.type === "TSNonNullExpression" ||
+    node.type === "ParenthesizedExpression"
+  ) {
+    return isCssMathFunctionExpression(node.expression as ExpressionKind);
+  }
+  if (
     node.type === "StringLiteral" ||
     (node.type === "Literal" && typeof node.value === "string")
   ) {
