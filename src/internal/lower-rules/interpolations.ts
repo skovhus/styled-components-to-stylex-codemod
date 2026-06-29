@@ -91,7 +91,12 @@ export type ResolveImportedValueOptions =
   | boolean
   | { allowCssCalc?: boolean; cssCalcUnit?: string; negate?: boolean };
 
-export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: string): string {
+export function wrapExprWithStaticParts(
+  expr: string,
+  prefix: string,
+  suffix: string,
+  cssProperty?: string,
+): string {
   if (!prefix && !suffix) {
     return expr;
   }
@@ -102,8 +107,17 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
     const content = stringMatch[1] ?? "";
     // A CSS math/var function (`calc(...)`) is already a complete length, so a
     // trailing unit suffix must not be appended (it would yield invalid CSS like
-    // `calc(40px + 8px)px`). Keep the value as-is in that case.
-    if (prefix === "" && isRecognizedCssUnitSuffix(suffix) && startsWithCssValueFunction(content)) {
+    // `calc(40px + 8px)px`). This requires knowing the property: custom
+    // properties (`--*`) are excluded because their value is an opaque token
+    // stream where a trailing token (even after `var()`) may be intentional, and
+    // callers that cannot supply the property keep the suffix to stay safe.
+    if (
+      prefix === "" &&
+      cssProperty !== undefined &&
+      !cssProperty.startsWith("--") &&
+      isRecognizedCssUnitSuffix(suffix) &&
+      startsWithCssValueFunction(content)
+    ) {
       return JSON.stringify(content);
     }
     // Combine into a single string literal for cleaner output
