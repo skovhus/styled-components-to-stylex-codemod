@@ -338,62 +338,151 @@ function isObjectOrArrayLiteralNode(value: unknown): boolean {
 }
 
 /**
- * Collects prop names a CSS interpolation reads: member-access properties — both
- * `p.transition` and static computed `p["transition"]` → "transition" — and
- * destructured object-pattern keys (`({ transition }) => ...` → "transition"), so
- * a prop read in any of these forms is caught.
+ * Collects the prop names a CSS interpolation reads from its props binding. A
+ * styled interpolation is a function whose first parameter is the component's
+ * props, so only reads rooted at that binding count: member accesses like
+ * `p.transition` / static computed `p["transition"]` (→ "transition") and the keys
+ * of a destructured first parameter (`({ transition }) => ...` → "transition").
+ *
+ * Reads through any other object are ignored — in particular a module-scope value
+ * that merely shares a name with an attr key (`color: ${() => palette.transition}`
+ * alongside a `transition` object attr) is not a props read, so the attr can still
+ * lower instead of forcing an over-cautious bail.
  */
 function collectCssPropReadNames(node: unknown, out: Set<string>): void {
+  const propParamNames = new Set<string>();
+  collectPropParamBindings(node, out, propParamNames, false);
+  collectPropMemberReads(node, propParamNames, out);
+}
+
+const FUNCTION_NODE_TYPES = new Set([
+  "ArrowFunctionExpression",
+  "FunctionExpression",
+  "FunctionDeclaration",
+]);
+
+const SKIP_AST_KEYS = new Set(["loc", "start", "end", "range", "comments"]);
+
+/**
+ * Records what an interpolation's props binding introduces: an Identifier first
+ * parameter (`(p) => ...` adds "p" to `propParamNames`) or the keys of a
+ * destructured first parameter (`({ transition }) => ...` adds "transition" to
+ * `out`, a direct prop read). Only the outermost function's first parameter is the
+ * props binding; parameters of nested callbacks bind something else and are skipped.
+ */
+function collectPropParamBindings(
+  node: unknown,
+  out: Set<string>,
+  propParamNames: Set<string>,
+  insideFunction: boolean,
+): void {
   if (!node || typeof node !== "object") {
     return;
   }
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectCssPropReadNames(child, out);
+      collectPropParamBindings(child, out, propParamNames, insideFunction);
     }
     return;
   }
   const n = node as Record<string, unknown>;
-  const property = n.property as { type?: string; name?: unknown; value?: unknown } | undefined;
-  if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
-    if (
-      n.computed !== true &&
-      property?.type === "Identifier" &&
-      typeof property.name === "string"
-    ) {
-      out.add(property.name);
-    } else if (
-      n.computed === true &&
-      property?.type === "StringLiteral" &&
-      typeof property.value === "string"
-    ) {
-      // Static computed read: `p["transition"]`.
-      out.add(property.value);
+  let nextInsideFunction = insideFunction;
+  if (typeof n.type === "string" && FUNCTION_NODE_TYPES.has(n.type)) {
+    if (!insideFunction) {
+      addPropParamBinding((n.params as unknown[] | undefined)?.[0], out, propParamNames);
+    }
+    nextInsideFunction = true;
+  }
+  for (const key of Object.keys(n)) {
+    if (SKIP_AST_KEYS.has(key)) {
+      continue;
+    }
+    collectPropParamBindings(n[key], out, propParamNames, nextInsideFunction);
+  }
+}
+
+/**
+ * Registers an interpolation's first parameter as the props binding: an Identifier
+ * name goes to `propParamNames`, a destructured object pattern's keys go straight to
+ * `out`. Defaulted params (`(p = {}) => ...`) wrap the binding in an
+ * `AssignmentPattern`, so unwrap to the underlying target first.
+ */
+function addPropParamBinding(param: unknown, out: Set<string>, propParamNames: Set<string>): void {
+  let target = param as { type?: string; left?: unknown; name?: unknown } | undefined;
+  while (target?.type === "AssignmentPattern") {
+    target = target.left as { type?: string; left?: unknown; name?: unknown } | undefined;
+  }
+  if (target?.type === "Identifier" && typeof target.name === "string") {
+    propParamNames.add(target.name);
+  } else if (target?.type === "ObjectPattern") {
+    addObjectPatternKeys(target, out);
+  }
+}
+
+/** Adds the static (non-computed) keys of an object destructuring pattern to `out`. */
+function addObjectPatternKeys(pattern: unknown, out: Set<string>): void {
+  const properties = (pattern as { properties?: Array<Record<string, unknown>> }).properties ?? [];
+  for (const prop of properties) {
+    if (prop?.computed === true) {
+      continue;
+    }
+    const key = prop?.key as { type?: string; name?: unknown; value?: unknown } | undefined;
+    if (key?.type === "Identifier" && typeof key.name === "string") {
+      out.add(key.name);
+    } else if (key?.type === "StringLiteral" && typeof key.value === "string") {
+      out.add(key.value);
     }
   }
-  if (n.type === "ObjectPattern") {
-    for (const prop of (n.properties as Array<Record<string, unknown>>) ?? []) {
-      if (prop?.computed === true) {
-        continue;
-      }
-      const key = prop?.key as { type?: string; name?: unknown; value?: unknown } | undefined;
-      if (key?.type === "Identifier" && typeof key.name === "string") {
-        out.add(key.name);
-      } else if (key?.type === "StringLiteral" && typeof key.value === "string") {
-        out.add(key.value);
+}
+
+/**
+ * Adds an `out` entry for every member read rooted at a props binding —
+ * `p.transition` and static computed `p["transition"]` (both → "transition") where
+ * `p` is a name in `propParamNames`. Reads through any other object are ignored.
+ */
+function collectPropMemberReads(
+  node: unknown,
+  propParamNames: ReadonlySet<string>,
+  out: Set<string>,
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectPropMemberReads(child, propParamNames, out);
+    }
+    return;
+  }
+  const n = node as Record<string, unknown>;
+  if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+    const object = n.object as { type?: string; name?: unknown } | undefined;
+    if (
+      object?.type === "Identifier" &&
+      typeof object.name === "string" &&
+      propParamNames.has(object.name)
+    ) {
+      const property = n.property as { type?: string; name?: unknown; value?: unknown } | undefined;
+      if (
+        n.computed !== true &&
+        property?.type === "Identifier" &&
+        typeof property.name === "string"
+      ) {
+        out.add(property.name);
+      } else if (
+        n.computed === true &&
+        property?.type === "StringLiteral" &&
+        typeof property.value === "string"
+      ) {
+        // Static computed read: `p["transition"]`.
+        out.add(property.value);
       }
     }
   }
   for (const key of Object.keys(n)) {
-    if (
-      key === "loc" ||
-      key === "start" ||
-      key === "end" ||
-      key === "range" ||
-      key === "comments"
-    ) {
+    if (SKIP_AST_KEYS.has(key)) {
       continue;
     }
-    collectCssPropReadNames(n[key], out);
+    collectPropMemberReads(n[key], propParamNames, out);
   }
 }

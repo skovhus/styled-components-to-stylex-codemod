@@ -145,6 +145,13 @@ function buildAttrPropTypeAnnotation(
   if (!filePath.endsWith(".ts") && !filePath.endsWith(".tsx")) {
     return null;
   }
+  // Non-identifier keys (e.g. `data-config`, `aria-*`) are JSX-only attributes that
+  // a component's props type need not declare, so `Props["data-config"]` fails to
+  // type-check even when `<div data-config={...} />` is valid. They also accept any
+  // value, so there is no literal-widening to guard — skip the annotation.
+  if (!/^[A-Za-z_$][\w$]*$/.test(key)) {
+    return null;
+  }
   // Resolve the component this decl actually renders, honoring polymorphic `as`
   // overrides (its own and any inherited from a local base) and flattened
   // `styled(Local)` chains. The hoisted value is passed to that rendered

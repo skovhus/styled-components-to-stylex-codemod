@@ -12756,6 +12756,29 @@ export const App = () => <InheritsAsBox>x</InheritsAsBox>;
     expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
   });
 
+  it("omits the literal-widening annotation when a hoisted attr key is not a valid identifier", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ "data-config": { mode: "compact" } })\`
+  color: red;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `data-config` is a JSX-only attribute, so indexing the props type with it
+    // (`Props["data-config"]`) does not type-check even though `<div data-config />`
+    // is valid. Such keys also accept any value, so there is no literal to widen —
+    // hoist the const without a type annotation rather than emit an unindexable one.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("data-config={boxDataConfig}");
+    expect(result.code).not.toContain('["data-config"]');
+  });
+
   it("hoists an object-form `sx` literal to preserve its reference identity", () => {
     const source = `
 import * as React from "react";
@@ -12976,6 +12999,31 @@ export const App = () => <Box />;
     // conflict as `p.transition`, so it must be detected too.
     expect(result.code).toBeNull();
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("does not bail when CSS reads an unrelated object sharing the attr's key name", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const palette = { transition: "blue" };
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: \${palette.transition};
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `palette.transition` is a member read of an unrelated module-scope object, not
+    // of the component's props, so it does not consume the `transition` attr. The
+    // static color lowers and the object attr hoists instead of an over-cautious bail.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("color: palette.transition");
+    expect(result.code).toContain("transition={boxTransition}");
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
   });
 
   it("unwraps defaulted object-pattern attrs parameters", () => {
