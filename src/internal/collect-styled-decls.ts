@@ -348,6 +348,14 @@ function collectStyledDeclsImpl(args: {
         props.add(inv.jsxProp);
       }
     }
+    // Object/array attrs literals are hoisted to a module-scope const (for stable
+    // reference identity) and, per styled-components semantics, override caller
+    // props. Both require a wrapper: the direct-inline path only adds a static attr
+    // when the call site omits it, which would drop the override and leave the
+    // hoisted const orphaned. Intrinsic bases otherwise inline static attrs.
+    if (attrsHasObjectOrArrayLiteral(attrsInfo)) {
+      return true;
+    }
     // If attrs depend on transient props ($...), emit a wrapper so we can consume those props
     // (and avoid forwarding them to the DOM) without trying to specialize per callsite.
     return [...props].some((p) => p.startsWith("$"));
@@ -1791,6 +1799,26 @@ function isStaticValueExpression(node: any, attrsParamInfo: AttrsParamInfo): boo
       }
       return isStaticValueExpression(prop.value, attrsParamInfo);
     });
+  }
+  return false;
+}
+
+/**
+ * True when any collected static attr value is an object/array literal node —
+ * i.e. a value the hoist step lifts to a module const. Such attrs force a wrapper
+ * (see `shouldForceWrapperForAttrs`) so the hoisted const is referenced and the
+ * styled-components override of caller props is preserved. Mirrors the hoist
+ * step's `isReferenceLiteralNode`, including TS-cast unwrapping.
+ */
+function attrsHasObjectOrArrayLiteral(attrsInfo: StyledDecl["attrsInfo"]): boolean {
+  for (const value of Object.values(attrsInfo?.staticAttrs ?? {})) {
+    let node: any = value;
+    while (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+      node = node.expression;
+    }
+    if (node?.type === "ObjectExpression" || node?.type === "ArrayExpression") {
+      return true;
+    }
   }
   return false;
 }

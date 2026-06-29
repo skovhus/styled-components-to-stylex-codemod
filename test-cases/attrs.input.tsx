@@ -589,6 +589,19 @@ const AsOverrideBox = styled(Motion).attrs({
   color: #9d174d;
 `;
 
+// Pattern 18: object-form attrs on an *intrinsic* element. styled-components
+// evaluates the object once and its attrs override caller props, so the codemod
+// emits a wrapper (rather than inlining the element) — the hoisted const is
+// referenced and the attr is applied with override semantics, instead of leaving
+// an orphaned hoist and dropping the override on the direct-inline path.
+const HtmlBox = styled.div.attrs({
+  dangerouslySetInnerHTML: { __html: "<b>Bold</b> and normal" },
+})`
+  padding: 8px;
+  background-color: #f0fdfa;
+  color: #134e4a;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -652,5 +665,6 @@ export const App = () => (
     <TabbableAnimatedBox>Tabbable animated box</TabbableAnimatedBox>
     <ChainedMotionBox>Chained motion box</ChainedMotionBox>
     <AsOverrideBox>As override box</AsOverrideBox>
+    <HtmlBox />
   </>
 );
