@@ -130,4 +130,12 @@ describe("buildStylexValueWithStaticParts", () => {
       "cond ? (`calc(${h}px + 4px)` as const) : `${h}px`",
     );
   });
+
+  it("sees through a TypeScript wrapper around the whole conditional", () => {
+    // The suffix is distributed inside the wrapped ternary and the `as` wrapper
+    // is restored around the rewritten value.
+    expect(build("(cond ? `calc(${h}px + 4px)` : h) as string | number", "", "px", "height")).toBe(
+      "(cond ? `calc(${h}px + 4px)` : `${h}px`) as string | number",
+    );
+  });
 });

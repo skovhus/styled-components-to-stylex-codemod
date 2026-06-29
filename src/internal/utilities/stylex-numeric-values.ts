@@ -153,12 +153,16 @@ export function buildStylexValueWithStaticParts(
   // their value is an opaque token stream where a trailing token (even after a
   // `var()`) may be intentional (e.g. `var(--prefix)in`).
   if (prefix === "" && !stylexProp.startsWith("--") && isRecognizedCssUnitSuffix(suffix)) {
-    if (expr.type === "ConditionalExpression" && conditionalHasCssMathFunctionBranch(expr)) {
-      return {
-        ...expr,
+    // See through transparent TS wrappers (`as`, `satisfies`, `!`, parens) so a
+    // wrapped conditional or function branch is still recognized; the wrapper is
+    // restored around the rewritten value.
+    const inner = unwrapTransparentExpression(expr);
+    if (inner.type === "ConditionalExpression" && conditionalHasCssMathFunctionBranch(inner)) {
+      const distributed = {
+        ...inner,
         consequent: buildStylexValueWithStaticParts(
           j,
-          expr.consequent as ExpressionKind,
+          inner.consequent as ExpressionKind,
           prefix,
           suffix,
           stylexProp,
@@ -168,7 +172,7 @@ export function buildStylexValueWithStaticParts(
         ),
         alternate: buildStylexValueWithStaticParts(
           j,
-          expr.alternate as ExpressionKind,
+          inner.alternate as ExpressionKind,
           prefix,
           suffix,
           stylexProp,
@@ -177,6 +181,7 @@ export function buildStylexValueWithStaticParts(
           options,
         ),
       } as ExpressionKind;
+      return rewrapTransparentExpression(expr, distributed);
     }
     if (isCssMathFunctionExpression(expr)) {
       return expr;
@@ -367,25 +372,49 @@ export function isRecognizedCssUnitSuffix(suffix: string): boolean {
 // inside identifier-valued properties (e.g. `animation-name`), which makes it an
 // unambiguous, property-agnostic trigger for distributing/dropping the suffix.
 function isCssMathFunctionExpression(node: ExpressionKind): boolean {
+  const inner = unwrapTransparentExpression(node);
   if (
+    inner.type === "StringLiteral" ||
+    (inner.type === "Literal" && typeof inner.value === "string")
+  ) {
+    return startsWithCssValueFunction(String(inner.value));
+  }
+  if (inner.type === "TemplateLiteral") {
+    const head = inner.quasis[0]?.value.cooked ?? inner.quasis[0]?.value.raw ?? "";
+    return startsWithCssValueFunction(head);
+  }
+  return false;
+}
+
+// Transparent TS/grouping wrappers that do not change a value's runtime form.
+function isTransparentWrapper(node: ExpressionKind): boolean {
+  return (
     node.type === "TSAsExpression" ||
     node.type === "TSSatisfiesExpression" ||
     node.type === "TSNonNullExpression" ||
     node.type === "ParenthesizedExpression"
-  ) {
-    return isCssMathFunctionExpression(node.expression as ExpressionKind);
+  );
+}
+
+function unwrapTransparentExpression(node: ExpressionKind): ExpressionKind {
+  return isTransparentWrapper(node)
+    ? unwrapTransparentExpression((node as { expression: ExpressionKind }).expression)
+    : node;
+}
+
+// Rebuilds the transparent-wrapper chain of `node` around `inner`, preserving
+// the original `as`/`satisfies`/`!`/parens once the inner value is rewritten.
+function rewrapTransparentExpression(node: ExpressionKind, inner: ExpressionKind): ExpressionKind {
+  if (!isTransparentWrapper(node)) {
+    return inner;
   }
-  if (
-    node.type === "StringLiteral" ||
-    (node.type === "Literal" && typeof node.value === "string")
-  ) {
-    return startsWithCssValueFunction(String(node.value));
-  }
-  if (node.type === "TemplateLiteral") {
-    const head = node.quasis[0]?.value.cooked ?? node.quasis[0]?.value.raw ?? "";
-    return startsWithCssValueFunction(head);
-  }
-  return false;
+  return {
+    ...node,
+    expression: rewrapTransparentExpression(
+      (node as { expression: ExpressionKind }).expression,
+      inner,
+    ),
+  } as ExpressionKind;
 }
 
 export function startsWithCssValueFunction(text: string): boolean {
@@ -393,12 +422,13 @@ export function startsWithCssValueFunction(text: string): boolean {
 }
 
 function conditionalHasCssMathFunctionBranch(node: ExpressionKind): boolean {
-  if (node.type !== "ConditionalExpression") {
-    return isCssMathFunctionExpression(node);
+  const inner = unwrapTransparentExpression(node);
+  if (inner.type !== "ConditionalExpression") {
+    return isCssMathFunctionExpression(inner);
   }
   return (
-    conditionalHasCssMathFunctionBranch(node.consequent as ExpressionKind) ||
-    conditionalHasCssMathFunctionBranch(node.alternate as ExpressionKind)
+    conditionalHasCssMathFunctionBranch(inner.consequent as ExpressionKind) ||
+    conditionalHasCssMathFunctionBranch(inner.alternate as ExpressionKind)
   );
 }
 
