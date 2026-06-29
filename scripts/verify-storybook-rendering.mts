@@ -267,8 +267,14 @@ const baseUrl = `http://127.0.0.1:${port}`;
 // Launch browser (auto-install Chromium if needed)
 // ---------------------------------------------------------------------------
 let browser;
+// Allow pointing at a pre-installed Chromium (e.g. CI/sandbox images that ship one
+// and disable browser downloads) via PLAYWRIGHT_CHROMIUM_EXECUTABLE.
+const preinstalledChromium = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    ...(preinstalledChromium ? { executablePath: preinstalledChromium } : {}),
+  });
 } catch {
   console.log("Installing Playwright Chromium browser...");
   execSync("npx playwright install --with-deps chromium", {

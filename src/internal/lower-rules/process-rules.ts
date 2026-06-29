@@ -33,6 +33,7 @@ import {
   setStyleObjectValue,
 } from "./utils.js";
 import { cssValueIsImportant } from "./important-values.js";
+import { extractScalarDefault } from "./box-shorthand-conflicts.js";
 import {
   getFirstAncestorPseudo,
   copyWrittenPropsToRemainingAncestorPseudoBuckets,
@@ -109,6 +110,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     cssHelperPropValues.has(propName)
       ? getComposedDefaultValue(propName)
       : (ctx.getWrappedComponentBaseDefaultValue(propName) ?? null);
+
+  // Resolves the `default` entry for a freshly-created condition bucket (pseudo/media)
+  // from the property's current base value. When the base value is itself a condition
+  // map (e.g. an earlier computed `@container` rule already wrapped the prop into
+  // `{ default, __computedKeys }`), we unwrap to its scalar default so the bucket never
+  // captures a live reference to the map it will later be merged into — that reference
+  // would otherwise become a `default → self` cycle during `mergeConditionBucket`.
+  const getExistingConditionDefault = (propName: string): unknown => {
+    const existingVal = (styleObj as Record<string, unknown>)[propName];
+    return existingVal !== undefined
+      ? extractScalarDefault(existingVal)
+      : getConditionDefaultValue(propName);
+  };
 
   // Bails the current declaration and records an unsupported-selector warning at the
   // selector's source location. Centralizes the markBail + warnings.push idiom used
@@ -1376,9 +1390,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const existing = perPropMedia[prop]!;
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
-            const existingVal = (styleObj as Record<string, unknown>)[prop];
-            existing.default =
-              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+            existing.default = getExistingConditionDefault(prop);
           }
           const current = existing[media];
           const mediaMap =
@@ -1395,9 +1407,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const existing = perPropPseudo[prop]!;
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
-            const existingVal = (styleObj as Record<string, unknown>)[prop];
-            existing.default =
-              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+            existing.default = getExistingConditionDefault(prop);
           }
           for (const ps of pseudos) {
             const current = existing[ps];
@@ -1502,9 +1512,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const existing = perPropMedia[prop]!;
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          existing.default =
-            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+          existing.default = getExistingConditionDefault(prop);
         }
         const currentMediaValue = existing[media];
         if (
@@ -1566,9 +1574,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const existing = perPropPseudo[prop]!;
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          existing.default =
-            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+          existing.default = getExistingConditionDefault(prop);
         }
         for (const ps of pseudos) {
           existing[ps] = value;
