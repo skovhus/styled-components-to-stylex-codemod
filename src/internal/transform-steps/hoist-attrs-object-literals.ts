@@ -30,7 +30,10 @@ const SKIP_ATTR_KEYS = new Set(["style", "sx", "as", "forwardedAs"]);
 
 export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult {
   const { j } = ctx;
-  const decls = (ctx.styledDecls ?? []) as StyledDecl[];
+  // Skip declarations partial migration is leaving unchanged: they keep their
+  // original styled source, so hoisting would insert unused consts and the
+  // multi-declarator bail must not fire for a component we are not rewriting.
+  const decls = (ctx.styledDecls ?? []).filter((d) => !d.skipTransform) as StyledDecl[];
   const declsWithLiteralAttrs = decls.filter(hasReferenceLiteralAttr);
   if (declsWithLiteralAttrs.length === 0) {
     return CONTINUE;

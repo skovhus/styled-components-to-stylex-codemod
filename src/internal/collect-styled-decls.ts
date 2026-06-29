@@ -291,7 +291,9 @@ function collectStyledDeclsImpl(args: {
         if (ret?.argument?.type === "ObjectExpression") {
           fillFromObject(ret.argument, {
             ...attrsParamInfo,
-            localNames: collectBlockLocalNames(body),
+            // Merge (not replace) so nested param destructuring bindings collected
+            // by getAttrsParamInfo are kept alongside block-local declarations.
+            localNames: new Set([...attrsParamInfo.localNames, ...collectBlockLocalNames(body)]),
           });
           return out;
         }
