@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-BWoiS3in.js";t();var n=e();function r(e){return(0,n.jsx)(`div`,{...e,className:`x78zum5 xdt5ytf xou54vl xfawy5m xwtm24k`})}function i(){return(0,n.jsx)(`div`,{children:`Exported only`})}export{i as App,r as Container};
