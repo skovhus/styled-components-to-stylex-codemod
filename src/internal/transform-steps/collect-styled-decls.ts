@@ -109,22 +109,32 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   // Both function- and object-form attrs bail when they carry a value we cannot
   // represent (e.g. spreads/getters, inline functions). Object-form unsupported
   // values used to fall through and silently drop the attr, which is lossy.
-  const unsupportedAttrsDecl = styledDecls.find(
+  const unsupportedAttrsDecls = styledDecls.filter(
     (d) =>
       !d.skipTransform &&
       (d.attrsInfo?.sourceKind === "function" || d.attrsInfo?.sourceKind === "object") &&
       d.attrsInfo.hasUnsupportedValues,
   );
-  if (unsupportedAttrsDecl) {
-    ctx.warnings.push({
-      severity: "warning",
-      type:
-        unsupportedAttrsDecl.attrsInfo?.sourceKind === "object"
-          ? "Unsupported .attrs() object value"
-          : "Unsupported .attrs() callback pattern",
-      loc: unsupportedAttrsDecl.loc,
-    });
-    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  if (unsupportedAttrsDecls.length > 0) {
+    for (const d of unsupportedAttrsDecls) {
+      ctx.warnings.push({
+        severity: "warning",
+        type:
+          d.attrsInfo?.sourceKind === "object"
+            ? "Unsupported .attrs() object value"
+            : "Unsupported .attrs() callback pattern",
+        loc: d.loc,
+      });
+    }
+    // Under partial migration, preserve only the offending declarations so
+    // convertible siblings still migrate; otherwise bail the whole file.
+    if (ctx.options.allowPartialMigration === true) {
+      for (const d of unsupportedAttrsDecls) {
+        d.skipTransform = true;
+      }
+    } else {
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
   }
 
   // If we didn't find any styled declarations but performed other edits (e.g. keyframes conversion),
