@@ -1316,6 +1316,67 @@ export const App = () => (
     );
   });
 
+  it("preserves a child reveal whose ancestor stays styled-components without leaking a dead style", () => {
+    // `Card` has an unsupported descendant selector and stays as styled-components,
+    // so it can never render the marker that `Actions`'s `${Card}:hover &` reveal
+    // depends on. `Actions` must be preserved too — including its dynamic prop-based
+    // `gap` style — so no unused StyleX style leaks into the converted `Footer` output.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Card = styled.div\`
+  padding: 8px;
+
+  & span.label {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div<{ $gap: number }>\`
+  opacity: 0;
+  gap: \${(p) => p.$gap}px;
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <span className="label">Label</span>
+    <Actions $gap={4}>Actions</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-childReveal.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer converts to StyleX.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and Actions are preserved as styled-components so the original
+    // `${Card}:hover &` reveal keeps working natively.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved child: neither the reveal override,
+    // an unmarked when.ancestor(), nor the dynamic prop style may appear.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    // Clear warning naming the preserved child and its ancestor.
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

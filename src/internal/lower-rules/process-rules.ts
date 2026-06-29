@@ -4,7 +4,7 @@
  */
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningType } from "../logger.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, type WarningType } from "../logger.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
@@ -118,12 +118,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     type: WarningType,
     rule: (typeof decl.rules)[number],
     warnDecl: StyledDecl = decl,
+    context?: Record<string, unknown>,
   ): void => {
     state.markBail();
     warnings.push({
       severity: "warning",
       type,
       loc: computeSelectorWarningLoc(warnDecl.loc, warnDecl.rawCss, rule.selector),
+      ...(context ? { context } : {}),
     });
   };
 
@@ -509,6 +511,27 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           : undefined;
         if (!parentDecl && !crossFileParent) {
           bailWithSelectorWarning("Unsupported selector: unknown component selector", rule);
+          break;
+        }
+
+        // The hovered ancestor was preserved as styled-components (it hit an
+        // unsupported pattern and was skipped). A reverse reveal depends on that
+        // ancestor rendering a StyleX marker (`stylex.defaultMarker()` matched by
+        // `stylex.when.ancestor()`), which a preserved styled-component cannot do.
+        // Preserve this declaring child too: keeping both as styled-components
+        // retains the original reveal and avoids emitting an unreachable
+        // `stylex.when.ancestor()` style. The per-decl skip rolls back everything
+        // this decl produced, so no orphaned style leaks.
+        //
+        // This only fires for same-file ancestors (`parentDecl`); cross-file
+        // reveals go through `crossFileParent` and are wired by the consumer
+        // patcher. A same-file ancestor referenced via `${Ancestor}` is always
+        // declared before this child, so its skip state is already settled here.
+        if (parentDecl?.skipTransform) {
+          bailWithSelectorWarning(PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, rule, decl, {
+            child: decl.localName,
+            ancestor: parentDecl.localName,
+          });
           break;
         }
 
