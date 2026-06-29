@@ -232,8 +232,24 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     // after-base css mixin in postProcessAfterBaseMixins). Pruning deletes the
     // ancestor's relation overrides, so the propagation must traverse those edges
     // first; otherwise the child would stay converted with the reveal dropped.
-    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
-    preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
+    // Combined fixpoint of two propagations until the preserved set stabilizes:
+    //   (a) a preserved/skipped decl preserves the components its template
+    //       references as selectors (collectPreservedReferencedStyledDecls), and
+    //   (b) a preserved/skipped reveal *ancestor* preserves its reveal children
+    //       (preserveReverseRevealChildrenOfPreservedAncestors).
+    // They feed each other: a newly-preserved reveal child may itself interpolate
+    // another component (e.g. a second `${Panel}:hover &` reveal) whose ancestor
+    // must also be preserved, so re-scan its template until nothing new is added.
+    let prevPreservedCount = -1;
+    while (preservedReferencedStyledDecls.size !== prevPreservedCount) {
+      prevPreservedCount = preservedReferencedStyledDecls.size;
+      preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(
+        state,
+        ctx.cssLocal,
+        preservedReferencedStyledDecls,
+      );
+      preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
+    }
     pruneSkippedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
@@ -596,9 +612,10 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
 function collectPreservedReferencedStyledDecls(
   state: LowerRulesState,
   cssLocal: string | undefined,
+  initialPreserved: Set<string> = new Set(),
 ): Set<string> {
   const { styledDecls } = state;
-  const preservedNames = new Set<string>();
+  const preservedNames = new Set<string>(initialPreserved);
   const componentNames = new Set(
     styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
   );

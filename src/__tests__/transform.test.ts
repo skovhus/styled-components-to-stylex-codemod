@@ -1488,6 +1488,65 @@ export const App = () => (
     expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
   });
 
+  it("preserves the second reveal ancestor of a newly preserved reveal child", () => {
+    // A skipped sibling preserves `Card`; `Actions` has two reverse reveals,
+    // `${Card}:hover &` and `${Panel}:hover &`. Preserving `Actions` (via the Card
+    // reveal) leaves its template interpolating `${Panel}`, so `Panel` must be
+    // preserved too — the preservation passes run as a combined fixpoint that
+    // re-scans newly preserved children's templates for further selector refs.
+    const source = `
+import styled from "styled-components";
+
+const Card = styled.div\`padding: 8px;\`;
+const Panel = styled.div\`margin: 4px;\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${Panel}:hover & {
+    opacity: 0.5;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions>A</Actions>
+    </Card>
+    <Panel>
+      <Actions>A2</Actions>
+    </Panel>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-secondRevealAncestor.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card, Panel (both reveal ancestors) and Actions all stay styled-components,
+    // so `Actions`'s `${Card}`/`${Panel}` selectors keep valid targets.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Panel\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No dead StyleX entries for the preserved ancestors/child.
+    expect(result.code).not.toMatch(/\b(panel|card|actions)[A-Za-z0-9]*:/);
+    expect(result.code).not.toContain("when.ancestor");
+  });
+
   it("prunes derived after-base mixin keys of a component preserved via reference", () => {
     // `Button` composes an after-base css mixin with a contextual (`&:hover`)
     // override, which `postProcessAfterBaseMixins` lowers into a per-use derived
