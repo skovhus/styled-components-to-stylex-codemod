@@ -261,7 +261,12 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
     const { prefix, suffix } = extractStaticPartsForDecl(d);
     // Preserve !important by appending it to the suffix
     const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
-    const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
+    const wrappedExpr = wrapExprWithStaticParts(
+      res.expr,
+      prefix,
+      effectiveSuffix,
+      (d.property ?? "").trim(),
+    );
     const cssValueTextForClassification =
       prefix || effectiveSuffix ? wrappedExpr : res.cssValueText;
 

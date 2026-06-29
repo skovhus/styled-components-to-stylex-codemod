@@ -27,4 +27,18 @@ describe("wrapExprWithStaticParts", () => {
     // it conservatively preserves it.
     expect(wrapExprWithStaticParts('"calc(40px + 8px)"', "", "px")).toBe('"calc(40px + 8px)px"');
   });
+
+  it("drops the suffix for any unit-shaped token, not just a fixed list", () => {
+    // `svmin` (and other viewport units) need no whitelist entry — the suffix is
+    // dropped because the value is a complete CSS math function.
+    expect(wrapExprWithStaticParts('"calc(100% - 1rem)"', "", "svmin", "width")).toBe(
+      '"calc(100% - 1rem)"',
+    );
+  });
+
+  it("keeps a template-literal calc source as-is instead of appending the suffix", () => {
+    expect(wrapExprWithStaticParts("`calc(${x}px + 8px)`", "", "px", "height")).toBe(
+      "`calc(${x}px + 8px)`",
+    );
+  });
 });

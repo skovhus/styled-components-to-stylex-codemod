@@ -101,23 +101,24 @@ export function wrapExprWithStaticParts(
     return expr;
   }
 
+  // A CSS math/var function (`calc(...)`) is already a complete length, so a
+  // trailing unit suffix must not be appended (it would yield invalid CSS like
+  // `calc(40px + 8px)px`). This requires knowing the property: custom properties
+  // (`--*`) are excluded because their value is an opaque token stream where a
+  // trailing token (even after `var()`) may be intentional, and callers that
+  // cannot supply the property keep the suffix to stay safe.
+  const dropsUnitAfterCssFunction = (content: string): boolean =>
+    prefix === "" &&
+    cssProperty !== undefined &&
+    !cssProperty.startsWith("--") &&
+    isRecognizedCssUnitSuffix(suffix) &&
+    startsWithCssValueFunction(content);
+
   // Check if expr is a string literal (matches "..." or '...')
   const stringMatch = expr.match(/^["'](.*)["']$/);
   if (stringMatch) {
     const content = stringMatch[1] ?? "";
-    // A CSS math/var function (`calc(...)`) is already a complete length, so a
-    // trailing unit suffix must not be appended (it would yield invalid CSS like
-    // `calc(40px + 8px)px`). This requires knowing the property: custom
-    // properties (`--*`) are excluded because their value is an opaque token
-    // stream where a trailing token (even after `var()`) may be intentional, and
-    // callers that cannot supply the property keep the suffix to stay safe.
-    if (
-      prefix === "" &&
-      cssProperty !== undefined &&
-      !cssProperty.startsWith("--") &&
-      isRecognizedCssUnitSuffix(suffix) &&
-      startsWithCssValueFunction(content)
-    ) {
+    if (dropsUnitAfterCssFunction(content)) {
       return JSON.stringify(content);
     }
     // Combine into a single string literal for cleaner output
@@ -129,6 +130,13 @@ export function wrapExprWithStaticParts(
   const numericMatch = expr.match(/^-?\d*\.?\d+$/);
   if (numericMatch) {
     return JSON.stringify(prefix + expr + suffix);
+  }
+
+  // A template-literal or bare expression source that is already a CSS math/var
+  // function (e.g. `calc(${x}px + 8px)`) is kept as-is rather than nested inside
+  // another template with the unit appended.
+  if (dropsUnitAfterCssFunction(expr.replace(/^`/, ""))) {
+    return expr;
   }
 
   // Use template literal for non-literal expressions

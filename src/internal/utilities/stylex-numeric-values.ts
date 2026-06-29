@@ -358,12 +358,14 @@ function isExpressionNode(value: unknown): value is ExpressionKind {
   );
 }
 
-// The trailing static text after an interpolation is treated as a CSS unit only
-// when it is a recognized unit token (`px`, `rem`, `%`, …). Arbitrary trailing
-// text (e.g. `!important` modifiers or identifier fragments) must never trigger
-// suffix splitting.
+// Whether the trailing static text has the shape of a CSS unit affix — a bare
+// run of letters (`px`, `rem`, `svmin`, …) or `%`. This intentionally matches by
+// shape rather than against a fixed unit list: the only callers gate it behind a
+// CSS math/var-function branch, where appending ANY trailing token yields invalid
+// CSS, so an exhaustive unit whitelist is unnecessary (and would be a maintenance
+// hazard). Multi-token suffixes (e.g. `px !important`) do not match and are kept.
 export function isRecognizedCssUnitSuffix(suffix: string): boolean {
-  return suffix === "%" || (/^[a-zA-Z]+$/.test(suffix) && CSS_UNITS.has(suffix.toLowerCase()));
+  return /^[a-zA-Z%]+$/.test(suffix);
 }
 
 // A CSS math or variable function such as `calc(...)`, `min(...)`, `clamp(...)`,
@@ -431,57 +433,6 @@ function conditionalHasCssMathFunctionBranch(node: ExpressionKind): boolean {
     conditionalHasCssMathFunctionBranch(inner.alternate as ExpressionKind)
   );
 }
-
-// Recognized CSS unit tokens (length, time, angle, frequency, resolution, and
-// flexible-length). Used to decide whether a trailing suffix is an authored CSS
-// unit at all.
-const CSS_UNITS = new Set([
-  "px",
-  "rem",
-  "em",
-  "ex",
-  "ch",
-  "cap",
-  "ic",
-  "lh",
-  "rlh",
-  "vw",
-  "vh",
-  "vi",
-  "vb",
-  "vmin",
-  "vmax",
-  "svw",
-  "svh",
-  "lvw",
-  "lvh",
-  "dvw",
-  "dvh",
-  "cqw",
-  "cqh",
-  "cqi",
-  "cqb",
-  "cqmin",
-  "cqmax",
-  "cm",
-  "mm",
-  "q",
-  "in",
-  "pt",
-  "pc",
-  "fr",
-  "s",
-  "ms",
-  "deg",
-  "grad",
-  "rad",
-  "turn",
-  "hz",
-  "khz",
-  "dpi",
-  "dpcm",
-  "dppx",
-]);
 
 function memberExpressionRootIdentifier(value: ExpressionKind): string | null {
   if (value.type === "Identifier") {

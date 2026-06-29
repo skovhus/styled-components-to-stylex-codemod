@@ -822,6 +822,7 @@ export function createCssHelperResolver(args: {
                   callResolved.exprString,
                   prefix,
                   suffix,
+                  (d.property ?? "").trim(),
                 );
                 const templateAst = parseExpr(wrappedExpr);
                 if (templateAst) {
@@ -883,6 +884,7 @@ export function createCssHelperResolver(args: {
             branchResolved.exprString,
             branchStaticParts.prefix,
             branchStaticParts.suffix,
+            (d.property ?? "").trim(),
           );
           const ast = parseExpr(wrappedExpr);
           if (!ast) {
@@ -1068,7 +1070,12 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Create a template literal string using the shared helper (same logic as top-level)
-            const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
+            const wrappedExpr = wrapExprWithStaticParts(
+              resolved.exprString,
+              prefix,
+              suffix,
+              (d.property ?? "").trim(),
+            );
             const templateAst = parseExpr(wrappedExpr);
             if (templateAst) {
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
