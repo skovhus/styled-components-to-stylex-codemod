@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-TGGffECc.js";t();var n=e();function r(e){return(0,n.jsx)(`div`,{...e,className:`x15neal0 x1tamke2 x1ypdohk`})}var i=()=>(0,n.jsx)(`div`,{style:{display:`flex`,gap:8,padding:16},children:(0,n.jsx)(r,{onClick:()=>alert(`clicked`),children:`Click me`})});export{i as App,r as ClickableBox};
