@@ -13006,9 +13006,13 @@ export const App = () => <Box />;
 import * as React from "react";
 import styled from "styled-components";
 
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
 const palette = { transition: "blue" };
 
-const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
   color: \${palette.transition};
 \`;
 
@@ -13020,10 +13024,116 @@ export const App = () => <Box>Box</Box>;
     // `palette.transition` is a member read of an unrelated module-scope object, not
     // of the component's props, so it does not consume the `transition` attr. The
     // static color lowers and the object attr hoists instead of an over-cautious bail.
+    // A component base (not an intrinsic element) is used so the only thing under
+    // test is the props-read detection, not the intrinsic-leak bail below.
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("color: palette.transition");
     expect(result.code).toContain("transition={boxTransition}");
     expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when an intrinsic element carries a custom non-DOM object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ config: { mode: "compact" } })<{ config?: { mode: "compact" | "full" } }>\`
+  color: red;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The wrapper would pass \`config\` straight to \`<div>\`, which fails TypeScript
+    // (non-hyphenated unknown attrs are rejected on intrinsics) and leaks a prop
+    // styled-components filters from the host element — even though the explicit
+    // styled generic declares it. Neither is representable losslessly, so bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a styled(localIntrinsic) chain leaks a custom object attr to its element", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const LocalDiv = styled.div\`
+  color: red;
+\`;
+
+const Box = styled(LocalDiv).attrs({ transition: { duration: 0.2 } })\`
+  padding: 4px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`styled(LocalDiv)\` flattens to render a \`<div>\` directly, so the inherited
+    // \`transition\` object attr still leaks to an intrinsic element — bail through the
+    // local styled base, not just for a direct \`styled.div\` base.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("does not bail when an intrinsic element carries a forwardable object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ dangerouslySetInnerHTML: { __html: "<b>x</b>" } })\`
+  color: red;
+\`;
+
+const DataBox = styled.div.attrs({ "data-config": { mode: "compact" } })\`
+  color: blue;
+\`;
+
+export const App = () => (
+  <>
+    <Box />
+    <DataBox>Box</DataBox>
+  </>
+);
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`dangerouslySetInnerHTML\` and \`data-*\` are valid DOM attributes that intrinsics
+    // accept and styled-components forwards, so they hoist to a wrapper rather than
+    // triggering the intrinsic-leak bail.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("dangerouslySetInnerHTML={");
+    expect(result.code).toContain("data-config={");
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a component-base CSS interpolation reads an object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // A component base sidesteps the intrinsic-leak bail, so this isolates the
+    // props-read detection: the CSS reads the \`transition\` object attr, which the
+    // lowering cannot substitute, so it must still bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
   it("unwraps defaulted object-pattern attrs parameters", () => {

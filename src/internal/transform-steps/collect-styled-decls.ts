@@ -124,7 +124,11 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
       d.attrsInfo.hasUnsupportedValues === true;
     // The CSS-read check also covers decls with no own attrs that inherit an
     // object attr from a local base, so it is evaluated independently.
-    return ownUnsupported || objectAttrConsumedByCss(d, declByLocalName);
+    return (
+      ownUnsupported ||
+      objectAttrConsumedByCss(d, declByLocalName) ||
+      objectAttrLeaksToIntrinsicElement(d, declByLocalName)
+    );
   });
   if (unsupportedAttrsDecls.length > 0) {
     for (const d of unsupportedAttrsDecls) {
@@ -326,6 +330,74 @@ function effectiveObjectAttrKeys(
     }
   }
   return keys;
+}
+
+/**
+ * True when a decl renders an intrinsic element yet carries an object/array attr
+ * whose key is not a forwardable DOM attribute (e.g. `config`, `transition`). The
+ * codemod emits a wrapper that passes the attr straight to the intrinsic element
+ * (`<div config={...} />`), which both fails TypeScript — non-hyphenated unknown
+ * attributes are rejected on intrinsics — and leaks a non-DOM prop styled-components
+ * would filter from the host element. Neither can be represented losslessly, so bail.
+ *
+ * Forwardable keys (`data-*` / `aria-*`, `style`, `dangerouslySetInnerHTML`) are
+ * valid DOM attributes that intrinsics accept and styled-components forwards, so
+ * they are excluded. Decls that render a component (their props type governs the
+ * value) are unaffected — only an intrinsic rendered target leaks.
+ */
+function objectAttrLeaksToIntrinsicElement(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+): boolean {
+  const objectKeys = effectiveObjectAttrKeys(decl, declByLocalName, new Set());
+  if (objectKeys.size === 0) {
+    return false;
+  }
+  if (!rendersIntrinsicElement(decl, declByLocalName, new Set())) {
+    return false;
+  }
+  return [...objectKeys].some((key) => !isForwardableIntrinsicObjectAttrKey(key));
+}
+
+/** True when `key` names a DOM attribute an intrinsic element accepts and forwards. */
+function isForwardableIntrinsicObjectAttrKey(key: string): boolean {
+  return (
+    key === "style" ||
+    key === "dangerouslySetInnerHTML" ||
+    key.startsWith("data-") ||
+    key.startsWith("aria-")
+  );
+}
+
+/**
+ * True when the component a decl ultimately renders is an intrinsic element.
+ * Honors a polymorphic `as` override (rendering that component instead) and
+ * flattens `styled(LocalStyled)` chains to the final rendered target — mirroring
+ * the wrapper emitter's `propsTarget = attrsAsTag ?? base` resolution.
+ */
+function rendersIntrinsicElement(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+  seen: Set<string>,
+): boolean {
+  if (seen.has(decl.localName)) {
+    return false;
+  }
+  seen.add(decl.localName);
+  // An `as` override renders that component (a component ref, never intrinsic here),
+  // so the attr is passed to it rather than to the declared base's element.
+  const asTag = decl.attrsInfo?.attrsAsTag;
+  if (asTag) {
+    const asDecl = declByLocalName.get(asTag);
+    return asDecl ? rendersIntrinsicElement(asDecl, declByLocalName, seen) : false;
+  }
+  if (decl.base.kind === "intrinsic") {
+    return true;
+  }
+  // A local styled base is flattened to render its own target; an imported/external
+  // component owns its props, so it is not an intrinsic leak.
+  const baseDecl = declByLocalName.get(decl.base.ident);
+  return baseDecl ? rendersIntrinsicElement(baseDecl, declByLocalName, seen) : false;
 }
 
 /** True when a (possibly TS-cast) attrs value node is an object/array literal. */
