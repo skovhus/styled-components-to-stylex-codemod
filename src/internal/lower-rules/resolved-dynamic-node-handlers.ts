@@ -592,8 +592,14 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
           const computedKeys = ((map as any).__computedKeys ?? []) as Array<{
             keyExpr: unknown;
             value: unknown;
+            sourceOrder?: number;
           }>;
-          computedKeys.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
+          const sourceOrder = ctx.getCurrentDeclarationSourceOrder();
+          computedKeys.push({
+            keyExpr: resolvedSelectorMedia.keyExpr,
+            value,
+            ...(sourceOrder !== undefined ? { sourceOrder } : {}),
+          });
           (map as any).__computedKeys = computedKeys;
           target[prop] = map;
         } else {
@@ -725,6 +731,9 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
     pseudos,
     media,
     resolvedSelectorMedia,
+    ...(ctx.getCurrentDeclarationSourceOrder() !== undefined
+      ? { computedKeySourceOrder: ctx.getCurrentDeclarationSourceOrder() }
+      : {}),
     parseExpr,
     resolverImports,
     warnings,

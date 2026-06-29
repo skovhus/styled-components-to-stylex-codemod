@@ -1534,7 +1534,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // These use computed property keys like [breakpoints.phone]
       if (resolvedSelectorMedia) {
         const entry = getOrCreateComputedMediaEntry(prop, ctx);
-        entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
+        const sourceOrder = ctx.getCurrentDeclarationSourceOrder();
+        entry.entries.push({
+          keyExpr: resolvedSelectorMedia.keyExpr,
+          value,
+          ...(sourceOrder !== undefined ? { sourceOrder } : {}),
+        });
         return;
       }
 

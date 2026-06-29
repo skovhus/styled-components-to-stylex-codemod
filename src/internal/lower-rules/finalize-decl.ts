@@ -3,7 +3,12 @@
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { cssValueToJs, toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  toStyleKey,
+  styleKeyWithSuffix,
+  type ComputedKeyEntry,
+} from "../transform/helpers.js";
 import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
@@ -21,7 +26,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
-import { copyConditionSourceOrders } from "./condition-source-order.js";
+import { copyConditionSourceOrders, getConditionSourceOrder } from "./condition-source-order.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import {
   findPlaceholderBlock,
@@ -146,6 +151,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         keyExpr: e.keyExpr,
         value: e.value,
         leadingComment: e.leadingComment,
+        ...(e.sourceOrder !== undefined ? { sourceOrder: e.sourceOrder } : {}),
       }));
     } else {
       // No existing map, create a new nested object with default and __computedKeys
@@ -154,12 +160,28 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         keyExpr: e.keyExpr,
         value: e.value,
         leadingComment: e.leadingComment,
+        ...(e.sourceOrder !== undefined ? { sourceOrder: e.sourceOrder } : {}),
       }));
       styleObj[prop] = nested;
     }
   }
   for (const [sel, obj] of Object.entries(nestedSelectors)) {
     styleObj[sel] = obj;
+  }
+
+  // Bail when a property mixes a computed at-rule key (from resolveSelector, stored in
+  // __computedKeys and always emitted last) with a static at-rule key on the same property.
+  // StyleX breaks ties between same-tier at-rules by source order, so appending the computed
+  // key last would silently reverse the original CSS cascade — not lossless. Static pseudo
+  // keys are unaffected (they sit in a different priority tier), so they don't trigger this.
+  for (const bucket of [styleObj, ...variantBuckets.values(), ...extraStyleObjects.values()]) {
+    if (hasComputedAndStaticAtRuleConflict(bucket)) {
+      state.bailUnsupported(
+        decl,
+        "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved",
+      );
+      return;
+    }
   }
 
   const baseRawEntries = Object.entries(styleObj);
@@ -771,6 +793,54 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   if (inlineStyleProps.length) {
     decl.inlineStyleProps = inlineStyleProps;
   }
+}
+
+/**
+ * Returns true when any property in the bucket has a computed at-rule key
+ * (`__computedKeys`, which the emitter always appends after the static keys) that came
+ * EARLIER in the source than a static at-rule key on the same property (e.g. computed
+ * `@container` before a later `@media print`). StyleX breaks same-tier at-rule ties by
+ * object position, so appending the computed key last would let it win over the static
+ * at-rule that should win — reversing the original cascade.
+ *
+ * Only genuine reversals bail: when the computed key came AFTER the static at-rule in
+ * source (the common case, e.g. base `@media` then a selector-interpolated breakpoint),
+ * appending it last preserves the cascade and is allowed. Entries without a recorded
+ * source order are skipped (no reversal can be proven), and static pseudo keys are
+ * ignored since they sit in a different StyleX priority tier.
+ */
+function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(bucket)) {
+    if (key.startsWith("__") || !value || typeof value !== "object") {
+      continue;
+    }
+    if (Array.isArray(value) || isAstNode(value)) {
+      continue;
+    }
+    const map = value as Record<string, unknown>;
+    const computedKeys = map.__computedKeys;
+    if (!Array.isArray(computedKeys) || computedKeys.length === 0) {
+      continue;
+    }
+    const computedSourceOrders = (computedKeys as ComputedKeyEntry[])
+      .map((entry) => entry.sourceOrder)
+      .filter((order): order is number => order !== undefined);
+    if (computedSourceOrders.length === 0) {
+      continue;
+    }
+    const earliestComputed = Math.min(...computedSourceOrders);
+    const staticAtRuleComesLater = Object.keys(map).some((k) => {
+      if (!k.startsWith("@")) {
+        return false;
+      }
+      const staticOrder = getConditionSourceOrder(map, k);
+      return staticOrder !== undefined && staticOrder > earliestComputed;
+    });
+    if (staticAtRuleComesLater) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

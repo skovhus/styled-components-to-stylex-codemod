@@ -37,6 +37,12 @@ export type SplitVariantsContext = Pick<
   pseudos: string[] | null;
   media: string | undefined;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
+  /**
+   * Source order of the CSS declaration currently being lowered. Stamped onto any
+   * computed at-rule key entry created here so the emitter/cascade-conflict guard can
+   * compare it against static at-rule keys' source orders.
+   */
+  computedKeySourceOrder?: number;
   setBail: () => void;
   bailUnsupported: (decl: StyledDecl, type: WarningType) => void;
 };
@@ -296,8 +302,15 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
         const computedKeys = ((map as any).__computedKeys ?? []) as Array<{
           keyExpr: unknown;
           value: unknown;
+          sourceOrder?: number;
         }>;
-        computedKeys.push({ keyExpr: resolvedSelectorMedia.keyExpr, value: valueAst });
+        computedKeys.push({
+          keyExpr: resolvedSelectorMedia.keyExpr,
+          value: valueAst,
+          ...(ctx.computedKeySourceOrder !== undefined
+            ? { sourceOrder: ctx.computedKeySourceOrder }
+            : {}),
+        });
         (map as any).__computedKeys = computedKeys;
         return;
       }
