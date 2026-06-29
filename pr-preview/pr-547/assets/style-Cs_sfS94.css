@@ -2322,6 +2322,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #ddd;
 }
 
+.xk643y4:not(#\#):not(#\#):not(#\#) {
+  background-color: #ddd6fe;
+}
+
 .xrun6:not(#\#):not(#\#):not(#\#) {
   background-color: #e0e0e0;
 }

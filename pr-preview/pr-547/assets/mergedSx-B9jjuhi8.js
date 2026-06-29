@@ -1,1 +1,0 @@
-import{o as e}from"./index-C_k7SW5X.js";function t(t,n,r){let i=e(t);if(!n&&!r)return i;let a=i.className;if(typeof n==`string`)a=a?a+` `+n:n;else if(n)for(let e=0;e<n.length;e++){let t=n[e];t&&(a=a?a+` `+t:t)}return{className:a,style:r?i.style?Object.assign({},i.style,r):r:i.style}}export{t};
