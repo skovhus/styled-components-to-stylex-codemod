@@ -13169,6 +13169,87 @@ export const App = () => <Child>x</Child>;
     expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when CSS reads an object attr through a body destructure of props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => {
+    const { transition } = p;
+    return transition.duration;
+  }}s;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The interpolation destructures the attr prop in its body (\`const { transition } = p\`)
+    // rather than member-accessing it directly, but it still reads the object attr — the
+    // scan must follow the props binding through the destructure, not miss it and emit
+    // divergent output. (A component base isolates this from the intrinsic-leak bail.)
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object attr through an alias of props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => {
+    const q = p;
+    return q.transition.duration;
+  }}s;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`const q = p\` aliases the props binding, so \`q.transition\` is a read of the attr —
+    // the scan resolves aliases (to a fixpoint) before checking member reads.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a CSS interpolation uses its props binding opaquely", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: \${(p: any) => String(p)};
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The props binding is passed whole to a function, so the scan cannot tell which
+    // prop is read and cannot rule out the object attr — bail rather than risk emitting
+    // output that reads the caller's omitted prop while applying the attr separately.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";

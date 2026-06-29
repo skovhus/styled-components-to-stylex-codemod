@@ -254,9 +254,16 @@ function objectAttrConsumedByCss(
   if (objectKeys.size === 0) {
     return false;
   }
-  const readNames = new Set<string>();
-  collectCssReadNames(decl, declByLocalName, readNames, new Set());
-  return [...objectKeys].some((key) => readNames.has(key));
+  const reads: CssPropReads = { names: new Set(), escapes: false };
+  collectCssReadNames(decl, declByLocalName, reads, new Set());
+  // A props binding used opaquely — passed to a function, spread, returned bare, or
+  // read with a dynamic key — could read any prop, so we cannot prove the object
+  // attr is untouched. Treat that as consuming it rather than risk emitting divergent
+  // output that reads the caller's (omitted) prop while applying the attr separately.
+  if (reads.escapes) {
+    return true;
+  }
+  return [...objectKeys].some((key) => reads.names.has(key));
 }
 
 /**
@@ -268,7 +275,7 @@ function objectAttrConsumedByCss(
 function collectCssReadNames(
   decl: StyledDeclLike,
   declByLocalName: ReadonlyMap<string, StyledDeclLike>,
-  out: Set<string>,
+  reads: CssPropReads,
   seen: Set<string>,
 ): void {
   if (seen.has(decl.localName)) {
@@ -276,7 +283,7 @@ function collectCssReadNames(
   }
   seen.add(decl.localName);
   for (const expr of decl.templateExpressions ?? []) {
-    collectCssPropReadNames(expr, out);
+    collectCssPropReads(expr, reads);
   }
   for (const candidate of declByLocalName.values()) {
     if (
@@ -284,7 +291,7 @@ function collectCssReadNames(
       !seen.has(candidate.localName) &&
       expressionsReferenceAnyPath(decl.templateExpressions, new Set([candidate.localName]))
     ) {
-      collectCssReadNames(candidate, declByLocalName, out, seen);
+      collectCssReadNames(candidate, declByLocalName, reads, seen);
     }
   }
   // A local styled base's CSS is inherited by the extender and evaluated with the
@@ -294,7 +301,7 @@ function collectCssReadNames(
   if (decl.base?.kind === "component") {
     const baseDecl = declByLocalName.get(decl.base.ident);
     if (baseDecl) {
-      collectCssReadNames(baseDecl, declByLocalName, out, seen);
+      collectCssReadNames(baseDecl, declByLocalName, reads, seen);
     }
   }
 }
@@ -418,22 +425,47 @@ function isObjectOrArrayLiteralNode(value: unknown): boolean {
   return node?.type === "ObjectExpression" || node?.type === "ArrayExpression";
 }
 
+/** Prop names a CSS interpolation reads, plus whether its props binding escapes. */
+type CssPropReads = { names: Set<string>; escapes: boolean };
+
 /**
- * Collects the prop names a CSS interpolation reads from its props binding. A
- * styled interpolation is a function whose first parameter is the component's
- * props, so only reads rooted at that binding count: member accesses like
- * `p.transition` / static computed `p["transition"]` (→ "transition") and the keys
- * of a destructured first parameter (`({ transition }) => ...` → "transition").
+ * Analyzes one CSS interpolation for reads of its props binding. A styled
+ * interpolation is a function whose first parameter is the component's props, so a
+ * read is one rooted at that binding:
  *
- * Reads through any other object are ignored — in particular a module-scope value
- * that merely shares a name with an attr key (`color: ${() => palette.transition}`
- * alongside a `transition` object attr) is not a props read, so the attr can still
- * lower instead of forcing an over-cautious bail.
+ *  - direct member access — `p.transition` / static computed `p["transition"]`,
+ *  - a destructured parameter — `({ transition }) => ...`,
+ *  - a destructure or alias in the body — `const { transition } = p` / `const q = p`
+ *    then `q.transition` (resolved to a fixpoint, since aliases can chain).
+ *
+ * Reads through any other object are ignored, so a module-scope value sharing an
+ * attr's key name (`${() => palette.transition}`) is not a props read. But when the
+ * binding is used opaquely — passed to a function, spread, returned bare, or read
+ * with a dynamic key — we cannot tell which prop is read, so `escapes` is set and
+ * the caller conservatively treats every object attr as consumed.
  */
-function collectCssPropReadNames(node: unknown, out: Set<string>): void {
-  const propParamNames = new Set<string>();
-  collectPropParamBindings(node, out, propParamNames, false);
-  collectPropMemberReads(node, propParamNames, out);
+function collectCssPropReads(expr: unknown, reads: CssPropReads): void {
+  // Identifiers bound to the props object: the function parameter plus any aliases.
+  const bindings = new Set<string>();
+  // Identifier *nodes* that are an accounted use of a binding — its declaration, a
+  // member-access object, or an alias initializer — so the escape pass can tell a
+  // tracked use from a bare one. Keyed by node identity (each AST node is distinct).
+  const accounted = new Set<object>();
+
+  collectParamBindings(expr, reads, bindings, accounted, false);
+  // Body destructures/aliases can reference a binding declared earlier and introduce
+  // new bindings, so re-scan until the binding/name sets stop growing.
+  for (;;) {
+    const sizeBefore = bindings.size + reads.names.size;
+    collectBodyBindings(expr, reads, bindings, accounted);
+    if (bindings.size + reads.names.size === sizeBefore) {
+      break;
+    }
+  }
+  collectMemberReads(expr, reads, bindings, accounted);
+  if (hasUnaccountedBindingRef(expr, bindings, accounted)) {
+    reads.escapes = true;
+  }
 }
 
 const FUNCTION_NODE_TYPES = new Set([
@@ -445,16 +477,17 @@ const FUNCTION_NODE_TYPES = new Set([
 const SKIP_AST_KEYS = new Set(["loc", "start", "end", "range", "comments"]);
 
 /**
- * Records what an interpolation's props binding introduces: an Identifier first
- * parameter (`(p) => ...` adds "p" to `propParamNames`) or the keys of a
- * destructured first parameter (`({ transition }) => ...` adds "transition" to
- * `out`, a direct prop read). Only the outermost function's first parameter is the
- * props binding; parameters of nested callbacks bind something else and are skipped.
+ * Records the props binding an interpolation's outermost function introduces: an
+ * Identifier first parameter (`(p) => ...`) becomes a binding; a destructured first
+ * parameter (`({ transition }) => ...`) contributes its keys as direct reads. Only
+ * the outermost function's first parameter is props; nested-callback parameters
+ * bind something else and are skipped.
  */
-function collectPropParamBindings(
+function collectParamBindings(
   node: unknown,
-  out: Set<string>,
-  propParamNames: Set<string>,
+  reads: CssPropReads,
+  bindings: Set<string>,
+  accounted: Set<object>,
   insideFunction: boolean,
 ): void {
   if (!node || typeof node !== "object") {
@@ -462,7 +495,7 @@ function collectPropParamBindings(
   }
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectPropParamBindings(child, out, propParamNames, insideFunction);
+      collectParamBindings(child, reads, bindings, accounted, insideFunction);
     }
     return;
   }
@@ -470,7 +503,7 @@ function collectPropParamBindings(
   let nextInsideFunction = insideFunction;
   if (typeof n.type === "string" && FUNCTION_NODE_TYPES.has(n.type)) {
     if (!insideFunction) {
-      addPropParamBinding((n.params as unknown[] | undefined)?.[0], out, propParamNames);
+      addBindingTarget((n.params as unknown[] | undefined)?.[0], reads, bindings, accounted);
     }
     nextInsideFunction = true;
   }
@@ -478,60 +511,118 @@ function collectPropParamBindings(
     if (SKIP_AST_KEYS.has(key)) {
       continue;
     }
-    collectPropParamBindings(n[key], out, propParamNames, nextInsideFunction);
+    collectParamBindings(n[key], reads, bindings, accounted, nextInsideFunction);
   }
 }
 
 /**
- * Registers an interpolation's first parameter as the props binding: an Identifier
- * name goes to `propParamNames`, a destructured object pattern's keys go straight to
- * `out`. Defaulted params (`(p = {}) => ...`) wrap the binding in an
- * `AssignmentPattern`, so unwrap to the underlying target first.
+ * Registers a props-binding target (a parameter, or the left side of an alias/
+ * destructure): an Identifier becomes a binding; an object pattern contributes its
+ * keys as reads and a rest element (`...rest`) as a further binding. Defaulted
+ * targets (`(p = {}) => ...`) wrap the binding in an `AssignmentPattern`, so unwrap.
  */
-function addPropParamBinding(param: unknown, out: Set<string>, propParamNames: Set<string>): void {
-  let target = param as { type?: string; left?: unknown; name?: unknown } | undefined;
-  while (target?.type === "AssignmentPattern") {
-    target = target.left as { type?: string; left?: unknown; name?: unknown } | undefined;
+function addBindingTarget(
+  target: unknown,
+  reads: CssPropReads,
+  bindings: Set<string>,
+  accounted: Set<object>,
+): void {
+  let node = target as { type?: string; left?: unknown; name?: unknown } | undefined;
+  while (node?.type === "AssignmentPattern") {
+    node = node.left as { type?: string; left?: unknown; name?: unknown } | undefined;
   }
-  if (target?.type === "Identifier" && typeof target.name === "string") {
-    propParamNames.add(target.name);
-  } else if (target?.type === "ObjectPattern") {
-    addObjectPatternKeys(target, out);
+  if (node?.type === "Identifier" && typeof node.name === "string") {
+    bindings.add(node.name);
+    accounted.add(node);
+  } else if (node?.type === "ObjectPattern") {
+    addObjectPatternKeys(node, reads, bindings, accounted);
   }
 }
 
-/** Adds the static (non-computed) keys of an object destructuring pattern to `out`. */
-function addObjectPatternKeys(pattern: unknown, out: Set<string>): void {
+/**
+ * Adds an object-pattern's static keys as reads; a rest element binds the remaining
+ * props (also a binding). A computed key (`{ [k]: v }`) reads an unknown prop, so it
+ * is treated as an escape.
+ */
+function addObjectPatternKeys(
+  pattern: unknown,
+  reads: CssPropReads,
+  bindings: Set<string>,
+  accounted: Set<object>,
+): void {
   const properties = (pattern as { properties?: Array<Record<string, unknown>> }).properties ?? [];
   for (const prop of properties) {
+    if (prop?.type === "RestElement") {
+      addBindingTarget(prop.argument, reads, bindings, accounted);
+      continue;
+    }
     if (prop?.computed === true) {
+      reads.escapes = true;
       continue;
     }
     const key = prop?.key as { type?: string; name?: unknown; value?: unknown } | undefined;
     if (key?.type === "Identifier" && typeof key.name === "string") {
-      out.add(key.name);
+      reads.names.add(key.name);
     } else if (key?.type === "StringLiteral" && typeof key.value === "string") {
-      out.add(key.value);
+      reads.names.add(key.value);
     }
   }
 }
 
 /**
- * Adds an `out` entry for every member read rooted at a props binding —
- * `p.transition` and static computed `p["transition"]` (both → "transition") where
- * `p` is a name in `propParamNames`. Reads through any other object are ignored.
+ * Finds body destructures/aliases of an existing binding — `const { transition } = p`
+ * (keys become reads) and `const q = p` (a new binding) — and accounts the binding
+ * references they consume so the escape pass does not flag them.
  */
-function collectPropMemberReads(
+function collectBodyBindings(
   node: unknown,
-  propParamNames: ReadonlySet<string>,
-  out: Set<string>,
+  reads: CssPropReads,
+  bindings: Set<string>,
+  accounted: Set<object>,
 ): void {
   if (!node || typeof node !== "object") {
     return;
   }
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectPropMemberReads(child, propParamNames, out);
+      collectBodyBindings(child, reads, bindings, accounted);
+    }
+    return;
+  }
+  const n = node as Record<string, unknown>;
+  if (n.type === "VariableDeclarator") {
+    const init = n.init as { type?: string; name?: unknown } | undefined;
+    if (init?.type === "Identifier" && typeof init.name === "string" && bindings.has(init.name)) {
+      accounted.add(init);
+      addBindingTarget(n.id, reads, bindings, accounted);
+    }
+  }
+  for (const key of Object.keys(n)) {
+    if (SKIP_AST_KEYS.has(key)) {
+      continue;
+    }
+    collectBodyBindings(n[key], reads, bindings, accounted);
+  }
+}
+
+/**
+ * Records a read for every member access rooted at a binding — `p.transition` and
+ * static computed `p["transition"]` (both → "transition") — and accounts the object
+ * identifier so it is not mistaken for an escape. A dynamic computed key
+ * (`p[expr]`) reads an unknown prop, so it is treated as an escape.
+ */
+function collectMemberReads(
+  node: unknown,
+  reads: CssPropReads,
+  bindings: ReadonlySet<string>,
+  accounted: Set<object>,
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectMemberReads(child, reads, bindings, accounted);
     }
     return;
   }
@@ -541,22 +632,26 @@ function collectPropMemberReads(
     if (
       object?.type === "Identifier" &&
       typeof object.name === "string" &&
-      propParamNames.has(object.name)
+      bindings.has(object.name)
     ) {
+      accounted.add(object);
       const property = n.property as { type?: string; name?: unknown; value?: unknown } | undefined;
       if (
         n.computed !== true &&
         property?.type === "Identifier" &&
         typeof property.name === "string"
       ) {
-        out.add(property.name);
+        reads.names.add(property.name);
       } else if (
         n.computed === true &&
         property?.type === "StringLiteral" &&
         typeof property.value === "string"
       ) {
         // Static computed read: `p["transition"]`.
-        out.add(property.value);
+        reads.names.add(property.value);
+      } else {
+        // Dynamic computed read (`p[expr]`): the key is unknown, so any attr may be read.
+        reads.escapes = true;
       }
     }
   }
@@ -564,6 +659,42 @@ function collectPropMemberReads(
     if (SKIP_AST_KEYS.has(key)) {
       continue;
     }
-    collectPropMemberReads(n[key], propParamNames, out);
+    collectMemberReads(n[key], reads, bindings, accounted);
   }
+}
+
+/**
+ * True when a binding identifier is referenced anywhere other than the accounted
+ * positions (its declaration, a member-access object, an alias initializer) — i.e.
+ * the binding escapes into a context we cannot analyze, so the read set is unknown.
+ */
+function hasUnaccountedBindingRef(
+  node: unknown,
+  bindings: ReadonlySet<string>,
+  accounted: ReadonlySet<object>,
+): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (Array.isArray(node)) {
+    return node.some((child) => hasUnaccountedBindingRef(child, bindings, accounted));
+  }
+  const n = node as Record<string, unknown>;
+  if (
+    n.type === "Identifier" &&
+    typeof n.name === "string" &&
+    bindings.has(n.name) &&
+    !accounted.has(n)
+  ) {
+    return true;
+  }
+  for (const key of Object.keys(n)) {
+    if (SKIP_AST_KEYS.has(key)) {
+      continue;
+    }
+    if (hasUnaccountedBindingRef(n[key], bindings, accounted)) {
+      return true;
+    }
+  }
+  return false;
 }
