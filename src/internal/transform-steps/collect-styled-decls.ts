@@ -270,11 +270,13 @@ function effectiveObjectAttrKeys(
     return keys;
   }
   seen.add(decl.localName);
-  if (decl.attrsInfo?.sourceKind === "object") {
-    for (const [key, value] of Object.entries(decl.attrsInfo.staticAttrs ?? {})) {
-      if (isObjectOrArrayLiteralNode(value)) {
-        keys.add(key);
-      }
+  // Both object-form and function-form `.attrs` record static object/array
+  // literals in `staticAttrs` (a function returning a constant object is still
+  // static), and both diverge from styled-components when that value is read by a
+  // CSS interpolation — so collect them regardless of source kind.
+  for (const [key, value] of Object.entries(decl.attrsInfo?.staticAttrs ?? {})) {
+    if (isObjectOrArrayLiteralNode(value)) {
+      keys.add(key);
     }
   }
   if (decl.base?.kind === "component") {

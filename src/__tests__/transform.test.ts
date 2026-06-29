@@ -12887,6 +12887,26 @@ export const App = () => <Child />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when CSS reads a function-form attr returning a static object", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs(() => ({ transition: { duration: 0.2 } }))\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // A function returning a constant object still records a static object attr,
+    // so the same CSS-read divergence applies as for object-form attrs — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";
