@@ -11,6 +11,10 @@ import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "../stylex-shorthands.j
 import type { StyledDecl } from "../transform-types.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
+import {
+  isRecognizedCssUnitSuffix,
+  startsWithCssValueFunction,
+} from "../utilities/stylex-numeric-values.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { literalToStaticValue } from "./types.js";
@@ -89,12 +93,30 @@ export function tryHandleRuntimeConditionalStaticBranches(
     return false;
   }
 
+  // Static text before/after the single slot (the only slot, per the guard above).
+  const slotIndex = parts.findIndex((part: { kind?: string }) => part.kind === "slot");
+  const staticTextIn = (slice: typeof parts): string =>
+    slice
+      .map((part: { kind?: string; value?: string }) =>
+        part.kind === "static" ? (part.value ?? "") : "",
+      )
+      .join("");
+  const staticBefore = staticTextIn(parts.slice(0, slotIndex));
+  const staticAfter = staticTextIn(parts.slice(slotIndex + 1));
+  const isCustomProperty = (d.property ?? "").startsWith("--");
+
   const buildBranchValue = (slotValue: string | number): string => {
-    let value = "";
-    for (const part of parts) {
-      value += part.kind === "slot" ? String(slotValue) : (part.value ?? "");
-    }
-    return value;
+    const slotText = String(slotValue);
+    // A trailing CSS unit suffix must not be concatenated onto a branch that is
+    // already a complete CSS math/var function (`calc(...)`), or the result is
+    // invalid CSS (`calc(40px + 8px)px`). Custom properties are excluded since
+    // their value is an opaque token stream.
+    const dropTrailingUnit =
+      staticBefore.trim() === "" &&
+      !isCustomProperty &&
+      startsWithCssValueFunction(slotText) &&
+      isRecognizedCssUnitSuffix(staticAfter.trim());
+    return staticBefore + slotText + (dropTrailingUnit ? "" : staticAfter);
   };
 
   const consequentStyle = buildStaticBranchStyle(d, buildBranchValue(consequentValue));

@@ -357,7 +357,7 @@ function isExpressionNode(value: unknown): value is ExpressionKind {
 // when it is a recognized unit token (`px`, `rem`, `%`, …). Arbitrary trailing
 // text (e.g. `!important` modifiers or identifier fragments) must never trigger
 // suffix splitting.
-function isRecognizedCssUnitSuffix(suffix: string): boolean {
+export function isRecognizedCssUnitSuffix(suffix: string): boolean {
   return suffix === "%" || (/^[a-zA-Z]+$/.test(suffix) && CSS_UNITS.has(suffix.toLowerCase()));
 }
 
@@ -388,7 +388,7 @@ function isCssMathFunctionExpression(node: ExpressionKind): boolean {
   return false;
 }
 
-function startsWithCssValueFunction(text: string): boolean {
+export function startsWithCssValueFunction(text: string): boolean {
   return /^\s*(?:calc|min|max|clamp|minmax|var|env)\s*\(/i.test(text);
 }
 

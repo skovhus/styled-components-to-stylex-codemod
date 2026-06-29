@@ -16,9 +16,11 @@ const styles = stylex.create({
   box: {
     position: "relative",
     top: 1,
+    height: 40,
     backgroundColor: "peachpuff",
   },
   boxBrowserIsTouchDevice: {
     top: 5,
+    height: "calc(40px + 8px)",
   },
 });
