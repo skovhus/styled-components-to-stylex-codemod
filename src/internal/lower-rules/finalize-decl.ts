@@ -803,11 +803,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
  * object position, so appending the computed key last would let it win over the static
  * at-rule that should win — reversing the original cascade.
  *
- * Only genuine reversals bail: when the computed key came AFTER the static at-rule in
- * source (the common case, e.g. base `@media` then a selector-interpolated breakpoint),
- * appending it last preserves the cascade and is allowed. Entries without a recorded
- * source order are skipped (no reversal can be proven), and static pseudo keys are
- * ignored since they sit in a different StyleX priority tier.
+ * The guard is conservative (safe/lossless): a static at-rule key is allowed only when it
+ * is PROVABLY ordered before the earliest computed key (its source order is recorded and is
+ * smaller). The common safe case — a base `@media` followed by a selector-interpolated
+ * breakpoint, as in `mediaQuery-helper` — is preserved. A static at-rule key whose source
+ * order is later, OR is untracked (e.g. a value copied into a variant bucket by
+ * `patchEarlierDynamicConditionValues` without source-order metadata), is treated as a
+ * possible reversal and bails. Static pseudo keys are ignored — they sit in a different
+ * StyleX priority tier, so their order relative to at-rules never affects the cascade.
  */
 function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(bucket)) {
@@ -829,14 +832,14 @@ function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): bo
       continue;
     }
     const earliestComputed = Math.min(...computedSourceOrders);
-    const staticAtRuleComesLater = Object.keys(map).some((k) => {
+    const staticAtRuleNotProvablyEarlier = Object.keys(map).some((k) => {
       if (!k.startsWith("@")) {
         return false;
       }
       const staticOrder = getConditionSourceOrder(map, k);
-      return staticOrder !== undefined && staticOrder > earliestComputed;
+      return staticOrder === undefined || staticOrder >= earliestComputed;
     });
-    if (staticAtRuleComesLater) {
+    if (staticAtRuleNotProvablyEarlier) {
       return true;
     }
   }
