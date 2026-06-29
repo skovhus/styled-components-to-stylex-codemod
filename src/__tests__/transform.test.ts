@@ -1778,6 +1778,66 @@ export const App = () => (
     expect(result.code).not.toContain("when.ancestor");
   });
 
+  it("preserves a reveal child when its ancestor is skipped late by an after-base mixin", () => {
+    // `Card` converts through the per-decl loop, then `postProcessAfterBaseMixins`
+    // marks it skipped (its after-base mixin needs a base default for a non-literal
+    // `opacity`). The preservation propagation must run before pruning removes the
+    // `${Card}:hover &` override — otherwise `Actions` stays converted with the
+    // reveal silently dropped. The mixin is exported so its preservation doesn't
+    // force a whole-file bail.
+    const source = `
+import styled, { css } from "styled-components";
+
+export const focusMix = css\`
+  &:focus {
+    opacity: 1;
+  }
+\`;
+
+const Card = styled.div\`
+  opacity: 0.5;
+  &:hover {
+    opacity: 0.8;
+  }
+  \${focusMix}
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <Actions>A</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-lateSkipAfterBaseMixin.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card (skipped late) and Actions (its reveal child) both stay styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No dead reveal override / unmarked when.ancestor() left behind.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

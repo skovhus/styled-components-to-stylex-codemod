@@ -225,15 +225,16 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // for skipped decls.
   let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
-    pruneSkippedDeclsFromState(state);
+    // Compute preservation and propagate reveal-child preservation BEFORE any
+    // pruning. A reverse-reveal child (`${Card}:hover &`) must be preserved when
+    // its ancestor `Card` is preserved — either referenced by a skipped sibling
+    // (e.g. `${Card} span.label { ... }`) or skipped late (e.g. an unsupported
+    // after-base css mixin in postProcessAfterBaseMixins). Pruning deletes the
+    // ancestor's relation overrides, so the propagation must traverse those edges
+    // first; otherwise the child would stay converted with the reveal dropped.
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
-    // An ancestor can become preserved here (not during its own processing) when a
-    // skipped sibling references it as a selector — e.g. a skipped block with
-    // `${Card} span.label { ... }` keeps `Card` as styled-components. A reverse-reveal
-    // child (`${Card}:hover &`) already lowered its rule against a converting `Card`,
-    // so its `stylex.when.ancestor()` style would now be unreachable. Preserve those
-    // children too, before pruning drops the ancestor's marker/relations.
     preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
+    pruneSkippedDeclsFromState(state);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
