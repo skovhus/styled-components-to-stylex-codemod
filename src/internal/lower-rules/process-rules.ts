@@ -4,7 +4,7 @@
  */
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningType } from "../logger.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, type WarningType } from "../logger.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
@@ -16,7 +16,12 @@ import {
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart, isAstNode } from "../utilities/jscodeshift-utils.js";
 import { SOURCE_CSS_PROPERTIES_KEY, literalToAst, toStyleKey } from "../transform/helpers.js";
-import { getOrCreateRelationOverrideBucket, makeDescendantKeyExpr } from "./shared.js";
+import {
+  declReferencesCrossFileSelector,
+  getOrCreateRelationOverrideBucket,
+  makeDescendantKeyExpr,
+  tagRelationOverrideLocals,
+} from "./shared.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { setConditionSourceOrder } from "./condition-source-order.js";
 import {
@@ -128,12 +133,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     type: WarningType,
     rule: (typeof decl.rules)[number],
     warnDecl: StyledDecl = decl,
+    context?: Record<string, unknown>,
   ): void => {
     state.markBail();
     warnings.push({
       severity: "warning",
       type,
       loc: computeSelectorWarningLoc(warnDecl.loc, warnDecl.rawCss, rule.selector),
+      ...(context ? { context } : {}),
     });
   };
 
@@ -514,6 +521,39 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
+        // The hovered ancestor was preserved as styled-components (it hit an
+        // unsupported pattern and was skipped). A reverse reveal depends on that
+        // ancestor rendering a StyleX marker (`stylex.defaultMarker()` matched by
+        // `stylex.when.ancestor()`), which a preserved styled-component cannot do.
+        // Preserve this declaring child too: keeping both as styled-components
+        // retains the original reveal and avoids emitting an unreachable
+        // `stylex.when.ancestor()` style. The per-decl skip rolls back everything
+        // this decl produced, so no orphaned style leaks.
+        //
+        // This only fires for same-file ancestors (`parentDecl`); cross-file
+        // reveals go through `crossFileParent` and are wired by the consumer
+        // patcher. A same-file ancestor referenced via `${Ancestor}` is always
+        // declared before this child, so its skip state is already settled here.
+        if (parentDecl?.skipTransform) {
+          // If this preserved-as-styled-components child also interpolates an
+          // imported component as a selector, preserving it raw would strand that
+          // cross-file selector: its target may have converted to StyleX in its own
+          // file, and the consumer bridge patcher skips this file because it
+          // otherwise transforms. Escalate to a whole-file bail so the original
+          // cross-file selector behavior is preserved. (Mirrors the post-lowering
+          // guard in preserveReverseRevealChildrenOfPreservedAncestors, which only
+          // covers ancestors preserved *after* this decl was processed.)
+          if (declReferencesCrossFileSelector(state, decl)) {
+            state.bail = true;
+            break;
+          }
+          bailWithSelectorWarning(PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, rule, decl, {
+            child: decl.localName,
+            ancestor: parentDecl.localName,
+          });
+          break;
+        }
+
         // Extract all ancestor pseudos (one per comma-separated part).
         // For no-pseudo reverse (`${Other} &`), use `:is(*)` as synthetic always-matching
         // pseudo so the style is conditional on the marker, not unconditional.
@@ -565,6 +605,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           overrideCountBeforeReverse,
           reverseMarkerVarName,
           jsxParentName,
+        );
+
+        // Record immutable local names so post-lowering preservation propagation
+        // can resolve these decls even after finalize rewrites their style keys
+        // (e.g. an enum/string-mapping child's `decl.styleKey` becomes its base key).
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          parentDecl?.localName,
+          decl.localName,
         );
 
         // For same-file no-pseudo reverse, set markerVarName on the override so
@@ -718,6 +768,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // Tag newly-created relation override as cross-file
         tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, jsxLocalName);
+
+        // Record immutable local names (mirror of the reverse path) so the
+        // post-lowering preservation/pruning can resolve these decls even after
+        // finalize rewrites their style keys (e.g. enum/string-mapping variants).
+        // The parent here is the declaring decl, whose own finalize runs *after*
+        // this registration, so its `parentStyleKey` is captured pre-rewrite.
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          decl.localName,
+          childDecl?.localName,
+        );
 
         const forwardResult = processDeclarationsIntoBucket(
           rule,

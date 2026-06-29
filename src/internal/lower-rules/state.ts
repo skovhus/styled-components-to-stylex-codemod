@@ -51,6 +51,14 @@ export type RelationOverride = {
   markerVarName?: string;
   /** Local name of the imported cross-file component (child in forward, parent in reverse) */
   crossFileComponentLocalName?: string;
+  /**
+   * Immutable local names of the same-file decls this override relates, recorded at
+   * registration. Style keys can be rewritten after registration (e.g. enum/string-
+   * mapping variants rewrite `decl.styleKey` to a derived base key), so post-lowering
+   * passes resolve the decls by local name instead of the now-stale style keys.
+   */
+  childLocalName?: string;
+  parentLocalName?: string;
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;
@@ -401,6 +409,14 @@ export function createLowerRulesState(ctx: TransformContext) {
     isIdentifierShadowed,
     enumValueMap,
     crossFileSelectorsByLocal,
+    /**
+     * Local names of decls whose template references an imported component as a
+     * selector — directly or transitively through a css helper. Precomputed once
+     * (template references are static) so the early rule-processing and the
+     * post-lowering preservation paths share one helper-aware check when deciding
+     * whether preserving a reveal child would strand a cross-file selector.
+     */
+    crossFileSelectorReferrers: new Set<string>(),
     propUsageByComponent,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     /**

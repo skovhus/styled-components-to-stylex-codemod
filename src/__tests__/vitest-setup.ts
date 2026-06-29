@@ -12,6 +12,8 @@ vi.mock("../internal/logger.js", () => ({
     "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts",
   PARTIAL_MIGRATION_INCOMPLETE_WARNING:
     "Partial migration left styled-components declarations unconverted",
+  PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING:
+    "Partial transform would leave a StyleX child reveal targeting a styled-components ancestor — the component-selector ancestor was not converted, so it cannot render the marker the child's stylex.when.ancestor() reveal needs; the child is preserved as styled-components to keep the reveal working",
   UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING:
     "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
   Logger: {
