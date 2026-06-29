@@ -1377,6 +1377,71 @@ export const App = () => (
     );
   });
 
+  it("preserves a reveal child when its ancestor is preserved only via reference propagation", () => {
+    // `Card` converts on its own, but a *skipped* sibling (`Other`) references it
+    // as a selector, so partial migration preserves `Card` as styled-components
+    // after lowering. `Actions` already lowered its `${Card}:hover &` reveal against
+    // a converting `Card`; without back-propagation that would leave a dead
+    // `actionsInCard` style (and a dynamic `actionsGap` style-fn) in stylex.create().
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Card = styled.div\`
+  padding: 8px;
+\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div<{ $gap: number }>\`
+  opacity: 0;
+  gap: \${(p) => p.$gap}px;
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <Other>
+      <span className="label">L</span>
+    </Other>
+    <Actions $gap={4}>Actions</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-childRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer still converts.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card (the referenced ancestor) and Actions (its reveal child) are both
+    // preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved child — neither the reveal override,
+    // an unmarked when.ancestor(), nor the dynamic style-fn may appear.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

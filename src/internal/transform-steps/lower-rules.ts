@@ -4,6 +4,7 @@
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING } from "../logger.js";
 import { TransformContext } from "../transform-context.js";
 import { getUseLogicalProperties, setUseLogicalProperties } from "../css-prop-mapping.js";
 import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "../keyframes.js";
@@ -193,6 +194,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
       break;
     }
     recordAddedResolverImports(state, snapshot.resolverImportKeys, decl);
+    recordContributedStyleKeys(state, snapshot.resolvedStyleKeys, decl);
   }
 
   if (!state.bail) {
@@ -218,6 +220,13 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   if (!state.bail) {
     pruneSkippedDeclsFromState(state);
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
+    // An ancestor can become preserved here (not during its own processing) when a
+    // skipped sibling references it as a selector — e.g. a skipped block with
+    // `${Card} span.label { ... }` keeps `Card` as styled-components. A reverse-reveal
+    // child (`${Card}:hover &`) already lowered its rule against a converting `Card`,
+    // so its `stylex.when.ancestor()` style would now be unreachable. Preserve those
+    // children too, before pruning drops the ancestor's marker/relations.
+    preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
@@ -439,7 +448,7 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
     if (d.skipTransform) {
       continue;
     }
-    for (const key of collectOwnedDeclStyleKeys(d)) {
+    for (const key of declStyleKeysForPruning(d)) {
       keepKeys.add(key);
     }
     if (d.extendsStyleKey) {
@@ -455,7 +464,7 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
 
   const keysToDelete = new Set<string>();
   for (const d of skipped) {
-    for (const key of collectOwnedDeclStyleKeys(d)) {
+    for (const key of declStyleKeysForPruning(d)) {
       if (!keepKeys.has(key)) {
         keysToDelete.add(key);
       }
@@ -470,14 +479,81 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
   }
-  if (keysToDelete.size > 0) {
-    const kept = state.relationOverrides.filter(
-      (o) =>
-        !keysToDelete.has(o.parentStyleKey) &&
-        !keysToDelete.has(o.childStyleKey) &&
-        !keysToDelete.has(o.overrideStyleKey),
-    );
-    state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+  dropOrphanedRelationOverrides(state, keysToDelete);
+}
+
+/**
+ * Drop relation overrides whose parent, child, or override style key was deleted
+ * (its decl is preserved as styled-components), and remove the override's now
+ * unreachable style object + pseudo bucket so emission never leaves an unused
+ * StyleX style behind.
+ */
+function dropOrphanedRelationOverrides(state: LowerRulesState, keysToDelete: Set<string>): void {
+  if (keysToDelete.size === 0) {
+    return;
+  }
+  const kept: RelationOverride[] = [];
+  for (const o of state.relationOverrides) {
+    const orphaned =
+      keysToDelete.has(o.parentStyleKey) ||
+      keysToDelete.has(o.childStyleKey) ||
+      keysToDelete.has(o.overrideStyleKey);
+    if (orphaned) {
+      state.resolvedStyleObjects.delete(o.overrideStyleKey);
+      state.relationOverridePseudoBuckets.delete(o.overrideStyleKey);
+      continue;
+    }
+    kept.push(o);
+  }
+  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
+/**
+ * Reverse component-selector reveals (`${Ancestor}:hover &`) require the ancestor
+ * to render a StyleX marker. The lowering pass only catches ancestors already
+ * skipped when the child was processed; partial migration can additionally
+ * preserve an ancestor *after* lowering when a skipped sibling references it as a
+ * selector. Propagate that preservation to the reverse-reveal children so both
+ * stay styled-components (keeping the original reveal) and the child's override
+ * style is pruned instead of emitted dead.
+ *
+ * Runs as a fixpoint because a newly-preserved child may itself be the ancestor
+ * of another reverse reveal. Same-file overrides only — cross-file reveals are
+ * wired through the consumer patcher.
+ */
+function preserveReverseRevealChildrenOfPreservedAncestors(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+): void {
+  const declByStyleKey = new Map<string, StyledDecl>();
+  for (const decl of state.styledDecls) {
+    if (!decl.isCssHelper) {
+      declByStyleKey.set(decl.styleKey, decl);
+    }
+  }
+  const isPreserved = (decl: StyledDecl): boolean =>
+    decl.skipTransform || preservedNames.has(decl.localName);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const override of state.relationOverrides) {
+      if (override.crossFile) {
+        continue;
+      }
+      const ancestorDecl = declByStyleKey.get(override.parentStyleKey);
+      const childDecl = declByStyleKey.get(override.childStyleKey);
+      if (!ancestorDecl || !childDecl || !isPreserved(ancestorDecl) || isPreserved(childDecl)) {
+        continue;
+      }
+      preservedNames.add(childDecl.localName);
+      changed = true;
+      state.warnings.push({
+        severity: "warning",
+        type: PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING,
+        loc: childDecl.loc,
+        context: { child: childDecl.localName, ancestor: ancestorDecl.localName },
+      });
+    }
   }
 }
 
@@ -538,7 +614,7 @@ function prunePreservedReferencedDeclsFromState(
     if (!preservedNames.has(decl.localName)) {
       continue;
     }
-    for (const key of collectOwnedDeclStyleKeys(decl)) {
+    for (const key of declStyleKeysForPruning(decl)) {
       keysToDelete.add(key);
     }
   }
@@ -551,16 +627,33 @@ function prunePreservedReferencedDeclsFromState(
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
   }
-  if (keysToDelete.size === 0) {
-    return;
+  dropOrphanedRelationOverrides(state, keysToDelete);
+}
+
+function recordContributedStyleKeys(
+  state: LowerRulesState,
+  beforeKeys: Set<string>,
+  decl: StyledDecl,
+): void {
+  for (const key of state.resolvedStyleObjects.keys()) {
+    if (!beforeKeys.has(key)) {
+      (decl.contributedStyleKeys ??= new Set<string>()).add(key);
+    }
   }
-  const kept = state.relationOverrides.filter(
-    (o) =>
-      !keysToDelete.has(o.parentStyleKey) &&
-      !keysToDelete.has(o.childStyleKey) &&
-      !keysToDelete.has(o.overrideStyleKey),
-  );
-  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
+/**
+ * Keys to prune when a decl is skipped/preserved: the statically-derivable owned
+ * keys plus everything its processing actually contributed to `resolvedStyleObjects`
+ * (dynamic style-fn / theme / pseudo keys that `collectOwnedDeclStyleKeys` can't
+ * enumerate). The union keeps pruning complete without a fragile field-by-field list.
+ */
+function declStyleKeysForPruning(decl: StyledDecl): Set<string> {
+  const keys = collectOwnedDeclStyleKeys(decl);
+  for (const key of decl.contributedStyleKeys ?? []) {
+    keys.add(key);
+  }
+  return keys;
 }
 
 function recordAddedResolverImports(

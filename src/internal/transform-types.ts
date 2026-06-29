@@ -801,6 +801,14 @@ export type StyledDecl = {
   /** Resolver imports added while preparing this decl for conversion. */
   resolverImportKeys?: Set<string>;
   /**
+   * Style keys this decl's own processing added to `resolvedStyleObjects`
+   * (base, variant, dynamic style-fn, theme, pseudo, element-override keys).
+   * Captured as a snapshot delta during lowering so a decl preserved *after*
+   * finalization can be pruned completely — relation-override keys are excluded
+   * (added later by finalizeRelationOverrides) and handled separately.
+   */
+  contributedStyleKeys?: Set<string>;
+  /**
    * When true, this declaration could not be transformed to StyleX and should be left
    * untouched in the output (original `styled\`...\`` template preserved, JSX usages
    * unchanged). Set by per-decl bails in lower-rules. Downstream emission, JSX
