@@ -106,17 +106,23 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
-  const unsupportedFunctionAttrsDecl = styledDecls.find(
+  // Both function- and object-form attrs bail when they carry a value we cannot
+  // represent (e.g. spreads/getters, inline functions). Object-form unsupported
+  // values used to fall through and silently drop the attr, which is lossy.
+  const unsupportedAttrsDecl = styledDecls.find(
     (d) =>
       !d.skipTransform &&
-      d.attrsInfo?.sourceKind === "function" &&
+      (d.attrsInfo?.sourceKind === "function" || d.attrsInfo?.sourceKind === "object") &&
       d.attrsInfo.hasUnsupportedValues,
   );
-  if (unsupportedFunctionAttrsDecl) {
+  if (unsupportedAttrsDecl) {
     ctx.warnings.push({
       severity: "warning",
-      type: "Unsupported .attrs() callback pattern",
-      loc: unsupportedFunctionAttrsDecl.loc,
+      type:
+        unsupportedAttrsDecl.attrsInfo?.sourceKind === "object"
+          ? "Unsupported .attrs() object value"
+          : "Unsupported .attrs() callback pattern",
+      loc: unsupportedAttrsDecl.loc,
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
