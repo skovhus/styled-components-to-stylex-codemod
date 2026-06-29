@@ -12711,6 +12711,30 @@ export const App = () => <InheritsAsBox>x</InheritsAsBox>;
     expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
   });
 
+  it("hoists an object-form `sx` literal to preserve its reference identity", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { SxAwareButton } from "./lib/sx-aware-component";
+
+const Btn = styled(SxAwareButton).attrs({ sx: { opacity: 1 }, type: "button" })\`
+  color: red;
+\`;
+
+export const App = () => <Btn>x</Btn>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // styled-components evaluates an object-form attrs argument once, so an `sx`
+    // object literal keeps a stable reference. It must be hoisted to a module
+    // const (like any other object/array attrs literal) rather than re-inlined
+    // fresh every render, which would break memoized sx-aware consumers.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('["sx"] = {');
+    expect(result.code).not.toContain("sx={{");
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";

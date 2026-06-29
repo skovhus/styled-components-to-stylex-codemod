@@ -24,9 +24,13 @@ import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
 
-// Keys with dedicated downstream handling (inline style extraction, polymorphic
-// `as`, stylex `sx` merging). Leave their values untouched.
-const SKIP_ATTR_KEYS = new Set(["style", "sx", "as", "forwardedAs"]);
+// Keys whose values have dedicated downstream handling and must not be hoisted:
+// `style` (inline-style extraction) and `as`/`forwardedAs` (polymorphic element
+// overrides — component references, never object/array literals). `sx` is
+// intentionally NOT excluded: its object/array literals are forwarded into the
+// rendered element / merged into the StyleX `sx` array, so they need the same
+// definition-time reference identity as any other object-form attrs literal.
+const SKIP_ATTR_KEYS = new Set(["style", "as", "forwardedAs"]);
 
 export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult {
   const { j } = ctx;
