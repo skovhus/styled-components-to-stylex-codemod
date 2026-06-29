@@ -209,39 +209,45 @@ function isLocalStyledComponent(ctx: TransformContext, name: string): boolean {
 
 /**
  * Resolves the component a decl actually renders, for typing a hoisted attrs
- * literal. `styled(LocalStyled)` chains are flattened at emit time to render the
- * ultimate non-styled component or intrinsic directly, and a polymorphic `as`
- * override (the decl's own or one inherited from a local base via the attrs
- * merge) replaces the rendered component entirely. Walk through local styled
- * bases — preferring each level's `as` target — to that final rendered base.
+ * literal. Two distinct emit behaviors must be mirrored:
+ *
+ *  - `styled(LocalStyled)` *bases* are flattened away at emit time — the wrapper
+ *    renders the local base's ultimate non-styled component or intrinsic directly —
+ *    so walk through a local styled base to its leaf.
+ *  - A polymorphic `as` override (`attrsAsTag`, the decl's own or one inherited from
+ *    a local base) is rendered *directly* (`propsTarget = attrsAsTag ?? base`); the
+ *    wrapper emits `<asTarget>` without flattening it. So an `as` target is the
+ *    rendered component as-is — type against it even when it is itself a local
+ *    styled component (flattening it would type against a different prop surface).
+ *
  * Returns null when the chain is cyclic or a base decl is missing.
  */
 function resolveRenderedBase(ctx: TransformContext, decl: StyledDecl): StyledDecl["base"] | null {
   const seen = new Set<string>([decl.localName]);
-  let current = renderedBaseOf(decl);
-  while (current.kind === "component" && isLocalStyledComponent(ctx, current.ident)) {
-    const ident = current.ident;
-    if (seen.has(ident)) {
+  let current: StyledDecl = decl;
+  for (;;) {
+    // An `as` override is rendered directly, so it is the rendered component — stop
+    // here rather than flattening through it.
+    const asTag = current.attrsInfo?.attrsAsTag;
+    if (asTag) {
+      return { kind: "component", ident: asTag };
+    }
+    const base = current.base;
+    // An intrinsic or a non-local (imported) component is rendered as-is.
+    if (base.kind !== "component" || !isLocalStyledComponent(ctx, base.ident)) {
+      return base;
+    }
+    // A local styled base is flattened away, so continue to its own rendered base.
+    if (seen.has(base.ident)) {
       return null;
     }
-    seen.add(ident);
-    const baseDecl = (ctx.styledDecls ?? []).find((d) => d.localName === ident);
+    seen.add(base.ident);
+    const baseDecl = (ctx.styledDecls ?? []).find((d) => d.localName === base.ident);
     if (!baseDecl) {
       return null;
     }
-    current = renderedBaseOf(baseDecl);
+    current = baseDecl;
   }
-  return current;
-}
-
-/**
- * The component a decl renders: its polymorphic `as` override when present
- * (mirroring `propsTarget = attrsAsTag ?? base.ident` in the wrapper emitter),
- * otherwise its declared base.
- */
-function renderedBaseOf(decl: StyledDecl): StyledDecl["base"] {
-  const asTag = decl.attrsInfo?.attrsAsTag;
-  return asTag ? { kind: "component", ident: asTag } : decl.base;
 }
 
 /** True when exactly one `VariableDeclaration` in the file declares `localName`. */

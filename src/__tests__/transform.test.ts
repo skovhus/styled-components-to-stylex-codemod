@@ -12756,6 +12756,36 @@ export const App = () => <InheritsAsBox>x</InheritsAsBox>;
     expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
   });
 
+  it("types a hoisted attrs literal against an `as` target that is a local styled component", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number; ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const StyledMotion = styled(Motion)\`
+  opacity: 0.9;
+\`;
+
+const Box = styled.div.attrs({ as: StyledMotion, transition: { duration: 0.2, ease: "easeIn" } })\`
+  color: red;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The `as` target is rendered directly (`<StyledMotion .../>`), so the hoisted
+    // const is typed against `typeof StyledMotion`. The resolver must NOT flatten the
+    // `as` target through to its underlying `Motion` base — only `styled(LocalBase)`
+    // *bases* are flattened, and `StyledMotion`'s prop surface may differ from `Motion`.
+    expect(result.code).toContain('React.ComponentPropsWithRef<typeof StyledMotion>["transition"]');
+    expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
+  });
+
   it("omits the literal-widening annotation when a hoisted attr key is not a valid identifier", () => {
     const source = `
 import * as React from "react";
