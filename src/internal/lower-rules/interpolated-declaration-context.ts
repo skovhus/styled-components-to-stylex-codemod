@@ -32,7 +32,6 @@ export type InterpolatedDeclarationContext = {
   pseudoElement: string | null;
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
-  hasAncestorAttributeScope: boolean;
   applyResolvedPropValue: (
     prop: string,
     value: unknown,

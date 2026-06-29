@@ -8,11 +8,7 @@ import type { RelationOverride } from "./lower-rules/state.js";
 import { cleanupEmptyStyleReferences } from "./post-process-empty-style-references.js";
 import { cleanupPostProcessImports } from "./post-process-imports.js";
 import { toStyleKey } from "./transform/helpers.js";
-import {
-  getIdentifierMemberPropertyName,
-  getJsxElementName,
-  isIdentifierMemberExpression,
-} from "./utilities/jscodeshift-utils.js";
+import { getJsxElementName, isIdentifierMemberExpression } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
@@ -36,8 +32,6 @@ export function postProcessTransformedAst(args: {
   crossFileMarkers?: Map<string, string>;
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
   parentsNeedingDefaultMarker?: Set<string>;
-  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
-  ancestorAttrsByStyleKey?: Map<string, Set<string>>;
 }): { changed: boolean; needsReactImport: boolean } {
   const {
     root,
@@ -54,7 +48,6 @@ export function postProcessTransformedAst(args: {
     stylesIdentifier = "styles",
     crossFileMarkers,
     parentsNeedingDefaultMarker,
-    ancestorAttrsByStyleKey,
   } = args;
   let changed = false;
 
@@ -73,8 +66,7 @@ export function postProcessTransformedAst(args: {
   if (
     relationOverrides.length > 0 ||
     ancestorSelectorParents.size > 0 ||
-    localElementOverridesByParent.size > 0 ||
-    (ancestorAttrsByStyleKey && ancestorAttrsByStyleKey.size > 0)
+    localElementOverridesByParent.size > 0
   ) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
@@ -458,64 +450,6 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      // When a child element uses styles with ancestor attribute conditions,
-      // walk up the ancestor JSX tree and add defaultMarker() to any element
-      // whose JSX attributes match the CSS attribute selector patterns.
-      if (ancestorAttrsByStyleKey && ancestorAttrsByStyleKey.size > 0) {
-        const usedStyleKeys = getUsedStyleKeys(call, sxAttr, stylesIdentifier);
-        for (const key of usedStyleKeys) {
-          const attrSelectors = ancestorAttrsByStyleKey.get(key);
-          if (!attrSelectors) {
-            continue;
-          }
-          const attrNames = extractAttrNamesFromSelectors(attrSelectors);
-          for (const anc of ancestors) {
-            if (!anc.opening) {
-              continue;
-            }
-            const jsxAttrs = (anc.opening.attributes ?? []) as any[];
-            const hasMatchingAttr = jsxAttrs.some(
-              (a: any) =>
-                a.type === "JSXAttribute" &&
-                a.name?.type === "JSXIdentifier" &&
-                attrNames.has(a.name.name),
-            );
-            if (!hasMatchingAttr) {
-              continue;
-            }
-            // Add defaultMarker() via sx attribute on the ancestor element
-            const existingSx = getSxAttrFromAttrs(jsxAttrs);
-            if (existingSx) {
-              if (!hasDefaultMarkerInSxArgs(existingSx)) {
-                addArgsToSxAttr(existingSx, [makeDefaultMarkerCall()]);
-                changed = true;
-              }
-            } else {
-              const existingCall = getStylexPropsCallFromAttrs(jsxAttrs);
-              if (existingCall) {
-                if (!hasDefaultMarker(existingCall)) {
-                  existingCall.arguments = [
-                    ...(existingCall.arguments ?? []),
-                    makeDefaultMarkerCall(),
-                  ];
-                  changed = true;
-                }
-              } else {
-                // Plain element with no sx or stylex.props — add sx={stylex.defaultMarker()}
-                anc.opening.attributes = [
-                  ...jsxAttrs,
-                  j.jsxAttribute(
-                    j.jsxIdentifier("sx"),
-                    j.jsxExpressionContainer(makeDefaultMarkerCall()),
-                  ),
-                ];
-                changed = true;
-              }
-            }
-          }
-        }
-      }
-
       const nextAncestors = [
         ...ancestors,
         { call, sxAttr, elementStyleKey, markerVarName: addedMarkerVarName, opening },
@@ -632,52 +566,6 @@ export function postProcessTransformedAst(args: {
 }
 
 // --- Non-exported helpers ---
-
-/** Extracts style key names referenced in a stylex.props() call or sx attribute. */
-function getUsedStyleKeys(call: any, sxAttr: any, stylesIdentifier: string): string[] {
-  const keys: string[] = [];
-  const extractKey = (node: any): void => {
-    const propertyName = getIdentifierMemberPropertyName(node, stylesIdentifier);
-    if (propertyName) {
-      keys.push(propertyName);
-    }
-    // Also match styleFn calls: styles.key(...)
-    if (node?.type === "CallExpression") {
-      extractKey(node.callee);
-    }
-  };
-  if (call) {
-    for (const arg of call.arguments ?? []) {
-      extractKey(arg);
-    }
-  }
-  if (sxAttr) {
-    const expr = sxAttr.value?.expression;
-    if (expr?.type === "ArrayExpression") {
-      for (const el of expr.elements ?? []) {
-        extractKey(el);
-      }
-    } else {
-      extractKey(expr);
-    }
-  }
-  return keys;
-}
-
-/** Extracts attribute names from CSS attribute selector strings like '[aria-checked="true"]'. */
-function extractAttrNamesFromSelectors(selectors: Set<string>): Set<string> {
-  const names = new Set<string>();
-  // Match attribute names inside [...] brackets
-  const re = /\[([a-zA-Z][\w-]*)/g;
-  for (const sel of selectors) {
-    let m;
-    while ((m = re.exec(sel)) !== null) {
-      names.add(m[1]!);
-    }
-    re.lastIndex = 0;
-  }
-  return names;
-}
 
 function appendToMapList<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);

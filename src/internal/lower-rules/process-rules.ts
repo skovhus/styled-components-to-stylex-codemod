@@ -4,7 +4,7 @@
  */
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningType } from "../logger.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, type WarningType } from "../logger.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
@@ -17,9 +17,10 @@ import {
 import { extractRootAndPath, getNodeLocStart, isAstNode } from "../utilities/jscodeshift-utils.js";
 import { SOURCE_CSS_PROPERTIES_KEY, literalToAst, toStyleKey } from "../transform/helpers.js";
 import {
+  declReferencesCrossFileSelector,
   getOrCreateRelationOverrideBucket,
-  makeAncestorKeyExpr,
   makeDescendantKeyExpr,
+  tagRelationOverrideLocals,
 } from "./shared.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { setConditionSourceOrder } from "./condition-source-order.js";
@@ -33,6 +34,7 @@ import {
   setStyleObjectValue,
 } from "./utils.js";
 import { cssValueIsImportant } from "./important-values.js";
+import { extractScalarDefault } from "./box-shorthand-conflicts.js";
 import {
   getFirstAncestorPseudo,
   copyWrittenPropsToRemainingAncestorPseudoBuckets,
@@ -110,6 +112,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       ? getComposedDefaultValue(propName)
       : (ctx.getWrappedComponentBaseDefaultValue(propName) ?? null);
 
+  // Resolves the `default` entry for a freshly-created condition bucket (pseudo/media)
+  // from the property's current base value. When the base value is itself a condition
+  // map (e.g. an earlier computed `@container` rule already wrapped the prop into
+  // `{ default, __computedKeys }`), we unwrap to its scalar default so the bucket never
+  // captures a live reference to the map it will later be merged into — that reference
+  // would otherwise become a `default → self` cycle during `mergeConditionBucket`.
+  const getExistingConditionDefault = (propName: string): unknown => {
+    const existingVal = (styleObj as Record<string, unknown>)[propName];
+    return existingVal !== undefined
+      ? extractScalarDefault(existingVal)
+      : getConditionDefaultValue(propName);
+  };
+
   // Bails the current declaration and records an unsupported-selector warning at the
   // selector's source location. Centralizes the markBail + warnings.push idiom used
   // throughout this file. `warnDecl` defaults to the declaration under processing but
@@ -118,12 +133,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     type: WarningType,
     rule: (typeof decl.rules)[number],
     warnDecl: StyledDecl = decl,
+    context?: Record<string, unknown>,
   ): void => {
     state.markBail();
     warnings.push({
       severity: "warning",
       type,
       loc: computeSelectorWarningLoc(warnDecl.loc, warnDecl.rawCss, rule.selector),
+      ...(context ? { context } : {}),
     });
   };
 
@@ -208,11 +225,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     });
     return "continue";
   };
-
-  // Track ancestor attribute computed key entries across rules so that base values and
-  // media-wrapped values for the same prop+attr are merged into a single entry.
-  // Key: "prop\0attrStr", Value: the entry pushed to perPropComputedMedia.
-  const ancestorAttrEntryByKey = new Map<string, { keyExpr: unknown; value: unknown }>();
 
   for (const rule of decl.rules) {
     if (state.bail) {
@@ -375,14 +387,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (s.includes(",") && !isHandledComponentPattern) {
-        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors,
-        // pseudo-elements, or ancestor attribute selectors
+        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors
+        // or pseudo-elements. Ancestor attribute selectors (`[attr] &`) resolve to
+        // `:is([attr] *)` pseudos, so they satisfy the `pseudo` check below.
         const parsed = parseSelector(s);
-        if (
-          parsed.kind !== "pseudo" &&
-          parsed.kind !== "pseudoElements" &&
-          parsed.kind !== "ancestorAttribute"
-        ) {
+        if (parsed.kind !== "pseudo" && parsed.kind !== "pseudoElements") {
           bailWithSelectorWarning(
             "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements",
             rule,
@@ -512,6 +521,39 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
+        // The hovered ancestor was preserved as styled-components (it hit an
+        // unsupported pattern and was skipped). A reverse reveal depends on that
+        // ancestor rendering a StyleX marker (`stylex.defaultMarker()` matched by
+        // `stylex.when.ancestor()`), which a preserved styled-component cannot do.
+        // Preserve this declaring child too: keeping both as styled-components
+        // retains the original reveal and avoids emitting an unreachable
+        // `stylex.when.ancestor()` style. The per-decl skip rolls back everything
+        // this decl produced, so no orphaned style leaks.
+        //
+        // This only fires for same-file ancestors (`parentDecl`); cross-file
+        // reveals go through `crossFileParent` and are wired by the consumer
+        // patcher. A same-file ancestor referenced via `${Ancestor}` is always
+        // declared before this child, so its skip state is already settled here.
+        if (parentDecl?.skipTransform) {
+          // If this preserved-as-styled-components child also interpolates an
+          // imported component as a selector, preserving it raw would strand that
+          // cross-file selector: its target may have converted to StyleX in its own
+          // file, and the consumer bridge patcher skips this file because it
+          // otherwise transforms. Escalate to a whole-file bail so the original
+          // cross-file selector behavior is preserved. (Mirrors the post-lowering
+          // guard in preserveReverseRevealChildrenOfPreservedAncestors, which only
+          // covers ancestors preserved *after* this decl was processed.)
+          if (declReferencesCrossFileSelector(state, decl)) {
+            state.bail = true;
+            break;
+          }
+          bailWithSelectorWarning(PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, rule, decl, {
+            child: decl.localName,
+            ancestor: parentDecl.localName,
+          });
+          break;
+        }
+
         // Extract all ancestor pseudos (one per comma-separated part).
         // For no-pseudo reverse (`${Other} &`), use `:is(*)` as synthetic always-matching
         // pseudo so the style is conditional on the marker, not unconditional.
@@ -563,6 +605,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           overrideCountBeforeReverse,
           reverseMarkerVarName,
           jsxParentName,
+        );
+
+        // Record immutable local names so post-lowering preservation propagation
+        // can resolve these decls even after finalize rewrites their style keys
+        // (e.g. an enum/string-mapping child's `decl.styleKey` becomes its base key).
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          parentDecl?.localName,
+          decl.localName,
         );
 
         // For same-file no-pseudo reverse, set markerVarName on the override so
@@ -716,6 +768,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // Tag newly-created relation override as cross-file
         tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, jsxLocalName);
+
+        // Record immutable local names (mirror of the reverse path) so the
+        // post-lowering preservation/pruning can resolve these decls even after
+        // finalize rewrites their style keys (e.g. enum/string-mapping variants).
+        // The parent here is the declaring decl, whose own finalize runs *after*
+        // this registration, so its `parentStyleKey` is captured pre-rewrite.
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          decl.localName,
+          childDecl?.localName,
+        );
 
         const forwardResult = processDeclarationsIntoBucket(
           rule,
@@ -1028,25 +1092,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       bailWithSelectorWarning("Unsupported selector: descendant/child/sibling selector", rule);
       break;
-    }
-
-    // Ancestor attribute selectors: [attr] & → stylex.when.ancestor(':is([attr])')
-    const ancestorAttrs =
-      parsedSelector.kind === "ancestorAttribute" ? parsedSelector.ancestorAttrs : null;
-    const ancestorAttrKeyExprs = ancestorAttrs
-      ? ancestorAttrs.map((attr) => makeAncestorKeyExpr(j, `:is(${attr})`))
-      : null;
-
-    // Track ancestor attribute selectors per style key for JSX marker injection
-    if (ancestorAttrs) {
-      let attrSet = state.ancestorAttrsByStyleKey.get(decl.styleKey);
-      if (!attrSet) {
-        attrSet = new Set();
-        state.ancestorAttrsByStyleKey.set(decl.styleKey, attrSet);
-      }
-      for (const attr of ancestorAttrs) {
-        attrSet.add(attr);
-      }
     }
 
     const pseudos =
@@ -1376,9 +1421,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const existing = perPropMedia[prop]!;
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
-            const existingVal = (styleObj as Record<string, unknown>)[prop];
-            existing.default =
-              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+            existing.default = getExistingConditionDefault(prop);
           }
           const current = existing[media];
           const mediaMap =
@@ -1395,9 +1438,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const existing = perPropPseudo[prop]!;
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
-            const existingVal = (styleObj as Record<string, unknown>)[prop];
-            existing.default =
-              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+            existing.default = getExistingConditionDefault(prop);
           }
           for (const ps of pseudos) {
             const current = existing[ps];
@@ -1410,51 +1451,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             }
             (existing[ps] as Record<string, unknown>)[media] = value;
             noteConditionSourceOrder(existing[ps] as Record<string, unknown>, media);
-          }
-        }
-        return;
-      }
-
-      // Handle ancestor attribute selectors: [attr] & → stylex.when.ancestor(':is([attr])')
-      // Must run before the plain `media` branch so @media inside [attr] & wraps correctly.
-      // Uses ancestorAttrEntryByKey to merge base and media values for the same prop+attr
-      // across separate rules (e.g., base `display: block` and `@media { display: flex }`).
-      // Computed media keys (e.g., imported breakpoint constants like `breakpoints.phone`)
-      // cannot be nested inside an ancestor computed key — bail to avoid silently dropping
-      // the breakpoint condition.
-      if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length && resolvedSelectorMedia) {
-        bailWithSelectorWarning(
-          "Unsupported selector: computed media query inside ancestor attribute selector",
-          rule,
-        );
-        return;
-      }
-      if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length) {
-        for (let i = 0; i < ancestorAttrs.length; i++) {
-          const attr = ancestorAttrs[i]!;
-          const mapKey = `${prop}\0${attr}`;
-          const existing = ancestorAttrEntryByKey.get(mapKey);
-
-          if (!existing) {
-            // First occurrence: push a new computed key entry
-            const entryValue = media ? { default: null, [media]: value } : value;
-            const computedEntry = { keyExpr: ancestorAttrKeyExprs[i]!, value: entryValue };
-            getOrCreateComputedMediaEntry(prop, ctx).entries.push(computedEntry);
-            ancestorAttrEntryByKey.set(mapKey, computedEntry);
-          } else if (media) {
-            // Media query for an already-seen attr: merge into existing value
-            if (typeof existing.value === "object" && existing.value !== null) {
-              (existing.value as Record<string, unknown>)[media] = value;
-            } else {
-              existing.value = { default: existing.value, [media]: value };
-            }
-          } else {
-            // Base value arriving after media: update the default
-            if (typeof existing.value === "object" && existing.value !== null) {
-              (existing.value as Record<string, unknown>).default = value;
-            } else {
-              existing.value = value;
-            }
           }
         }
         return;
@@ -1502,9 +1498,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const existing = perPropMedia[prop]!;
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          existing.default =
-            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+          existing.default = getExistingConditionDefault(prop);
         }
         const currentMediaValue = existing[media];
         if (
@@ -1525,8 +1519,24 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Handle resolved selector media (from adapter.resolveSelector)
       // These use computed property keys like [breakpoints.phone]
       if (resolvedSelectorMedia) {
+        // A computed media key is emitted at the property's top level — it cannot be
+        // nested inside a pseudo condition map. This covers ancestor attribute selectors
+        // (`[attr] &` → `:is([attr] *)`), which would otherwise silently lose their scope
+        // when a computed `@media ${importedBreakpoint}` wraps the declaration.
+        if (pseudos?.length) {
+          bailWithSelectorWarning(
+            "Unsupported selector: computed media query inside ancestor attribute selector",
+            rule,
+          );
+          return;
+        }
         const entry = getOrCreateComputedMediaEntry(prop, ctx);
-        entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
+        const sourceOrder = ctx.getCurrentDeclarationSourceOrder();
+        entry.entries.push({
+          keyExpr: resolvedSelectorMedia.keyExpr,
+          value,
+          ...(sourceOrder !== undefined ? { sourceOrder } : {}),
+        });
         return;
       }
 
@@ -1566,9 +1576,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const existing = perPropPseudo[prop]!;
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          existing.default =
-            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
+          existing.default = getExistingConditionDefault(prop);
         }
         for (const ps of pseudos) {
           existing[ps] = value;
@@ -1632,7 +1640,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       pseudoElement: pseudoElement ?? (pseudoElementsList ? (pseudoElementsList[0] ?? null) : null),
       attrTarget,
       resolvedSelectorMedia,
-      hasAncestorAttributeScope: Boolean(ancestorAttrs?.length),
       applyResolvedPropValue,
     });
     if (state.bail) {

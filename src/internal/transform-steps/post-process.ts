@@ -52,7 +52,6 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     stylesIdentifier: ctx.stylesIdentifier,
     crossFileMarkers: ctx.crossFileMarkers,
     parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
-    ancestorAttrsByStyleKey: ctx.ancestorAttrsByStyleKey,
   });
   if (post.changed) {
     ctx.markChanged();

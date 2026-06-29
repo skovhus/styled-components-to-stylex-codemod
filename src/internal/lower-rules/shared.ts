@@ -4,8 +4,51 @@
  * and relation override bucket management.
  */
 import type { JSCodeshift } from "jscodeshift";
+import type { StyledDecl } from "../transform-types.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
+import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import type { ExpressionKind } from "./decl-types.js";
-import type { RelationOverride } from "./state.js";
+import type { LowerRulesState, RelationOverride } from "./state.js";
+
+const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
+
+/**
+ * Collects the local names of components interpolated as *selectors* in a decl's
+ * template (e.g. `${Card}:hover &`, `${Badge} { ... }`), filtering out
+ * interpolations used as values. Shared by the rule-processing and post-lowering
+ * preservation passes so both detect the same selector references.
+ */
+export function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  if (!decl.rawCss) {
+    return identifiers;
+  }
+  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
+  }
+  return identifiers;
+}
+
+/**
+ * True when a decl's template interpolates an imported component as a selector —
+ * directly or transitively through a css helper. A reveal child preserved as raw
+ * styled-components would strand that cross-file selector if its target converted
+ * to StyleX in its own file (the consumer bridge patcher skips files that
+ * otherwise transform), so callers bail. Reads the precomputed
+ * `crossFileSelectorReferrers` set (built once before rule processing) so the
+ * check stays helper-aware in both the early and late preservation paths.
+ */
+export function declReferencesCrossFileSelector(state: LowerRulesState, decl: StyledDecl): boolean {
+  return state.crossFileSelectorReferrers.has(decl.localName);
+}
 
 export function findPlaceholderBlock(
   rawCss: string,
@@ -169,6 +212,33 @@ export function cssPropertyToIdentifier(prop: string, avoidNames?: Set<string>):
     return `${name}Value`;
   }
   return name;
+}
+
+/**
+ * Tag every relation override registered under `overrideStyleKey` with the
+ * immutable local names of the decls it relates. Post-lowering preservation and
+ * pruning resolve decls by these names because a decl's style key can be
+ * rewritten after the override is registered (e.g. enum/string-mapping variants
+ * rewrite `decl.styleKey` to a derived base key). Call at every override-creation
+ * site so the tags don't depend on which path created the override.
+ */
+export function tagRelationOverrideLocals(
+  relationOverrides: RelationOverride[],
+  overrideStyleKey: string,
+  parentLocalName: string | undefined,
+  childLocalName: string | undefined,
+): void {
+  for (const o of relationOverrides) {
+    if (o.overrideStyleKey !== overrideStyleKey) {
+      continue;
+    }
+    if (parentLocalName) {
+      o.parentLocalName = parentLocalName;
+    }
+    if (childLocalName) {
+      o.childLocalName = childLocalName;
+    }
+  }
 }
 
 /**

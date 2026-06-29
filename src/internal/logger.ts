@@ -120,6 +120,7 @@ export type WarningType =
   | "Unsupported selector: computed media query inside cross-component sibling selector"
   | "Unsupported selector: computed media query inside sibling selector"
   | "Unsupported selector: computed media query inside :has() component selector"
+  | "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved"
   | "Unsupported selector: cross-file :has() component selector not yet supported"
   | "Unsupported selector: unresolved interpolation in :has() component selector"
   | "Unsupported selector: unknown component selector"
@@ -134,6 +135,7 @@ export type WarningType =
   | "Partial migration left styled-components declarations unconverted"
   | "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts"
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
+  | "Partial transform would leave a StyleX child reveal targeting a styled-components ancestor — the component-selector ancestor was not converted, so it cannot render the marker the child's stylex.when.ancestor() reveal needs; the child is preserved as styled-components to keep the reveal working"
   | "Conditional StyleX default would override an unproven earlier style for the same property"
   | "Flat StyleX value would erase earlier conditional property states"
   | "Forwarded sx conditional default would override an unproven wrapped component base style"
@@ -150,6 +152,9 @@ export const CASCADE_CONFLICT_WARNING =
 
 export const PARTIAL_MIGRATION_INCOMPLETE_WARNING =
   "Partial migration left styled-components declarations unconverted" satisfies WarningType;
+
+export const PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING =
+  "Partial transform would leave a StyleX child reveal targeting a styled-components ancestor — the component-selector ancestor was not converted, so it cannot render the marker the child's stylex.when.ancestor() reveal needs; the child is preserved as styled-components to keep the reveal working" satisfies WarningType;
 
 export const UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING =
   "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)" satisfies WarningType;

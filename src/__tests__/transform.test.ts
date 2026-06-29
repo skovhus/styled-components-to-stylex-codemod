@@ -1316,6 +1316,788 @@ export const App = () => (
     );
   });
 
+  it("preserves a child reveal whose ancestor stays styled-components without leaking a dead style", () => {
+    // `Card` has an unsupported descendant selector and stays as styled-components,
+    // so it can never render the marker that `Actions`'s `${Card}:hover &` reveal
+    // depends on. `Actions` must be preserved too — including its dynamic prop-based
+    // `gap` style — so no unused StyleX style leaks into the converted `Footer` output.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Card = styled.div\`
+  padding: 8px;
+
+  & span.label {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div<{ $gap: number }>\`
+  opacity: 0;
+  gap: \${(p) => p.$gap}px;
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <span className="label">Label</span>
+    <Actions $gap={4}>Actions</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-childReveal.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer converts to StyleX.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and Actions are preserved as styled-components so the original
+    // `${Card}:hover &` reveal keeps working natively.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved child: neither the reveal override,
+    // an unmarked when.ancestor(), nor the dynamic prop style may appear.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    // Clear warning naming the preserved child and its ancestor.
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
+  it("preserves a reveal child when its ancestor is preserved only via reference propagation", () => {
+    // `Card` converts on its own, but a *skipped* sibling (`Other`) references it
+    // as a selector, so partial migration preserves `Card` as styled-components
+    // after lowering. `Actions` already lowered its `${Card}:hover &` reveal against
+    // a converting `Card`; without back-propagation that would leave a dead
+    // `actionsInCard` style (and a dynamic `actionsGap` style-fn) in stylex.create().
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Card = styled.div\`
+  padding: 8px;
+\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div<{ $gap: number }>\`
+  opacity: 0;
+  gap: \${(p) => p.$gap}px;
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <Other>
+      <span className="label">L</span>
+    </Other>
+    <Actions $gap={4}>Actions</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-childRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer still converts.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card (the referenced ancestor) and Actions (its reveal child) are both
+    // preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved child — neither the reveal override,
+    // an unmarked when.ancestor(), nor the dynamic style-fn may appear.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
+  it("prunes dynamic style-fn keys of a pre-resolved component preserved via reference", () => {
+    // `Actions` uses the object-call syntax (pre-resolved during collection) with a
+    // dynamic prop-based `gap`, producing a separate `actionsGap` style-fn key. A
+    // skipped sibling references `${Actions}` as a selector, so partial migration
+    // preserves `Actions` as styled-components — its dynamic key must be pruned too,
+    // not left behind as an unused StyleX style.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Actions = styled.div<{ $gap?: string }>((p) => ({
+  opacity: 1,
+  gap: p.$gap || "4px",
+}));
+
+const Other = styled.div\`
+  \${Actions} span.label {
+    color: red;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Actions $gap="8px">A</Actions>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-preResolvedReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer still converts.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Actions (object-call syntax) stays styled-components because the skipped
+    // sibling references it as a selector.
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved component — including its dynamic
+    // pre-resolved style-fn key.
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+  });
+
+  it("preserves the second reveal ancestor of a newly preserved reveal child", () => {
+    // A skipped sibling preserves `Card`; `Actions` has two reverse reveals,
+    // `${Card}:hover &` and `${Panel}:hover &`. Preserving `Actions` (via the Card
+    // reveal) leaves its template interpolating `${Panel}`, so `Panel` must be
+    // preserved too — the preservation passes run as a combined fixpoint that
+    // re-scans newly preserved children's templates for further selector refs.
+    const source = `
+import styled from "styled-components";
+
+const Card = styled.div\`padding: 8px;\`;
+const Panel = styled.div\`margin: 4px;\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${Panel}:hover & {
+    opacity: 0.5;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions>A</Actions>
+    </Card>
+    <Panel>
+      <Actions>A2</Actions>
+    </Panel>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-secondRevealAncestor.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card, Panel (both reveal ancestors) and Actions all stay styled-components,
+    // so `Actions`'s `${Card}`/`${Panel}` selectors keep valid targets.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Panel\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No dead StyleX entries for the preserved ancestors/child.
+    expect(result.code).not.toMatch(/\b(panel|card|actions)[A-Za-z0-9]*:/);
+    expect(result.code).not.toContain("when.ancestor");
+  });
+
+  it("bails when a preserved reveal child also holds a cross-file selector", () => {
+    // `Card` is skipped (unsupported descendant), so `Actions` (`${Card}:hover &`)
+    // is preserved as raw styled-components. But `Actions` also interpolates the
+    // imported `${ImportedChild}` as a selector — and `ImportedChild` may have been
+    // converted to StyleX in its own file. Since this file is otherwise transformed
+    // (Footer converts), the consumer bridge patcher would skip it, stranding the
+    // cross-file selector. The whole file must bail to preserve that behavior.
+    const source = `
+import styled from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+const Card = styled.div\`
+  padding: 8px;
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions>
+        <ImportedChild />
+      </Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    // Whole-file bail: the file is returned unchanged rather than partially
+    // converted with a stranded cross-file selector in the preserved child.
+    expect(result.code).toBeNull();
+  });
+
+  it("bails when an early-preserved reveal child holds a cross-file selector", () => {
+    // Same hazard as the previous test, but via the *early* preservation path:
+    // `Card` is skipped from the start (unsupported `& a.active`), so when
+    // `Actions` (`${Card}:hover &`) is processed its ancestor is already
+    // `skipTransform` and the reveal child is preserved inline in process-rules —
+    // before the post-lowering reference-propagation guard runs. `Actions` also
+    // interpolates the imported `${ImportedChild}`, so the same cross-file bail
+    // must fire here too, otherwise the otherwise-transformed file strands the
+    // selector.
+    const source = `
+import styled from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+const Card = styled.div\`
+  padding: 8px;
+  & a.active {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <a className="active">link</a>
+    <Actions>
+      <ImportedChild />
+    </Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("bails when a preserved reveal child holds a cross-file selector via a css helper", () => {
+    // The cross-file selector is hidden behind a css helper: `Actions` only
+    // interpolates `${mix}`, and `mix` is the one that interpolates the imported
+    // `${ImportedChild}`. A naive scan of `Actions`'s own template sees only the
+    // `mix` identifier (a value interpolation, not a selector), so the guard must
+    // expand through the helper to find the stranded cross-file selector and bail.
+    const source = `
+import styled, { css } from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+export const mix = css\`
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const Card = styled.div\`
+  padding: 8px;
+  & a.active {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${mix}
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <a className="active">link</a>
+    <Actions>
+      <ImportedChild />
+    </Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("prunes derived after-base mixin keys of a component preserved via reference", () => {
+    // `Button` composes an after-base css mixin with a contextual (`&:hover`)
+    // override, which `postProcessAfterBaseMixins` lowers into a per-use derived
+    // key (`hoverStylesInButton`) created *after* the per-decl key recording. A
+    // skipped sibling references `${Button}`, so partial migration preserves
+    // `Button`; the derived key must be pruned, not emitted dead. The mixin is
+    // exported so its preservation doesn't force a whole-file bail.
+    const source = `
+import styled, { css } from "styled-components";
+
+export const HoverStyles = css\`
+  &:hover {
+    color: blue;
+  }
+\`;
+
+const Button = styled.button\`
+  color: red;
+  \${HoverStyles}
+\`;
+
+const Other = styled.div\`
+  \${Button} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Button>Hover</Button>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-derivedMixinReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Button stays styled-components (referenced by the skipped sibling).
+    expect(result.code).toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    // The derived per-use mixin key must not leak into stylex.create().
+    expect(result.code).not.toContain("hoverStylesInButton");
+  });
+
+  it("preserves an enum-variant reveal child when its ancestor is preserved via reference", () => {
+    // `Actions` is lowered as an enum/string-mapping variant, so finalizeDeclProcessing
+    // rewrites `decl.styleKey` (`actions` → `actionsBase`) *after* the reverse
+    // `${Card}:hover &` override was registered with the original key. The
+    // post-lowering preservation propagation must still associate that override
+    // back to `Actions` (by local name) so it is preserved alongside the
+    // reference-preserved `Card`, rather than staying converted with a dropped reveal.
+    const source = `
+import styled from "styled-components";
+
+const pickColor = (v: string) => (v === "primary" ? "crimson" : "navy");
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Actions = styled.div<{ $variant: "primary" | "secondary" }>\`
+  opacity: 0;
+  background: \${(p) => pickColor(p.$variant)};
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Card>
+      <Actions $variant="primary">A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-enumRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and the enum-variant Actions are preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // None of the enum child's StyleX keys (base/variant/reveal) may leak.
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
+  it("preserves a no-pseudo scoped-marker reveal child when its ancestor is preserved via reference", () => {
+    // The no-pseudo reverse form `${Card} &` uses a scoped marker, so its override
+    // is flagged `crossFile` even though `Card` is same-file. The post-lowering
+    // propagation must still preserve `Actions` when `Card` is preserved via a
+    // skipped sibling — distinguishing genuine cross-file overrides by ancestor
+    // resolution, not the `crossFile` flag — so the `${Card} &` style isn't lost.
+    const source = `
+import styled from "styled-components";
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Other = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0.5;
+
+  \${Card} & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Card>
+      <Actions>A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-noPseudoRevealReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Both Card and Actions stay styled-components so the `${Card} &` reveal works.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No leftover StyleX keys for the preserved child (base or scoped-marker override).
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
+  it("drops the reveal override when both ancestor and enum-variant child are preserved", () => {
+    // Both `Card` and `Actions` use a background string-mapping (enum) variant, so
+    // both have `decl.styleKey` rewritten to a derived base key. `Actions` is
+    // preserved because a skipped block references `${Actions}` (which transitively
+    // preserves `Card`). The `${Card}:hover &` override stores the child's pre-rewrite
+    // key, so `dropOrphanedRelationOverrides()` must resolve the decls by local name
+    // (not just style key) to drop the override and avoid a dead `actionsInCard`.
+    const source = `
+import styled from "styled-components";
+
+const pickBgA = (v: string) => (v === "a" ? "crimson" : "navy");
+const pickBgB = (v: string) => (v === "x" ? "teal" : "olive");
+
+const Card = styled.div<{ $kind: "a" | "b" }>\`
+  padding: 8px;
+  background: \${(p) => pickBgA(p.$kind)};
+\`;
+
+const Actions = styled.div<{ $variant: "x" | "y" }>\`
+  background: \${(p) => pickBgB(p.$variant)};
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Actions} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card $kind="a">
+      <Actions $variant="x">A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-enumBothPreserved.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card and Actions stay styled-components; no leftover StyleX keys for either,
+    // including the now-unreachable reveal override.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div</);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\b(actions|card)[A-Za-z0-9]*:/);
+  });
+
+  it("propagates preservation through a forward selector owned by a preserved reveal child", () => {
+    // Chain: a skipped block preserves `Card`; the reveal propagation preserves the
+    // enum `Actions` (`${Card}:hover &`); `Actions` in turn owns a forward selector
+    // `&:hover ${Badge}`. Without local-name tagging on the forward override, the
+    // fixpoint can't reach `Badge` (its parent key is the pre-finalize `actions`),
+    // so `Badge` converts while preserved `Actions` still references `${Badge}`, and
+    // a dead `badgeInActions` is emitted. With tagging, `Badge` is preserved too.
+    const source = `
+import styled from "styled-components";
+
+const pickA = (v: string) => (v === "a" ? "crimson" : "navy");
+const pickB = (v: string) => (v === "x" ? "teal" : "olive");
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Badge = styled.span<{ $b: "x" | "y" }>\`
+  background: \${(p) => pickB(p.$b)};
+\`;
+
+const Actions = styled.div<{ $a: "a" | "b" }>\`
+  background: \${(p) => pickA(p.$a)};
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  &:hover \${Badge} {
+    color: red;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions $a="a">
+        <Badge $b="x">B</Badge>
+      </Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-forwardSelectorChain.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card, Actions and Badge are all preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    expect(result.code).toMatch(/const\s+Badge\s*=\s*styled\.span</);
+    // No dead reveal overrides for the preserved chain.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("badgeInActions");
+    expect(result.code).not.toContain("when.ancestor");
+  });
+
+  it("preserves a reveal child when its ancestor is skipped late by an after-base mixin", () => {
+    // `Card` converts through the per-decl loop, then `postProcessAfterBaseMixins`
+    // marks it skipped (its after-base mixin needs a base default for a non-literal
+    // `opacity`). The preservation propagation must run before pruning removes the
+    // `${Card}:hover &` override — otherwise `Actions` stays converted with the
+    // reveal silently dropped. The mixin is exported so its preservation doesn't
+    // force a whole-file bail.
+    const source = `
+import styled, { css } from "styled-components";
+
+export const focusMix = css\`
+  &:focus {
+    opacity: 1;
+  }
+\`;
+
+const Card = styled.div\`
+  opacity: 0.5;
+  &:hover {
+    opacity: 0.8;
+  }
+  \${focusMix}
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <Actions>A</Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runPartial(source, "partial-lateSkipAfterBaseMixin.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card (skipped late) and Actions (its reveal child) both stay styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div`/);
+    // No dead reveal override / unmarked when.ancestor() left behind.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        type: expect.stringContaining("StyleX child reveal targeting a styled-components ancestor"),
+        context: expect.objectContaining({ child: "Actions", ancestor: "Card" }),
+      }),
+    );
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],
@@ -8628,6 +9410,110 @@ export const Box = styled.div\`
       { adapter: fixtureAdapter },
     );
 
+    expect(result.code).toBeNull();
+  });
+
+  it("represents arbitrary ancestor data-attribute selectors as `:is([attr] *)` self-conditions without markers", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  opacity: 0;
+
+  [data-menu-open="true"] & {
+    opacity: 1;
+  }
+\`;
+
+export function Example() {
+  return (
+    <div data-menu-open="true">
+      <Button>Action</Button>
+    </div>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttribute.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    // The condition is a self pseudo-selector matching descendants of the ancestor —
+    // this needs no marker on the (arbitrary, codemod-uncontrolled) ancestor element.
+    // (quote-agnostic: raw recast output escapes the inner quotes)
+    expect(code).toMatch(/:is\(\[data-menu-open=.+? \*\)/);
+    // It must NOT fall back to an unmarked stylex.when.ancestor() (would silently never match),
+    // nor inject stylex.defaultMarker() onto the ancestor <div>.
+    expect(code).not.toContain("when.ancestor");
+    expect(code).not.toContain("defaultMarker");
+  });
+
+  it("preserves a static @media scope for an interpolated value inside an ancestor attribute selector", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  color: black;
+
+  [data-open] & {
+    @media (min-width: 600px) {
+      color: \${(p) => p.theme.color.labelBase};
+    }
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttributeInterpolatedMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    // The interpolated theme value must stay scoped to BOTH the ancestor condition and
+    // the media query — emitting `@media (min-width: 600px)` -> value nested under the
+    // `:is([data-open] *)` pseudo, not applied unconditionally at every width.
+    expect(code).toMatch(/:is\(\[data-open\] \*\)/);
+    expect(code).toMatch(/@media \(min-width: 600px\)["']?\s*:\s*\$colors\.labelBase/);
+  });
+
+  it("bails on a computed media query nested inside an ancestor attribute selector", () => {
+    const source = `
+import styled from "styled-components";
+import { screenSizeBreakPoints } from "./lib/helpers";
+
+export const Button = styled.button\`
+  opacity: 0;
+
+  [data-menu-open="true"] & {
+    @media \${screenSizeBreakPoints.phone} {
+      opacity: 1;
+    }
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttributeMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // A computed media key is emitted at the property's top level and cannot nest
+    // under the `:is([attr] *)` condition — bail cleanly rather than silently
+    // dropping the ancestor scope.
     expect(result.code).toBeNull();
   });
 

@@ -163,6 +163,10 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
       if (!resolvedStyleObjects.has(derivedKey)) {
         resolvedStyleObjects.set(derivedKey, patched);
       }
+      // This runs after the per-decl key-recording pass, so attribute the derived
+      // per-use key to its decl here — otherwise pruning a later-preserved decl
+      // would leave it behind as an unused StyleX style.
+      (decl.contributedStyleKeys ??= new Set<string>()).add(derivedKey);
       prunableCssHelperKeys.add(mixinKey);
 
       // Replace this mixin key with the derived key, preserving ordering.

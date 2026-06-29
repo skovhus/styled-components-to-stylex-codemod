@@ -4,6 +4,7 @@
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING } from "../logger.js";
 import { TransformContext } from "../transform-context.js";
 import { getUseLogicalProperties, setUseLogicalProperties } from "../css-prop-mapping.js";
 import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "../keyframes.js";
@@ -13,7 +14,11 @@ import { postProcessAfterBaseMixins } from "../lower-rules/after-base-mixins.js"
 import { preScanCssHelperPlaceholders } from "../lower-rules/pre-scan.js";
 import { processDeclRules } from "../lower-rules/process-rules.js";
 import { finalizeRelationOverrides } from "../lower-rules/relation-overrides.js";
-import { makeCssPropKey } from "../lower-rules/shared.js";
+import {
+  collectTemplateSelectorIdentifiers,
+  declReferencesCrossFileSelector,
+  makeCssPropKey,
+} from "../lower-rules/shared.js";
 import {
   createLowerRulesState,
   type LowerRulesState,
@@ -46,7 +51,6 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   ctx.crossFileMarkers = lowered.crossFileMarkers;
   ctx.siblingMarkerKeys = lowered.siblingMarkerKeys;
   ctx.parentsNeedingDefaultMarker = lowered.parentsNeedingDefaultMarker;
-  ctx.ancestorAttrsByStyleKey = lowered.ancestorAttrsByStyleKey;
 
   if (lowered.bail || ctx.resolveValueBailRef.value) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
@@ -126,8 +130,6 @@ type LowerRulesResult = {
   crossFileMarkers: Map<string, string>;
   siblingMarkerKeys: Set<string>;
   parentsNeedingDefaultMarker: Set<string>;
-  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
-  ancestorAttrsByStyleKey: Map<string, Set<string>>;
   preservedReferencedStyledDecls: Set<string>;
   bail: boolean;
 };
@@ -163,6 +165,14 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   }
   state.inlineKeyframeNameMap = ctx.inlineKeyframeNameMap;
 
+  // Precompute which decls reference an imported component as a selector, looking
+  // through css helpers (`${mix}` where `mix = css\`${ImportedChild} { ... }\``).
+  // The preservation guards consult this so a preserved reveal child whose
+  // cross-file selector hides behind a helper still bails instead of silently
+  // stranding the import. Template selector references are static, so one pass
+  // before rule processing suffices for both the early and late guard paths.
+  state.crossFileSelectorReferrers = computeCrossFileSelectorReferrers(state, ctx.cssLocal);
+
   for (const decl of state.styledDecls) {
     if (state.bail) {
       break;
@@ -171,10 +181,17 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
       continue;
     }
     if (decl.preResolvedStyle) {
+      // Pre-resolved decls bypass processOneDecl, so record the style keys they
+      // add here too — otherwise a later preservation (via a skipped sibling's
+      // selector reference) would prune only the base key and leak the
+      // preResolvedFnDecls (dynamic style-fn) keys as unused StyleX styles.
+      const contributed = (decl.contributedStyleKeys ??= new Set<string>());
       state.resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
+      contributed.add(decl.styleKey);
       if (decl.preResolvedFnDecls) {
         for (const [k, v] of Object.entries(decl.preResolvedFnDecls)) {
           state.resolvedStyleObjects.set(k, v);
+          contributed.add(k);
         }
       }
       continue;
@@ -193,6 +210,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
       break;
     }
     recordAddedResolverImports(state, snapshot.resolverImportKeys, decl);
+    recordContributedStyleKeys(state, snapshot.resolvedStyleKeys, decl);
   }
 
   if (!state.bail) {
@@ -216,8 +234,32 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // for skipped decls.
   let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
-    pruneSkippedDeclsFromState(state);
-    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
+    // Compute preservation and propagate reveal-child preservation BEFORE any
+    // pruning. A reverse-reveal child (`${Card}:hover &`) must be preserved when
+    // its ancestor `Card` is preserved — either referenced by a skipped sibling
+    // (e.g. `${Card} span.label { ... }`) or skipped late (e.g. an unsupported
+    // after-base css mixin in postProcessAfterBaseMixins). Pruning deletes the
+    // ancestor's relation overrides, so the propagation must traverse those edges
+    // first; otherwise the child would stay converted with the reveal dropped.
+    // Combined fixpoint of two propagations until the preserved set stabilizes:
+    //   (a) a preserved/skipped decl preserves the components its template
+    //       references as selectors (collectPreservedReferencedStyledDecls), and
+    //   (b) a preserved/skipped reveal *ancestor* preserves its reveal children
+    //       (preserveReverseRevealChildrenOfPreservedAncestors).
+    // They feed each other: a newly-preserved reveal child may itself interpolate
+    // another component (e.g. a second `${Panel}:hover &` reveal) whose ancestor
+    // must also be preserved, so re-scan its template until nothing new is added.
+    let prevPreservedCount = -1;
+    while (preservedReferencedStyledDecls.size !== prevPreservedCount) {
+      prevPreservedCount = preservedReferencedStyledDecls.size;
+      preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(
+        state,
+        ctx.cssLocal,
+        preservedReferencedStyledDecls,
+      );
+      preserveReverseRevealChildrenOfPreservedAncestors(state, preservedReferencedStyledDecls);
+    }
+    pruneSkippedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
@@ -282,7 +324,6 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     crossFileMarkers,
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     parentsNeedingDefaultMarker,
-    ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
     preservedReferencedStyledDecls,
     bail: state.bail,
   };
@@ -353,7 +394,6 @@ type StateSnapshot = {
   siblingMarkerNames: Array<[string, string]>;
   relationOverridePseudoKeys: Set<string>;
   childPseudoKeys: Set<string>;
-  ancestorAttrKeys: Set<string>;
   usedCssHelperFunctions: Set<string>;
   resolverImportKeys: Set<string>;
 };
@@ -375,7 +415,6 @@ function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
     siblingMarkerNames: [...state.siblingMarkerNames.entries()],
     relationOverridePseudoKeys: new Set(state.relationOverridePseudoBuckets.keys()),
     childPseudoKeys: new Set(state.childPseudoMarkers.keys()),
-    ancestorAttrKeys: new Set(state.ancestorAttrsByStyleKey.keys()),
     usedCssHelperFunctions: new Set(state.usedCssHelperFunctions),
     resolverImportKeys: new Set(state.resolverImports.keys()),
   };
@@ -425,8 +464,18 @@ function collectOwnedDeclStyleKeys(decl: StyledDecl): Set<string> {
   return keys;
 }
 
-function pruneSkippedDeclsFromState(state: LowerRulesState): void {
-  const skipped = state.styledDecls.filter((d: StyledDecl) => d.skipTransform);
+function pruneSkippedDeclsFromState(
+  state: LowerRulesState,
+  preservedReferencedNames: Set<string> = new Set(),
+): void {
+  // A reveal child added to `preservedReferencedNames` will be preserved as
+  // styled-components, but its `decl.skipTransform` isn't set until `lowerRules`
+  // returns. Treat it as skipped here so it neither survives in the output nor
+  // keeps a skipped ancestor's keys alive via the keep set (e.g. a later-assigned
+  // `extendsStyleKey`/`extraStyleKeys` pointing at the ancestor).
+  const willBePreserved = (d: StyledDecl): boolean =>
+    d.skipTransform || preservedReferencedNames.has(d.localName);
+  const skipped = state.styledDecls.filter(willBePreserved);
   if (skipped.length === 0) {
     return;
   }
@@ -436,10 +485,10 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   // and mixin style keys that appear in multiple decls' owned key sets.
   const keepKeys = new Set<string>();
   for (const d of state.styledDecls) {
-    if (d.skipTransform) {
+    if (willBePreserved(d)) {
       continue;
     }
-    for (const key of collectOwnedDeclStyleKeys(d)) {
+    for (const key of declStyleKeysForPruning(d)) {
       keepKeys.add(key);
     }
     if (d.extendsStyleKey) {
@@ -455,7 +504,7 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
 
   const keysToDelete = new Set<string>();
   for (const d of skipped) {
-    for (const key of collectOwnedDeclStyleKeys(d)) {
+    for (const key of declStyleKeysForPruning(d)) {
       if (!keepKeys.has(key)) {
         keysToDelete.add(key);
       }
@@ -465,28 +514,123 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
     state.resolvedStyleObjects.delete(key);
     state.relationOverridePseudoBuckets.delete(key);
     state.childPseudoMarkers.delete(key);
-    state.ancestorAttrsByStyleKey.delete(key);
     state.ancestorSelectorParents.delete(key);
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
   }
-  if (keysToDelete.size > 0) {
-    const kept = state.relationOverrides.filter(
-      (o) =>
-        !keysToDelete.has(o.parentStyleKey) &&
-        !keysToDelete.has(o.childStyleKey) &&
-        !keysToDelete.has(o.overrideStyleKey),
-    );
-    state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+  dropOrphanedRelationOverrides(state, keysToDelete);
+}
+
+/**
+ * Drop relation overrides whose parent, child, or override style key was deleted
+ * (its decl is preserved as styled-components), and remove the override's now
+ * unreachable style object + pseudo bucket so emission never leaves an unused
+ * StyleX style behind.
+ */
+function dropOrphanedRelationOverrides(state: LowerRulesState, keysToDelete: Set<string>): void {
+  if (keysToDelete.size === 0) {
+    return;
+  }
+  // A stored parent/child style key can be stale: the child key is captured before
+  // the child's own finalize, which may rewrite it (e.g. enum/string-mapping
+  // variants → a derived base key). Also test the decls' current style keys,
+  // resolved via their immutable local names, so a preserved decl drops its
+  // override regardless of key rewrites instead of leaving a dead StyleX entry.
+  const currentStyleKey = (localName: string | undefined): string | undefined =>
+    localName ? state.declByLocalName.get(localName)?.styleKey : undefined;
+  const kept: RelationOverride[] = [];
+  for (const o of state.relationOverrides) {
+    const childCurrent = currentStyleKey(o.childLocalName);
+    const parentCurrent = currentStyleKey(o.parentLocalName);
+    const orphaned =
+      keysToDelete.has(o.parentStyleKey) ||
+      keysToDelete.has(o.childStyleKey) ||
+      keysToDelete.has(o.overrideStyleKey) ||
+      (childCurrent !== undefined && keysToDelete.has(childCurrent)) ||
+      (parentCurrent !== undefined && keysToDelete.has(parentCurrent));
+    if (orphaned) {
+      state.resolvedStyleObjects.delete(o.overrideStyleKey);
+      state.relationOverridePseudoBuckets.delete(o.overrideStyleKey);
+      continue;
+    }
+    kept.push(o);
+  }
+  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
+/**
+ * Reverse component-selector reveals (`${Ancestor}:hover &`) require the ancestor
+ * to render a StyleX marker. The lowering pass only catches ancestors already
+ * skipped when the child was processed; partial migration can additionally
+ * preserve an ancestor *after* lowering when a skipped sibling references it as a
+ * selector. Propagate that preservation to the reverse-reveal children so both
+ * stay styled-components (keeping the original reveal) and the child's override
+ * style is pruned instead of emitted dead.
+ *
+ * Runs as a fixpoint because a newly-preserved child may itself be the ancestor
+ * of another reverse reveal. Same-file overrides only — cross-file reveals are
+ * wired through the consumer patcher.
+ */
+function preserveReverseRevealChildrenOfPreservedAncestors(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+): void {
+  const declByStyleKey = new Map<string, StyledDecl>();
+  for (const decl of state.styledDecls) {
+    if (!decl.isCssHelper) {
+      declByStyleKey.set(decl.styleKey, decl);
+    }
+  }
+  const isPreserved = (decl: StyledDecl): boolean =>
+    decl.skipTransform || preservedNames.has(decl.localName);
+  // Prefer the immutable local name (style keys may have been rewritten after the
+  // override was registered — e.g. enum/string-mapping variants), falling back to
+  // the style key for overrides that predate local-name tagging.
+  const resolveOverrideDecl = (localName: string | undefined, styleKey: string) =>
+    (localName ? state.declByLocalName.get(localName) : undefined) ?? declByStyleKey.get(styleKey);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const override of state.relationOverrides) {
+      // Don't gate on `override.crossFile`: the no-pseudo reverse form (`${Card} &`)
+      // is flagged crossFile because it uses a scoped marker, yet its ancestor is a
+      // same-file decl that still needs this propagation. Genuine cross-file reveals
+      // are filtered instead by ancestor resolution below — their imported ancestor
+      // has no local decl, so `ancestorDecl` is undefined and the override is skipped.
+      const ancestorDecl = resolveOverrideDecl(override.parentLocalName, override.parentStyleKey);
+      const childDecl = resolveOverrideDecl(override.childLocalName, override.childStyleKey);
+      if (!ancestorDecl || !childDecl || !isPreserved(ancestorDecl) || isPreserved(childDecl)) {
+        continue;
+      }
+      preservedNames.add(childDecl.localName);
+      changed = true;
+      // A reveal child preserved as raw styled-components keeps its template
+      // verbatim. If it also holds a *cross-file* `${ImportedChild}` selector whose
+      // target converts to StyleX in its own file, that selector would break: the
+      // imported component is no longer a styled-component, and because this file is
+      // "transformed" the consumer bridge patcher skips it. The cross-file marker
+      // path that conversion would have used is gone. Bail the whole file so the
+      // original cross-file selector behavior is preserved.
+      if (declReferencesCrossFileSelector(state, childDecl)) {
+        state.bail = true;
+      }
+      state.warnings.push({
+        severity: "warning",
+        type: PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING,
+        loc: childDecl.loc,
+        context: { child: childDecl.localName, ancestor: ancestorDecl.localName },
+      });
+    }
   }
 }
 
 function collectPreservedReferencedStyledDecls(
   state: LowerRulesState,
   cssLocal: string | undefined,
+  initialPreserved: Set<string> = new Set(),
 ): Set<string> {
   const { styledDecls } = state;
-  const preservedNames = new Set<string>();
+  const preservedNames = new Set<string>(initialPreserved);
   const componentNames = new Set(
     styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
   );
@@ -538,7 +682,7 @@ function prunePreservedReferencedDeclsFromState(
     if (!preservedNames.has(decl.localName)) {
       continue;
     }
-    for (const key of collectOwnedDeclStyleKeys(decl)) {
+    for (const key of declStyleKeysForPruning(decl)) {
       keysToDelete.add(key);
     }
   }
@@ -546,21 +690,37 @@ function prunePreservedReferencedDeclsFromState(
     state.resolvedStyleObjects.delete(key);
     state.relationOverridePseudoBuckets.delete(key);
     state.childPseudoMarkers.delete(key);
-    state.ancestorAttrsByStyleKey.delete(key);
     state.ancestorSelectorParents.delete(key);
     state.siblingMarkerParents.delete(key);
     state.siblingMarkerNames.delete(key);
   }
-  if (keysToDelete.size === 0) {
-    return;
+  dropOrphanedRelationOverrides(state, keysToDelete);
+}
+
+function recordContributedStyleKeys(
+  state: LowerRulesState,
+  beforeKeys: Set<string>,
+  decl: StyledDecl,
+): void {
+  for (const key of state.resolvedStyleObjects.keys()) {
+    if (!beforeKeys.has(key)) {
+      (decl.contributedStyleKeys ??= new Set<string>()).add(key);
+    }
   }
-  const kept = state.relationOverrides.filter(
-    (o) =>
-      !keysToDelete.has(o.parentStyleKey) &&
-      !keysToDelete.has(o.childStyleKey) &&
-      !keysToDelete.has(o.overrideStyleKey),
-  );
-  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
+/**
+ * Keys to prune when a decl is skipped/preserved: the statically-derivable owned
+ * keys plus everything its processing actually contributed to `resolvedStyleObjects`
+ * (dynamic style-fn / theme / pseudo keys that `collectOwnedDeclStyleKeys` can't
+ * enumerate). The union keeps pruning complete without a fragile field-by-field list.
+ */
+function declStyleKeysForPruning(decl: StyledDecl): Set<string> {
+  const keys = collectOwnedDeclStyleKeys(decl);
+  for (const key of decl.contributedStyleKeys ?? []) {
+    keys.add(key);
+  }
+  return keys;
 }
 
 function recordAddedResolverImports(
@@ -628,7 +788,6 @@ function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void
   }
   pruneMapKeysNotIn(state.relationOverridePseudoBuckets, snap.relationOverridePseudoKeys);
   pruneMapKeysNotIn(state.childPseudoMarkers, snap.childPseudoKeys);
-  pruneMapKeysNotIn(state.ancestorAttrsByStyleKey, snap.ancestorAttrKeys);
   resetSet(state.usedCssHelperFunctions, snap.usedCssHelperFunctions);
   pruneMapKeysNotIn(state.resolverImports, snap.resolverImportKeys);
 }
@@ -689,23 +848,32 @@ function collectRemovableCssHelperFunctions(
   return removable;
 }
 
-function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
-  const identifiers = new Set<string>();
-  if (!decl.rawCss) {
-    return identifiers;
+function computeCrossFileSelectorReferrers(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Set<string> {
+  const referrers = new Set<string>();
+  if (state.crossFileSelectorsByLocal.size === 0) {
+    return referrers;
   }
-  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
-    const slotId = Number(match[1]);
-    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
-    if (
-      expr?.type === "Identifier" &&
-      expr.name &&
-      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
-    ) {
-      identifiers.add(expr.name);
+  const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
+  for (const decl of state.styledDecls) {
+    const referencedNames = collectTemplateSelectorIdentifiers(decl);
+    // Expand through css helpers the decl interpolates, so a cross-file selector
+    // hidden inside `${mix}` counts as referenced by this decl.
+    for (const helperName of collectTemplateExpressionIdentifiers(decl)) {
+      for (const selectorName of helperSelectorIdentifiers.get(helperName) ?? []) {
+        referencedNames.add(selectorName);
+      }
+    }
+    for (const ref of referencedNames) {
+      if (state.crossFileSelectorsByLocal.has(ref)) {
+        referrers.add(decl.localName);
+        break;
+      }
     }
   }
-  return identifiers;
+  return referrers;
 }
 
 function collectCssHelperFunctionSelectorIdentifiers(
