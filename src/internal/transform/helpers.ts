@@ -52,6 +52,12 @@ export type ComputedKeyEntry = {
   /** Original CSS custom property name when this computed key represents a rewritten definition. */
   originalCssVariableName?: string;
   /**
+   * Source order of the CSS declaration this computed at-rule key came from. Used by the
+   * cascade-conflict guard to detect when a computed at-rule key (always emitted last) would
+   * incorrectly win over a static at-rule key that came later in the original source.
+   */
+  sourceOrder?: number;
+  /**
    * When true, emit this entry before regular string-keyed properties (e.g. for
    * CSS-variable definitions like `[vars.spacingSm]: "24px"` that should appear
    * at the top of the rule). Default (false) emits at the end (e.g. media queries).

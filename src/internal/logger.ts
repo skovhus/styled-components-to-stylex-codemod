@@ -120,6 +120,7 @@ export type WarningType =
   | "Unsupported selector: computed media query inside cross-component sibling selector"
   | "Unsupported selector: computed media query inside sibling selector"
   | "Unsupported selector: computed media query inside :has() component selector"
+  | "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved"
   | "Unsupported selector: cross-file :has() component selector not yet supported"
   | "Unsupported selector: unresolved interpolation in :has() component selector"
   | "Unsupported selector: unknown component selector"

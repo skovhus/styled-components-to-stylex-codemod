@@ -105,6 +105,7 @@ Run repo scripts directly with `node`, see `scripts` folder
 - Specific test case: `node scripts/verify-storybook-rendering.mts theme-conditionalInlineStyle`
 - Only changed vs main: `node scripts/verify-storybook-rendering.mts --only-changed`
 - Save diff images: `node scripts/verify-storybook-rendering.mts --save-diffs`
+- Use a pre-installed browser (sandboxes/CI that ship Chromium and disable downloads): set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to the chrome binary, e.g. `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node scripts/verify-storybook-rendering.mts <case>`
 
 ## Adding Test Cases
 
@@ -190,7 +191,7 @@ Examples: `attrs-polymorphicAs`, `conditional-enumIfChain`, `wrapper-basic`, `th
 
 For bail-out files, keep the appropriate prefix (`_unsupported.` or `_unimplemented.`) and apply the same `category-variation` scheme after it: `_unsupported.selector-complex`, `_unimplemented.selector-sibling`
 
-**Categories**: `basic`, `extending`, `attrs`, `asProp`, `conditional`, `interpolation`, `mixin`, `cssHelper`, `selector`, `theme`, `useTheme`, `wrapper`, `externalStyles`, `helper`, `cssVariable`, `mediaQuery`, `transientProp`, `shouldForwardProp`, `withConfig`, `keyframes`, `variant`, `css`, `htmlProp`, `typeHandling`, `import`, `staticProp`, `ref`, `styleObject`, `naming`, `example`
+**Categories**: `basic`, `extending`, `attrs`, `asProp`, `conditional`, `interpolation`, `mixin`, `cssHelper`, `selector`, `theme`, `useTheme`, `wrapper`, `externalStyles`, `helper`, `cssVariable`, `mediaQuery`, `containerQuery`, `transientProp`, `shouldForwardProp`, `withConfig`, `keyframes`, `variant`, `css`, `htmlProp`, `typeHandling`, `import`, `staticProp`, `ref`, `styleObject`, `naming`, `example`
 
 ### Test Case Visual Guidelines
 

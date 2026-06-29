@@ -790,6 +790,22 @@ export const fixtureAdapter = defineAdapter({
       ctx.path
     ) {
       const feature = ctx.mediaQuery.feature;
+      // `@container <name> (max-width: ${screenSizeBreakPoints.phone}px)` resolves to a
+      // computed at-rule key as a literal container-query string (the raw px value is
+      // substituted in place). This mirrors adapters that return a fully-formed
+      // `@container ...` selector and exercises the computed-key code path for containers.
+      if (ctx.mediaQuery.atRule.startsWith("@container")) {
+        const px = CONTAINER_BREAKPOINTS_PX[ctx.path];
+        if (px === undefined) {
+          return undefined;
+        }
+        const containerQuery = `${ctx.mediaQuery.before}${px}${ctx.mediaQuery.after}`;
+        return {
+          kind: "media",
+          expr: JSON.stringify(containerQuery),
+          imports: [],
+        };
+      }
       if (feature?.name === "width" && feature.unit === "px") {
         const suffix = feature.modifier === "min" ? "Min" : feature.modifier === "max" ? "" : null;
         if (suffix === null) {
@@ -916,6 +932,12 @@ export const customAdapter = defineAdapter({
   },
   resolveSelector: customResolveSelector,
 });
+
+/** Raw px values for container-query breakpoints (matches helpers.ts screenSizeBreakPoints). */
+const CONTAINER_BREAKPOINTS_PX: Record<string, number> = {
+  phone: 640,
+  tablet: 768,
+};
 
 const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
 const INLINE_BASE_FLEX_CONSUMED_PROPS = [
