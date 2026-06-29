@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-BlisjUMW.js";t();var n=e();function r(){return(0,n.jsx)(`div`,{className:`x1csysfu x1tamke2 x12peec7`,children:`Dialog Content`})}export{r as App};
