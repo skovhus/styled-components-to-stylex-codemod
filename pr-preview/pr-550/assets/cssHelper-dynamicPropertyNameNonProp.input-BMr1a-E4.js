@@ -1,0 +1,4 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,u as n}from"./index-CL4eeOmx.js";t();var r=e(),i={isSafari:!0},a=n.div`
+  display: flex;
+  ${({gap:e=8,column:t})=>i.isSafari?`${t?`column`:`row`}-gap: ${e}px; margin-top: ${e}px;`:``};
+`,o=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:12,padding:12},children:[(0,r.jsxs)(a,{gap:10,style:{background:`#d6efff`,padding:8},children:[(0,r.jsx)(`div`,{style:{background:`#4ea8de`,color:`white`,padding:8},children:`Row gap + margin top`}),(0,r.jsx)(`div`,{style:{background:`#4ea8de`,color:`white`,padding:8},children:`Row gap + margin top`})]}),(0,r.jsxs)(a,{column:!0,gap:12,style:{background:`#ffe4cf`,padding:8},children:[(0,r.jsx)(`div`,{style:{background:`#f9844a`,color:`white`,padding:8},children:`Column gap + margin top`}),(0,r.jsx)(`div`,{style:{background:`#f9844a`,color:`white`,padding:8},children:`Column gap + margin top`})]})]});export{o as App,a as Stack};
