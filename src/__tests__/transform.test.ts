@@ -1488,6 +1488,55 @@ export const App = () => (
     expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
   });
 
+  it("prunes derived after-base mixin keys of a component preserved via reference", () => {
+    // `Button` composes an after-base css mixin with a contextual (`&:hover`)
+    // override, which `postProcessAfterBaseMixins` lowers into a per-use derived
+    // key (`hoverStylesInButton`) created *after* the per-decl key recording. A
+    // skipped sibling references `${Button}`, so partial migration preserves
+    // `Button`; the derived key must be pruned, not emitted dead. The mixin is
+    // exported so its preservation doesn't force a whole-file bail.
+    const source = `
+import styled, { css } from "styled-components";
+
+export const HoverStyles = css\`
+  &:hover {
+    color: blue;
+  }
+\`;
+
+const Button = styled.button\`
+  color: red;
+  \${HoverStyles}
+\`;
+
+const Other = styled.div\`
+  \${Button} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Button>Hover</Button>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-derivedMixinReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Button stays styled-components (referenced by the skipped sibling).
+    expect(result.code).toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    // The derived per-use mixin key must not leak into stylex.create().
+    expect(result.code).not.toContain("hoverStylesInButton");
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],
