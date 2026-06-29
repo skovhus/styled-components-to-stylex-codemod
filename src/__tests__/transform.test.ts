@@ -1442,6 +1442,52 @@ export const App = () => (
     );
   });
 
+  it("prunes dynamic style-fn keys of a pre-resolved component preserved via reference", () => {
+    // `Actions` uses the object-call syntax (pre-resolved during collection) with a
+    // dynamic prop-based `gap`, producing a separate `actionsGap` style-fn key. A
+    // skipped sibling references `${Actions}` as a selector, so partial migration
+    // preserves `Actions` as styled-components — its dynamic key must be pruned too,
+    // not left behind as an unused StyleX style.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Actions = styled.div<{ $gap?: string }>((p) => ({
+  opacity: 1,
+  gap: p.$gap || "4px",
+}));
+
+const Other = styled.div\`
+  \${Actions} span.label {
+    color: red;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Other>
+    <span className="label">L</span>
+    <Actions $gap="8px">A</Actions>
+    <Footer>Footer</Footer>
+  </Other>
+);
+`;
+    const result = runPartial(source, "partial-preResolvedReferenced.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Footer still converts.
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Actions (object-call syntax) stays styled-components because the skipped
+    // sibling references it as a selector.
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    // No leaked StyleX style for the preserved component — including its dynamic
+    // pre-resolved style-fn key.
+    expect(result.code).not.toMatch(/\bactions[A-Za-z0-9]*:/);
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

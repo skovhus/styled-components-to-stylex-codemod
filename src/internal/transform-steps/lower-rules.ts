@@ -172,10 +172,17 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
       continue;
     }
     if (decl.preResolvedStyle) {
+      // Pre-resolved decls bypass processOneDecl, so record the style keys they
+      // add here too — otherwise a later preservation (via a skipped sibling's
+      // selector reference) would prune only the base key and leak the
+      // preResolvedFnDecls (dynamic style-fn) keys as unused StyleX styles.
+      const contributed = (decl.contributedStyleKeys ??= new Set<string>());
       state.resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
+      contributed.add(decl.styleKey);
       if (decl.preResolvedFnDecls) {
         for (const [k, v] of Object.entries(decl.preResolvedFnDecls)) {
           state.resolvedStyleObjects.set(k, v);
+          contributed.add(k);
         }
       }
       continue;
