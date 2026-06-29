@@ -12563,6 +12563,34 @@ export const App = () => <Box role="link" />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() callback pattern");
   });
 
+  it("leaves object attrs inline when the styled name is shadowed in another scope", () => {
+    const source = `
+import styled from "styled-components";
+
+function f() {
+  const Box = null;
+  return Box;
+}
+
+const Box = styled.div.attrs({ dangerouslySetInnerHTML: { __html: "x" } })\`
+  color: red;
+\`;
+
+export const App = () => <div>{f()}<Box /></div>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The styled name is ambiguous (also bound inside `f`), so a name-based
+    // const insertion could target the wrong scope. The hoist is skipped and the
+    // object attr stays inline (always in scope) instead of referencing an
+    // out-of-scope hoisted const. (Resolving the shadowed declaration itself is a
+    // separate, pre-existing concern in the emit path.)
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const \w*[Dd]angerouslySetInnerHTML\b/);
+    expect(result.code).toContain("dangerouslySetInnerHTML={{");
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";

@@ -34,7 +34,14 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
   // original styled source, so hoisting would insert unused consts and the
   // multi-declarator bail must not fire for a component we are not rewriting.
   const decls = (ctx.styledDecls ?? []).filter((d) => !d.skipTransform) as StyledDecl[];
-  const declsWithLiteralAttrs = decls.filter(hasReferenceLiteralAttr);
+  // Only operate on declarations whose name resolves to a single declaration in
+  // the file. The const insertion (and the wrapper/callsite that references it)
+  // is located by name, so a same-named binding in another scope would target
+  // the wrong declaration and produce an out-of-scope reference. Leaving such a
+  // decl's attrs inline is always in scope; only its reference identity is lost.
+  const declsWithLiteralAttrs = decls.filter(
+    (d) => hasReferenceLiteralAttr(d) && hasSingleDeclaration(ctx, d.localName),
+  );
   if (declsWithLiteralAttrs.length === 0) {
     return CONTINUE;
   }
@@ -58,7 +65,7 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
 
   const reservedNames = collectReservedNames(ctx);
 
-  for (const decl of decls) {
+  for (const decl of declsWithLiteralAttrs) {
     const attrsInfo = decl.attrsInfo;
     if (!attrsInfo || attrsInfo.sourceKind !== "object") {
       continue;
@@ -136,6 +143,24 @@ function buildAttrPropTypeAnnotation(
   } catch {
     return null;
   }
+}
+
+/** True when exactly one `VariableDeclaration` in the file declares `localName`. */
+function hasSingleDeclaration(ctx: TransformContext, localName: string): boolean {
+  const { j, root } = ctx;
+  return (
+    root
+      .find(j.VariableDeclaration)
+      .filter((path) =>
+        path.node.declarations.some(
+          (dcl) =>
+            dcl.type === "VariableDeclarator" &&
+            dcl.id?.type === "Identifier" &&
+            dcl.id.name === localName,
+        ),
+      )
+      .size() === 1
+  );
 }
 
 /** True when any non-special attrs value is an object/array literal AST node. */
