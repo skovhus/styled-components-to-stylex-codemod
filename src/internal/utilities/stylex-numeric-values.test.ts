@@ -70,36 +70,41 @@ describe("buildStylexValueWithStaticParts", () => {
   });
 
   it("distributes a non-px unit suffix into branches", () => {
-    // `ms` is never px-omittable, so the numeric branch keeps a template; the
-    // var() branch is already a complete value and is left untouched.
-    expect(build("cond ? `var(--d)` : DURATION", "", "ms", "transitionDuration")).toBe(
-      "cond ? `var(--d)` : `${DURATION}ms`",
+    // The var() branch is already a complete value and is left untouched; the
+    // numeric branch keeps the authored `rem`.
+    expect(build("cond ? `var(--w)` : SIZE", "", "rem", "width")).toBe(
+      "cond ? `var(--w)` : `${SIZE}rem`",
     );
+  });
+
+  it("treats a non-px length unit branch as already complete", () => {
+    expect(build('cond ? "10vh" : size', "", "px", "height")).toBe('cond ? "10vh" : `${size}px`');
   });
 
   it("keeps wrapping the whole conditional when no branch is a complete CSS length", () => {
     // Both branches are bare numerics — distributing is unnecessary, so the
     // original whole-expression wrapping behavior is preserved.
-    expect(build("cond ? a : b", "", "px", "lineHeight")).toBe("`${cond ? a : b}px`");
+    expect(build("cond ? a : b", "", "px", "height")).toBe("`${cond ? a : b}px`");
   });
 
   it("does not append a unit suffix to a standalone calc() value", () => {
     expect(build("`calc(${x}px + 8px)`", "", "px", "height")).toBe("`calc(${x}px + 8px)`");
   });
 
-  it("keeps the suffix on an incomplete unit fragment", () => {
-    // `200m` is not a complete unit — the `s` suffix completes it to `200ms`.
-    // No branch is a complete length, so the whole conditional stays wrapped.
-    expect(build('cond ? "200m" : delay', "", "s", "transitionDuration")).toBe(
-      '`${cond ? "200m" : delay}s`',
+  it("does not split the suffix on identifier-valued properties", () => {
+    // `animation-name` is not length-valued: the trailing `in` is part of the
+    // identifier, so the whole conditional stays wrapped (`fade-1pxin` /
+    // `slide-in`) rather than `in` being treated as a CSS unit.
+    expect(build('cond ? "fade-1px" : "slide-"', "", "in", "animationName")).toBe(
+      '`${cond ? "fade-1px" : "slide-"}in`',
     );
   });
 
-  it("does not double a complete time-unit branch", () => {
-    // `1s` already carries a complete unit, so the `s` suffix is dropped there
-    // while the numeric branch still receives it.
-    expect(build('cond ? "1s" : delay', "", "s", "transitionDuration")).toBe(
-      'cond ? "1s" : `${delay}s`',
+  it("leaves non-length properties whole so a partial unit still completes", () => {
+    // `transition-duration` is not a gated length property, so the whole
+    // conditional is wrapped and the `s` still completes `200m` to `200ms`.
+    expect(build('cond ? "200m" : delay', "", "s", "transitionDuration")).toBe(
+      '`${cond ? "200m" : delay}s`',
     );
   });
 });

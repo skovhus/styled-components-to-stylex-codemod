@@ -145,8 +145,11 @@ export function buildStylexValueWithStaticParts(
   // must not be appended to a branch that already forms a complete CSS length,
   // or the result is invalid CSS (`calc(40px + 8px)px`). When a conditional
   // mixes such a length branch with a bare-numeric branch, distribute the suffix
-  // into each branch so only the numeric branch receives the unit.
-  if (prefix === "" && isCssUnitSuffix(suffix)) {
+  // into each branch so only the numeric branch receives the unit. This only
+  // applies to length-valued properties — on identifier/string properties such
+  // as `animation-name` a trailing token like `in` is part of the value, not a
+  // CSS unit, so it must be left attached.
+  if (suffixIsAuthoredCssUnit(stylexProp, prefix, suffix)) {
     if (expr.type === "ConditionalExpression" && conditionalHasCompleteCssLengthBranch(expr)) {
       return {
         ...expr,
@@ -347,11 +350,13 @@ function isExpressionNode(value: unknown): value is ExpressionKind {
   );
 }
 
-// A pure CSS unit affix such as `px`, `rem`, or `%` — distinguishes a unit
-// suffix (which must not be doubled onto an existing length) from arbitrary
-// trailing text or `!important` modifiers.
-function isCssUnitSuffix(suffix: string): boolean {
-  return /^[a-zA-Z%]+$/.test(suffix);
+// The trailing static text after an interpolation is an authored CSS unit only
+// when it is a bare unit affix (`px`, `rem`, `%`, …) AND the property is
+// length-valued. On identifier/string properties (e.g. `animation-name`,
+// `grid-template-areas`) a trailing token like `in` belongs to the value rather
+// than being a unit, so the suffix must never be split off there.
+function suffixIsAuthoredCssUnit(stylexProp: string, prefix: string, suffix: string): boolean {
+  return prefix === "" && /^[a-zA-Z%]+$/.test(suffix) && STYLEX_PX_IMPLICIT_PROPS.has(stylexProp);
 }
 
 // A value that already constitutes a complete CSS length: a CSS math/var
