@@ -8672,6 +8672,38 @@ export function Example() {
     expect(code).not.toContain("defaultMarker");
   });
 
+  it("preserves a static @media scope for an interpolated value inside an ancestor attribute selector", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  color: black;
+
+  [data-open] & {
+    @media (min-width: 600px) {
+      color: \${(p) => p.theme.color.labelBase};
+    }
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttributeInterpolatedMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    // The interpolated theme value must stay scoped to BOTH the ancestor condition and
+    // the media query — emitting `@media (min-width: 600px)` -> value nested under the
+    // `:is([data-open] *)` pseudo, not applied unconditionally at every width.
+    expect(code).toMatch(/:is\(\[data-open\] \*\)/);
+    expect(code).toMatch(/@media \(min-width: 600px\)["']?\s*:\s*\$colors\.labelBase/);
+  });
+
   it("bails on a computed media query nested inside an ancestor attribute selector", () => {
     const source = `
 import styled from "styled-components";

@@ -300,10 +300,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           stylisValueRaw: d.valueRaw ?? "",
         },
       );
-      // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
-      // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
-      // within the pseudo-element's nested selector bucket.
-      if (pseudoElement) {
+      // When another condition is also in scope, the direct `perPropPseudo` write below
+      // would drop it. Delegate to applyResolvedPropValue, which correctly nests the
+      // value under the pseudo:
+      // - pseudoElement (e.g. ::-webkit-slider-thumb:hover) → pseudo within the element bucket
+      // - media (e.g. `[attr] & { @media (...) { color: ${theme} } }`) → media within the pseudo
+      // - resolvedSelectorMedia (a computed `@media ${breakpoint}`) → bails (cannot nest a
+      //   computed media key inside a pseudo condition)
+      if (pseudoElement || media || resolvedSelectorMedia) {
         for (const out of cssDeclarationToStylexDeclarations(d)) {
           applyResolvedPropValue(
             out.prop,
