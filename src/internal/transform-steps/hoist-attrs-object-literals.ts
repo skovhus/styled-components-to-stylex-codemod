@@ -1,24 +1,33 @@
 /**
- * Step: hoist object/array literal values from object-form `.attrs({...})` to
- * stable module-scope consts.
+ * Hoists object/array literal values from object-form `.attrs({...})` to stable
+ * module-scope consts. Split across two pipeline steps to resolve a skip-ordering
+ * cycle (see `transform.ts`):
  *
- * styled-components evaluates an object-form attrs argument once, at component
- * definition time, so object/array literals inside it keep a stable reference
- * across renders. Emitting them inline in the wrapper JSX (e.g.
- * `transition={{ duration: 0.2 }}`) would instead create a fresh reference on
- * every render, which breaks memoized children or effects keyed on those props.
- * To stay lossless we lift each such literal into a module-scope `const` and
- * reference it by name, mirroring styled-components' shared reference.
+ *  - `markBlockedAttrsHoistsStep` runs *early* (before `lowerRulesStep`) and only
+ *    decides which literal-attrs decls cannot be hoisted safely, marking them
+ *    `skipTransform` (partial migration) or bailing (strict). Running early lets
+ *    `lowerRulesStep`'s inlined-`css`-helper cleanup see those skips and not
+ *    delete a helper a now-preserved decl still references.
+ *  - `hoistAttrsObjectLiteralsStep` runs *later* (after every per-decl skip is
+ *    final, e.g. `lowerRulesStep` skipping a decl for unsupported CSS) and does
+ *    the actual const insertion + attrs rewrite. Deferring insertion avoids
+ *    emitting an unused hoisted const for a declaration a later step preserves.
+ *
+ * Why hoist at all: styled-components evaluates an object-form attrs argument
+ * once, at component definition time, so object/array literals inside it keep a
+ * stable reference across renders. Emitting them inline in the wrapper JSX (e.g.
+ * `transition={{ duration: 0.2 }}`) would create a fresh reference every render,
+ * breaking memoized children or effects keyed on those props. Lifting each into a
+ * module-scope `const` mirrors styled-components' shared reference.
  *
  * Function-form attrs (`.attrs((props) => ({...}))`) are intentionally left
  * alone: styled-components re-invokes the callback on every render, so those
  * literals are already fresh per render and inlining them matches the original
  * semantics.
  *
- * This runs *before* `analyzeBeforeEmitStep` (which merges a base decl's attrs
- * into extending decls) so an inherited base literal is already rewritten to its
- * hoisted reference before the merge copies it into the extender — keeping the
- * stable reference even when the extender's own attrs are function-form.
+ * The insertion step still runs *before* `analyzeBeforeEmitStep` (which merges a
+ * base decl's attrs into extending decls) so an inherited base literal is already
+ * rewritten to its hoisted reference before the merge copies it into the extender.
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -32,43 +41,56 @@ import type { TransformContext } from "../transform-context.js";
 // definition-time reference identity as any other object-form attrs literal.
 const SKIP_ATTR_KEYS = new Set(["style", "as", "forwardedAs"]);
 
+/**
+ * Early phase: mark (or bail on) declarations whose object/array attrs literal
+ * cannot be hoisted safely, so later steps see those skips. Does no insertion.
+ */
+export function markBlockedAttrsHoistsStep(ctx: TransformContext): StepResult {
+  const decls = (ctx.styledDecls ?? []).filter((d) => !d.skipTransform) as StyledDecl[];
+  const blocked = decls
+    .filter(hasReferenceLiteralAttr)
+    .map((decl) => ({ decl, reason: hoistBlockReason(ctx, decl) }))
+    .filter((entry): entry is { decl: StyledDecl; reason: BlockReason } => entry.reason !== null);
+  if (blocked.length === 0) {
+    return CONTINUE;
+  }
+
+  // Bail (or, under partial migration, preserve just that declaration) rather
+  // than degrade to inline: inline would drop styled-components' definition-time
+  // reference identity and — for the blocked cases — also produces broken output.
+  for (const { decl, reason } of blocked) {
+    ctx.warnings.push({ severity: "warning", type: reason, loc: decl.loc });
+  }
+  if (ctx.options.allowPartialMigration === true) {
+    for (const { decl } of blocked) {
+      decl.skipTransform = true;
+    }
+    return CONTINUE;
+  }
+  return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+}
+
+/**
+ * Insertion phase: lift each remaining object/array attrs literal into a
+ * module-scope const and rewrite the attr to reference it. Runs after every
+ * per-decl skip is final, so a declaration a later step preserved
+ * (`skipTransform`) never gets an unused hoisted const.
+ */
 export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult {
   const { j } = ctx;
-  // Skip declarations partial migration is leaving unchanged: they keep their
-  // original styled source, so hoisting would insert unused consts and the
-  // multi-declarator bail must not fire for a component we are not rewriting.
   const decls = (ctx.styledDecls ?? []).filter((d) => !d.skipTransform) as StyledDecl[];
   const declsWithLiteralAttrs = decls.filter(hasReferenceLiteralAttr);
   if (declsWithLiteralAttrs.length === 0) {
     return CONTINUE;
   }
 
-  // Declarations whose object/array attrs literal cannot be hoisted safely. We
-  // bail (or, under partial migration, preserve just that declaration) rather
-  // than degrade to inline: inline would drop styled-components' definition-time
-  // reference identity and — for the blocked cases — also produces broken output.
-  const blocked = declsWithLiteralAttrs
-    .map((decl) => ({ decl, reason: hoistBlockReason(ctx, decl) }))
-    .filter((entry): entry is { decl: StyledDecl; reason: BlockReason } => entry.reason !== null);
-  if (blocked.length > 0) {
-    for (const { decl, reason } of blocked) {
-      ctx.warnings.push({ severity: "warning", type: reason, loc: decl.loc });
-    }
-    if (ctx.options.allowPartialMigration === true) {
-      for (const { decl } of blocked) {
-        decl.skipTransform = true;
-      }
-    } else {
-      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
-    }
-  }
-
   const reservedNames = collectReservedNames(ctx);
-  const blockedDecls = new Set(blocked.map((entry) => entry.decl));
 
   for (const decl of declsWithLiteralAttrs) {
     const attrsInfo = decl.attrsInfo;
-    if (blockedDecls.has(decl) || !attrsInfo || attrsInfo.sourceKind !== "object") {
+    // Blocked decls were already marked `skipTransform` by the early phase, so
+    // the `!d.skipTransform` filter above excludes them here.
+    if (!attrsInfo || attrsInfo.sourceKind !== "object") {
       continue;
     }
 

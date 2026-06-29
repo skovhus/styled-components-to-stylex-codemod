@@ -3322,6 +3322,51 @@ export const App = () => (
     expect(referencesHelper && !declaresHelper).toBe(false);
   });
 
+  it("does not emit an unused attrs hoist for a decl lower-rules later preserves", () => {
+    // `Sib` carries an object-form attrs literal *and* an unsupported descendant
+    // selector. The hoist's skip-marking runs before lower-rules, but the const
+    // insertion runs *after* lower-rules marks `Sib` `skipTransform` for the
+    // selector — so `Sib` is preserved as styled-components with no orphaned
+    // `sibTransition` const (which would also double-evaluate any reads in the
+    // literal). The convertible sibling `Ok` still migrates.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Sib = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+
+  & .inner {
+    color: blue;
+  }
+\`;
+
+const Ok = styled.div\`
+  color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Sib>a</Sib>
+    <Ok>ok</Ok>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsHoistPreserved.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // `Sib` is preserved as styled-components (selector unsupported)...
+    expect(result.code).toContain("const Sib = styled(Motion)");
+    // ...with no orphaned hoist for its attrs literal...
+    expect(result.code).not.toContain("sibTransition");
+    // ...while the convertible sibling still migrates.
+    expect(result.code).toContain("styles.ok");
+  });
+
   it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
     // `Derived` has an unsupported selector and stays as styled-components.
     // `Base` is simple and converts to StyleX. styled-components injects its
