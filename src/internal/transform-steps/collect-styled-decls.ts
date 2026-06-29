@@ -250,10 +250,38 @@ function objectAttrConsumedByCss(
     return false;
   }
   const readNames = new Set<string>();
-  for (const expr of decl.templateExpressions ?? []) {
-    collectCssPropReadNames(expr, readNames);
-  }
+  collectCssReadNames(decl, declByLocalName, readNames, new Set());
   return [...objectKeys].some((key) => readNames.has(key));
+}
+
+/**
+ * Collects prop-read names from a decl's own CSS interpolations and from any
+ * local `css` helpers it references (`${motionStyles}`), recursively. A referenced
+ * helper's interpolations are inlined into the template, so a prop read inside the
+ * helper reads the consuming component's props just like an inline interpolation.
+ */
+function collectCssReadNames(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+  out: Set<string>,
+  seen: Set<string>,
+): void {
+  if (seen.has(decl.localName)) {
+    return;
+  }
+  seen.add(decl.localName);
+  for (const expr of decl.templateExpressions ?? []) {
+    collectCssPropReadNames(expr, out);
+  }
+  for (const candidate of declByLocalName.values()) {
+    if (
+      candidate.isCssHelper &&
+      !seen.has(candidate.localName) &&
+      expressionsReferenceAnyPath(decl.templateExpressions, new Set([candidate.localName]))
+    ) {
+      collectCssReadNames(candidate, declByLocalName, out, seen);
+    }
+  }
 }
 
 /**

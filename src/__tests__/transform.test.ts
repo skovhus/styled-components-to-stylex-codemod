@@ -12907,6 +12907,32 @@ export const App = () => <Box />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when a referenced css helper reads an object-form attr", () => {
+    const source = `
+import * as React from "react";
+import styled, { css } from "styled-components";
+
+const motionStyles = css\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+  \${motionStyles}
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The read of `p.transition.duration` is hidden inside the referenced `css`
+    // helper, not the styled template's own interpolations, but it is inlined into
+    // the component and reads its props — so the conflict must still be detected.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";
