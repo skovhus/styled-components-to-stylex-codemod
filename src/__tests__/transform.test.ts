@@ -3234,6 +3234,50 @@ export const App = () => (
     );
   });
 
+  it("bails when attrs-hoist skips a local base whose leaf would convert (hoist runs before the cascade check)", () => {
+    // `Base` shares a multi-declarator statement, so its object-form attrs
+    // literal cannot be hoisted — under partial migration the hoist step marks
+    // `Base` `skipTransform`. `Derived` extends `Base` and would otherwise
+    // convert to StyleX, which is the unsafe cascade direction. The hoist step
+    // runs *before* `detectPartialCascadeConflictStep`, so the cascade check
+    // sees `Base`'s freshly added skip and bails. If the cascade check ran first
+    // (before hoisting), it would miss the skip and silently emit a StyleX leaf
+    // wrapping a preserved styled-components base.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Motion = (props: React.ComponentProps<"div"> & { transition?: { duration: number } }) => {
+  const { transition, ...rest } = props;
+  return <div data-duration={transition?.duration} {...rest} />;
+};
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`,
+  sentinel = 1;
+
+const Derived = styled(Base)\`
+  color: blue;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <div>
+    {sentinel}
+    <Base>b</Base>
+    <Derived>d</Derived>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsCascadeMultiDeclarator.input.tsx");
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles",
+    );
+  });
+
   it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
     // `Derived` has an unsupported selector and stays as styled-components.
     // `Base` is simple and converts to StyleX. styled-components injects its

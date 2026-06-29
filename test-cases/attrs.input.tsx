@@ -539,6 +539,24 @@ const TabbableAnimatedBox = styled(AnimatedBox).attrs((props) => ({
   background-color: #ddd6fe;
 `;
 
+// Pattern 17d: object-form attrs on a component whose base is a *local styled*
+// component. The codemod transforms/flattens that base, so the hoisted const must
+// NOT be annotated with `React.ComponentPropsWithRef<typeof StyledMotion>[...]`
+// (which could dangle or omit the attrs prop). It is emitted unannotated instead,
+// unlike the Motion-based consts above whose base is a non-styled component.
+const StyledMotion = styled(Motion)`
+  opacity: 0.9;
+`;
+
+const ChainedMotionBox = styled(StyledMotion).attrs({
+  initial: "enter",
+  transition: { duration: 0.5 },
+})`
+  padding: 8px;
+  background-color: #f5d0fe;
+  color: #701a75;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -600,5 +618,6 @@ export const App = () => (
     <AnimatedBox>Animated box</AnimatedBox>
     <FadeBox>Fade box</FadeBox>
     <TabbableAnimatedBox>Tabbable animated box</TabbableAnimatedBox>
+    <ChainedMotionBox>Chained motion box</ChainedMotionBox>
   </>
 );

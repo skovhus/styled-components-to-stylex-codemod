@@ -199,8 +199,14 @@ function runTransformPipeline(
     detectCascadeConflictStep,
     lowerRulesStep,
     finalizeKeyframesStep,
-    detectPartialCascadeConflictStep,
+    // Hoisting can mark a blocked object-form attrs decl `skipTransform` (under
+    // partial migration), so it must run *before* the partial cascade check —
+    // otherwise a newly skipped local base would not be seen and an unsafe
+    // StyleX-leaf-over-styled-components-base cascade could slip through. The
+    // cascade step only reads `skipTransform` (it never sets it), so running
+    // hoisting first costs the hoist no skip visibility.
     hoistAttrsObjectLiteralsStep,
+    detectPartialCascadeConflictStep,
     analyzeBeforeEmitStep,
     rewriteCssHelpersStep,
     emitStylesStep,

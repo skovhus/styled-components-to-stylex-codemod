@@ -125,6 +125,14 @@ function buildAttrPropTypeAnnotation(
     return null;
   }
   const base = decl.base;
+  // A local styled base is itself transformed by the codemod — flattened/inlined,
+  // or rewritten with its attrs-provided props omitted — so `typeof Base` may no
+  // longer exist or no longer expose this prop. Annotating against it can turn
+  // valid input into a type error, so skip (emit an unannotated const). Only
+  // imported or non-styled component bases keep the contextual prop type.
+  if (base.kind === "component" && isLocalStyledComponent(ctx, base.ident)) {
+    return null;
+  }
   const baseProps =
     base.kind === "component"
       ? `React.ComponentPropsWithRef<typeof ${base.ident}>`
@@ -167,6 +175,11 @@ function hoistBlockReason(ctx: TransformContext, decl: StyledDecl): BlockReason 
   return multiDeclaratorStatementLoc(ctx, decl.localName) !== null
     ? "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
     : null;
+}
+
+/** True when `name` is the local name of a styled component declared in this file. */
+function isLocalStyledComponent(ctx: TransformContext, name: string): boolean {
+  return (ctx.styledDecls ?? []).some((d) => d.localName === name);
 }
 
 /** True when exactly one `VariableDeclaration` in the file declares `localName`. */
