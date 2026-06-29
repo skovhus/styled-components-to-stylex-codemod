@@ -1713,6 +1713,71 @@ export const App = () => (
     expect(result.code).not.toMatch(/\b(actions|card)[A-Za-z0-9]*:/);
   });
 
+  it("propagates preservation through a forward selector owned by a preserved reveal child", () => {
+    // Chain: a skipped block preserves `Card`; the reveal propagation preserves the
+    // enum `Actions` (`${Card}:hover &`); `Actions` in turn owns a forward selector
+    // `&:hover ${Badge}`. Without local-name tagging on the forward override, the
+    // fixpoint can't reach `Badge` (its parent key is the pre-finalize `actions`),
+    // so `Badge` converts while preserved `Actions` still references `${Badge}`, and
+    // a dead `badgeInActions` is emitted. With tagging, `Badge` is preserved too.
+    const source = `
+import styled from "styled-components";
+
+const pickA = (v: string) => (v === "a" ? "crimson" : "navy");
+const pickB = (v: string) => (v === "x" ? "teal" : "olive");
+
+const Card = styled.div\`padding: 8px;\`;
+
+const Badge = styled.span<{ $b: "x" | "y" }>\`
+  background: \${(p) => pickB(p.$b)};
+\`;
+
+const Actions = styled.div<{ $a: "a" | "b" }>\`
+  background: \${(p) => pickA(p.$a)};
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  &:hover \${Badge} {
+    color: red;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Card} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card>
+      <Actions $a="a">
+        <Badge $b="x">B</Badge>
+      </Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-forwardSelectorChain.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card, Actions and Badge are all preserved as styled-components.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div`/);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    expect(result.code).toMatch(/const\s+Badge\s*=\s*styled\.span</);
+    // No dead reveal overrides for the preserved chain.
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("badgeInActions");
+    expect(result.code).not.toContain("when.ancestor");
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],

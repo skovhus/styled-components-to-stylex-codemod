@@ -752,6 +752,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // Tag newly-created relation override as cross-file
         tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, jsxLocalName);
 
+        // Record immutable local names (mirror of the reverse path) so the
+        // post-lowering preservation/pruning can resolve these decls even after
+        // finalize rewrites their style keys (e.g. enum/string-mapping variants).
+        // The parent here is the declaring decl, whose own finalize runs *after*
+        // this registration, so its `parentStyleKey` is captured pre-rewrite.
+        for (const o of relationOverrides) {
+          if (o.overrideStyleKey === overrideStyleKey) {
+            o.parentLocalName = decl.localName;
+            if (childDecl) {
+              o.childLocalName = childDecl.localName;
+            }
+          }
+        }
+
         const forwardResult = processDeclarationsIntoBucket(
           rule,
           bucket,
