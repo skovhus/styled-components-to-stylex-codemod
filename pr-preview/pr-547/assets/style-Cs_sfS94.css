@@ -2246,6 +2246,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #16a34a;
 }
 
+.x1s1zsy0:not(#\#):not(#\#):not(#\#) {
+  background-color: #1e293b;
+}
+
 .x1y3due9:not(#\#):not(#\#):not(#\#) {
   background-color: #2196f3;
 }
@@ -2664,6 +2668,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xgcd1z6:not(#\#):not(#\#):not(#\#) {
   background-color: inherit;
+}
+
+.x19jae51:not(#\#):not(#\#):not(#\#) {
+  background-color: khaki;
 }
 
 .xy5hps6:not(#\#):not(#\#):not(#\#) {
@@ -3116,6 +3124,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xrm2vzt:not(#\#):not(#\#):not(#\#) {
   color: #111827;
+}
+
+.xfovfkl:not(#\#):not(#\#):not(#\#) {
+  color: #134e4a;
 }
 
 .x239c2q:not(#\#):not(#\#):not(#\#) {
@@ -5098,6 +5110,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: var(--xupw61s);
 }
 
+@container panel (width <= 640px) {
+  .x12ad5fe.x12ad5fe:not(#\#):not(#\#):not(#\#) {
+    color: gray;
+  }
+
+  .x1d2bg4j.x1d2bg4j:not(#\#):not(#\#):not(#\#) {
+    color: #ff0;
+  }
+}
+
 @container sidebar (width >= 300px) {
   .x16fd72j.x16fd72j:not(#\#):not(#\#):not(#\#) {
     display: flex;
@@ -5470,6 +5492,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1q1vt7x:not(#\#):not(#\#):not(#\#):not(#\#) {
   height: calc(100vh - 60px);
+}
+
+.xb2sohu:not(#\#):not(#\#):not(#\#):not(#\#) {
+  height: 48px;
 }
 
 .x2tgbz4:not(#\#):not(#\#):not(#\#):not(#\#) {
