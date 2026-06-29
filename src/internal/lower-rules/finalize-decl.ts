@@ -803,16 +803,21 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
  * object position, so appending the computed key last would let it win over the static
  * at-rule that should win — reversing the original cascade.
  *
- * The guard is conservative (safe/lossless): a static at-rule key is allowed only when it
- * is PROVABLY ordered before the earliest computed key (its source order is recorded and is
- * smaller). The common safe case — a base `@media` followed by a selector-interpolated
- * breakpoint, as in `mediaQuery-helper` — is preserved. A static at-rule key whose source
- * order is later, OR is untracked (e.g. a value copied into a variant bucket by
- * `patchEarlierDynamicConditionValues` without source-order metadata), is treated as a
- * possible reversal and bails. Symmetrically, when a static at-rule key is present but no
- * computed at-rule key carries a recorded source order, the ordering cannot be proven and
- * the property bails too. Static pseudo keys are ignored — they sit in a different StyleX
- * priority tier, so their order relative to at-rules never affects the cascade.
+ * The guard is conservative (safe/lossless): a static at-rule key is allowed only when EVERY
+ * at-rule computed key on the property is PROVABLY ordered after it (each at-rule computed key
+ * carries a recorded source order and the static key's order is smaller). The common safe
+ * case — a base `@media` followed by a selector-interpolated breakpoint, as in
+ * `mediaQuery-helper` — is preserved. Anything that cannot be proven safe bails:
+ *   - a static at-rule key whose source order is later than, or unprovable against, a computed
+ *     at-rule key (e.g. a value copied into a variant bucket by
+ *     `patchEarlierDynamicConditionValues` without source-order metadata);
+ *   - any at-rule computed key that carries no recorded source order (e.g. produced by a
+ *     resolver path that doesn't stamp it) — its position relative to the static key is unknown.
+ *
+ * Relation computed keys (`stylex.when.siblingBefore` / `ancestor`, emitted as call
+ * expressions) sit in a different StyleX priority tier and nest their own at-rules inside their
+ * value, so they never collide with a top-level at-rule key and are excluded. Static pseudo
+ * keys are likewise ignored.
  */
 function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(bucket)) {
@@ -827,24 +832,25 @@ function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): bo
     if (!Array.isArray(computedKeys) || computedKeys.length === 0) {
       continue;
     }
-    // Top-level static at-rule keys on the same property. Relation computed keys
-    // (stylex.when.siblingBefore/ancestor) nest their at-rules inside their own value, so a
-    // sibling/ancestor map never exposes an at-rule here — only genuine at-rule-vs-at-rule
-    // collisions are considered. Static pseudo keys are excluded (different priority tier).
+    // At-rule computed keys are the only ones whose position relative to a static at-rule key
+    // matters; relation keys (stylex.when.*) and CSS-variable definitions are excluded.
+    const atRuleComputedEntries = (computedKeys as ComputedKeyEntry[]).filter(
+      isAtRuleComputedKeyEntry,
+    );
+    if (atRuleComputedEntries.length === 0) {
+      continue;
+    }
     const staticAtRuleKeys = Object.keys(map).filter((k) => k.startsWith("@"));
     if (staticAtRuleKeys.length === 0) {
       continue;
     }
-    const computedSourceOrders = (computedKeys as ComputedKeyEntry[])
-      .map((entry) => entry.sourceOrder)
-      .filter((order): order is number => order !== undefined);
-    // No computed at-rule key carries a recorded source order (e.g. produced by a resolver
-    // path that doesn't stamp it). With a static at-rule key also present we cannot prove the
-    // computed key isn't an earlier at-rule that the emitter would wrongly move last, so bail.
-    if (computedSourceOrders.length === 0) {
+    // Any at-rule computed key without a recorded source order makes ordering unprovable.
+    if (atRuleComputedEntries.some((entry) => entry.sourceOrder === undefined)) {
       return true;
     }
-    const earliestComputed = Math.min(...computedSourceOrders);
+    const earliestComputed = Math.min(
+      ...atRuleComputedEntries.map((entry) => entry.sourceOrder as number),
+    );
     const staticAtRuleNotProvablyEarlier = staticAtRuleKeys.some((k) => {
       const staticOrder = getConditionSourceOrder(map, k);
       return staticOrder === undefined || staticOrder >= earliestComputed;
@@ -854,6 +860,25 @@ function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): bo
     }
   }
   return false;
+}
+
+/**
+ * True when a computed key entry represents an at-rule (`@media`/`@container`/`@supports`),
+ * whose object position determines cascade order against sibling at-rule keys. Relation keys
+ * (`stylex.when.siblingBefore`/`ancestor`) are call expressions in a different priority tier,
+ * and CSS-variable definitions (`[vars.x]: value`, marked `prepend`/`originalCssVariableName`)
+ * are declarations, not conditions — both are excluded.
+ */
+function isAtRuleComputedKeyEntry(entry: ComputedKeyEntry): boolean {
+  if (entry.prepend || entry.originalCssVariableName) {
+    return false;
+  }
+  const keyExpr = entry.keyExpr;
+  if (!keyExpr || typeof keyExpr !== "object") {
+    return false;
+  }
+  const type = (keyExpr as { type?: string }).type;
+  return type !== "CallExpression" && type !== "OptionalCallExpression";
 }
 
 /**
