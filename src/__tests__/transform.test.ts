@@ -12798,6 +12798,28 @@ export const App = () => <Box id="box" />;
     expect(result.code).toBeNull();
   });
 
+  it("bails on a computed object-form attrs key instead of mis-naming the attr", () => {
+    const source = `
+import styled from "styled-components";
+
+const attrName = "data-x";
+
+const Box = styled.div.attrs({ [attrName]: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The key `[attrName]` is a runtime value, so we cannot know which prop the
+    // object targets. Treating it as the literal string "attrName" would emit a
+    // wrongly-named static `attrName={...}` — bail instead.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";

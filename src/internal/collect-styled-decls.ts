@@ -146,13 +146,21 @@ function collectStyledDeclsImpl(args: {
           }
           continue;
         }
+        // A bare identifier key (`{ attrName: ... }`) names the prop literally, but
+        // a *computed* identifier key (`{ [attrName]: ... }`) is a runtime value —
+        // we cannot know which prop it targets. A string-literal key resolves to
+        // its value whether computed (`["data-x"]`) or not.
         const key =
-          prop.key.type === "Identifier"
+          prop.key.type === "Identifier" && !prop.computed
             ? prop.key.name
             : prop.key.type === "StringLiteral"
               ? prop.key.value
               : null;
         if (!key) {
+          // An unresolvable key (computed identifier/member, numeric, etc.) means
+          // we don't know which prop the value targets — mark unsupported and bail
+          // rather than drop it or emit a wrongly-named static attr.
+          out.hasUnsupportedValues = true;
           continue;
         }
 
