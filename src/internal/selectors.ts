@@ -15,7 +15,6 @@ type ParsedSelector =
   | { kind: "pseudoElementWithPseudo"; element: string; pseudos: string[] } // "::-webkit-slider-thumb:hover"
   | { kind: "pseudoElements"; elements: string[] } // comma-separated: "::before", "::after"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
-  | { kind: "ancestorAttribute"; ancestorAttrs: string[] } // [aria-checked="true"] &
   | { kind: "unsupported"; reason: string };
 
 /**
@@ -64,20 +63,18 @@ export function parseSelector(selector: string): ParsedSelector {
       return { kind: "base" };
     }
 
-    // For comma-separated selectors, each must be a valid pseudo-class, pseudo-element,
-    // or ancestor attribute selector on &
+    // For comma-separated selectors, each must be a valid pseudo-class or pseudo-element
+    // on &. Ancestor attribute selectors (`[attr] &`) resolve to `:is([attr] *)` pseudos
+    // (see parseSingleSelector), so they flow through the pseudo branch here.
     if (selectors.length > 1) {
       const pseudos: string[] = [];
       const pseudoElementValues: string[] = [];
-      const ancestorAttrs: string[] = [];
       for (const sel of selectors) {
         const result = parseSingleSelector(sel);
         if (result.kind === "pseudo" && result.pseudos.length === 1 && result.pseudos[0]) {
           pseudos.push(result.pseudos[0]);
         } else if (result.kind === "pseudoElement") {
           pseudoElementValues.push(result.element);
-        } else if (result.kind === "ancestorAttribute") {
-          ancestorAttrs.push(...result.ancestorAttrs);
         } else {
           return {
             kind: "unsupported",
@@ -85,18 +82,11 @@ export function parseSelector(selector: string): ParsedSelector {
           };
         }
       }
-      const kindCount =
-        (pseudos.length > 0 ? 1 : 0) +
-        (pseudoElementValues.length > 0 ? 1 : 0) +
-        (ancestorAttrs.length > 0 ? 1 : 0);
-      if (kindCount > 1) {
+      if (pseudos.length > 0 && pseudoElementValues.length > 0) {
         return {
           kind: "unsupported",
           reason: "mixed pseudo-classes and pseudo-elements in comma-separated selector",
         };
-      }
-      if (ancestorAttrs.length > 0) {
-        return { kind: "ancestorAttribute", ancestorAttrs };
       }
       if (pseudoElementValues.length > 0) {
         // Sort to produce deterministic output regardless of source order
@@ -188,13 +178,14 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   ) {
     // Verify node order: [attr]+ combinator(space) nesting — nothing else
     if (isAncestorAttributePattern(nodes)) {
-      // Concatenate all attributes into a single string to preserve AND semantics.
-      // `[data-state="active"][data-size="lg"] &` → one entry requiring both on the same ancestor.
-      // Comma-separated branches (OR) produce separate entries via parseSelector's loop.
-      return {
-        kind: "ancestorAttribute",
-        ancestorAttrs: [attributes.map((a) => a.toString()).join("")],
-      };
+      // Represent `[attr] &` losslessly as a self pseudo-condition `:is([attr] *)`: the
+      // element is styled when it is a descendant of an element matching the attribute.
+      // Unlike stylex.when.ancestor(), this needs NO marker on the (arbitrary) ancestor.
+      // Concatenate compound attributes to preserve AND semantics on the same ancestor:
+      // `[data-state="active"][data-size="lg"] &` → `:is([data-state="active"][data-size="lg"] *)`.
+      // Comma-separated branches (OR) produce separate pseudos via parseSelector's loop.
+      const attrStr = attributes.map((a) => a.toString()).join("");
+      return { kind: "pseudo", pseudos: [`:is(${attrStr} *)`] };
     }
   }
 

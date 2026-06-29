@@ -9282,6 +9282,110 @@ export const Box = styled.div\`
     expect(result.code).toBeNull();
   });
 
+  it("represents arbitrary ancestor data-attribute selectors as `:is([attr] *)` self-conditions without markers", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  opacity: 0;
+
+  [data-menu-open="true"] & {
+    opacity: 1;
+  }
+\`;
+
+export function Example() {
+  return (
+    <div data-menu-open="true">
+      <Button>Action</Button>
+    </div>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttribute.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    // The condition is a self pseudo-selector matching descendants of the ancestor —
+    // this needs no marker on the (arbitrary, codemod-uncontrolled) ancestor element.
+    // (quote-agnostic: raw recast output escapes the inner quotes)
+    expect(code).toMatch(/:is\(\[data-menu-open=.+? \*\)/);
+    // It must NOT fall back to an unmarked stylex.when.ancestor() (would silently never match),
+    // nor inject stylex.defaultMarker() onto the ancestor <div>.
+    expect(code).not.toContain("when.ancestor");
+    expect(code).not.toContain("defaultMarker");
+  });
+
+  it("preserves a static @media scope for an interpolated value inside an ancestor attribute selector", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  color: black;
+
+  [data-open] & {
+    @media (min-width: 600px) {
+      color: \${(p) => p.theme.color.labelBase};
+    }
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttributeInterpolatedMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const code = result.code ?? "";
+    // The interpolated theme value must stay scoped to BOTH the ancestor condition and
+    // the media query — emitting `@media (min-width: 600px)` -> value nested under the
+    // `:is([data-open] *)` pseudo, not applied unconditionally at every width.
+    expect(code).toMatch(/:is\(\[data-open\] \*\)/);
+    expect(code).toMatch(/@media \(min-width: 600px\)["']?\s*:\s*\$colors\.labelBase/);
+  });
+
+  it("bails on a computed media query nested inside an ancestor attribute selector", () => {
+    const source = `
+import styled from "styled-components";
+import { screenSizeBreakPoints } from "./lib/helpers";
+
+export const Button = styled.button\`
+  opacity: 0;
+
+  [data-menu-open="true"] & {
+    @media \${screenSizeBreakPoints.phone} {
+      opacity: 1;
+    }
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "selector-ancestorDataAttributeMedia.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // A computed media key is emitted at the property's top level and cannot nest
+    // under the `:is([attr] *)` condition — bail cleanly rather than silently
+    // dropping the ancestor scope.
+    expect(result.code).toBeNull();
+  });
+
   it("should preserve stylex imported values in optional theme branch probing", () => {
     const source = `
 import styled from "styled-components";

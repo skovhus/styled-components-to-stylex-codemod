@@ -98,7 +98,7 @@ const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
  */
 const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
   ["selector-componentDynamicProp", 0.03], // TODO: investigate if this override can be removed
-  ["selector-dataAttribute", 0.01], // Sub-pixel anti-aliasing from defaultMarker() class on ancestor elements
+  ["selector-dataAttribute", 0.01], // Sub-pixel text/edge anti-aliasing across the labelled attribute boxes
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
@@ -267,8 +267,14 @@ const baseUrl = `http://127.0.0.1:${port}`;
 // Launch browser (auto-install Chromium if needed)
 // ---------------------------------------------------------------------------
 let browser;
+// Allow pointing at a pre-installed Chromium (e.g. CI/sandbox images that ship one
+// and disable browser downloads) via PLAYWRIGHT_CHROMIUM_EXECUTABLE.
+const preinstalledChromium = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    ...(preinstalledChromium ? { executablePath: preinstalledChromium } : {}),
+  });
 } catch {
   console.log("Installing Playwright Chromium browser...");
   execSync("npx playwright install --with-deps chromium", {

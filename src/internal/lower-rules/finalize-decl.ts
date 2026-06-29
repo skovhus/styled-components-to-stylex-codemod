@@ -3,7 +3,12 @@
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { cssValueToJs, toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  toStyleKey,
+  styleKeyWithSuffix,
+  type ComputedKeyEntry,
+} from "../transform/helpers.js";
 import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
@@ -21,7 +26,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
-import { copyConditionSourceOrders } from "./condition-source-order.js";
+import { copyConditionSourceOrders, getConditionSourceOrder } from "./condition-source-order.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import {
   findPlaceholderBlock,
@@ -147,6 +152,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         keyExpr: e.keyExpr,
         value: e.value,
         leadingComment: e.leadingComment,
+        ...(e.sourceOrder !== undefined ? { sourceOrder: e.sourceOrder } : {}),
       }));
     } else {
       // No existing map, create a new nested object with default and __computedKeys
@@ -155,6 +161,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         keyExpr: e.keyExpr,
         value: e.value,
         leadingComment: e.leadingComment,
+        ...(e.sourceOrder !== undefined ? { sourceOrder: e.sourceOrder } : {}),
       }));
       styleObj[prop] = nested;
     }
@@ -182,6 +189,25 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     bucketBaseKeySnapshot: bucketSnapshotLookup(decl, variantBuckets),
     bucketSourceOrder: bucketSourceOrderLookup(decl, variantBuckets),
   });
+
+  // Bail when a property mixes a computed at-rule key (from resolveSelector, stored in
+  // __computedKeys and always emitted last) with a static at-rule key on the same property.
+  // StyleX breaks ties between same-tier at-rules by source order, so appending the computed
+  // key last would silently reverse the original CSS cascade — not lossless. Static pseudo
+  // keys are unaffected (they sit in a different priority tier), so they don't trigger this.
+  //
+  // Runs AFTER shorthand/directional/border resolution so it also catches conflicts created
+  // when a shorthand/axis property (e.g. computed `@container` on `padding-inline`) is merged
+  // with a side longhand (e.g. static `@media` on `padding-left`) into the same map.
+  for (const bucket of [styleObj, ...variantBuckets.values(), ...extraStyleObjects.values()]) {
+    if (hasComputedAndStaticAtRuleConflict(bucket)) {
+      state.bailUnsupported(
+        decl,
+        "Unsupported: a property combines a computed at-rule key (from resolveSelector) with a static at-rule key on the same property — StyleX emits computed keys last, so the original cascade order between the at-rules cannot be preserved",
+      );
+      return;
+    }
+  }
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
 
@@ -778,6 +804,104 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   if (inlineStyleProps.length) {
     decl.inlineStyleProps = inlineStyleProps;
   }
+}
+
+/**
+ * Returns true when any property in the bucket has a computed at-rule key
+ * (`__computedKeys`, which the emitter always appends after the static keys) that came
+ * EARLIER in the source than a static at-rule key on the same property (e.g. computed
+ * `@container` before a later `@media print`). StyleX breaks same-tier at-rule ties by
+ * object position, so appending the computed key last would let it win over the static
+ * at-rule that should win — reversing the original cascade.
+ *
+ * The guard is conservative (safe/lossless): a static at-rule key is allowed only when EVERY
+ * at-rule computed key on the property is PROVABLY ordered after it (each at-rule computed key
+ * carries a recorded source order and the static key's order is smaller). The common safe
+ * case — a base `@media` followed by a selector-interpolated breakpoint, as in
+ * `mediaQuery-helper` — is preserved. Anything that cannot be proven safe bails:
+ *   - a static at-rule key whose source order is later than, or unprovable against, a computed
+ *     at-rule key (e.g. a value copied into a variant bucket by
+ *     `patchEarlierDynamicConditionValues` without source-order metadata);
+ *   - any at-rule computed key that carries no recorded source order (e.g. produced by a
+ *     resolver path that doesn't stamp it) — its position relative to the static key is unknown.
+ *
+ * Relation computed keys (`stylex.when.siblingBefore` / `ancestor`, emitted as call
+ * expressions) sit in a different StyleX priority tier and nest their own at-rules inside their
+ * value, so they never collide with a top-level at-rule key and are excluded. Static pseudo
+ * keys are likewise ignored.
+ *
+ * Known limitations (both narrow, both left as future work to keep this guard focused):
+ *  - Condition maps already serialized to an AST `ObjectExpression` (e.g. via
+ *    `resolveCssBranchToInlineMap`) are not inspected; detecting a reversal inside raw AST
+ *    would require a separate emit-time check.
+ *  - The shorthand/directional merge helpers clone condition maps without copying the
+ *    `conditionSourceOrders` WeakMap, so after a merge a static at-rule key's source order can
+ *    read as `undefined` even when it was provably-earlier pre-merge. This guard then bails
+ *    conservatively (safe/lossless: the declaration is left untransformed rather than emitted
+ *    with a possibly-wrong cascade), which can over-bail an actually-safe merged property.
+ *    Preserving the metadata through those merges would tighten this.
+ */
+function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(bucket)) {
+    if (key.startsWith("__") || !value || typeof value !== "object") {
+      continue;
+    }
+    // AST-serialized condition maps are not inspected (see "Known limitation" above).
+    if (Array.isArray(value) || isAstNode(value)) {
+      continue;
+    }
+    const map = value as Record<string, unknown>;
+    const computedKeys = map.__computedKeys;
+    if (!Array.isArray(computedKeys) || computedKeys.length === 0) {
+      continue;
+    }
+    // At-rule computed keys are the only ones whose position relative to a static at-rule key
+    // matters; relation keys (stylex.when.*) and CSS-variable definitions are excluded.
+    const atRuleComputedEntries = (computedKeys as ComputedKeyEntry[]).filter(
+      isAtRuleComputedKeyEntry,
+    );
+    if (atRuleComputedEntries.length === 0) {
+      continue;
+    }
+    const staticAtRuleKeys = Object.keys(map).filter((k) => k.startsWith("@"));
+    if (staticAtRuleKeys.length === 0) {
+      continue;
+    }
+    // Any at-rule computed key without a recorded source order makes ordering unprovable.
+    if (atRuleComputedEntries.some((entry) => entry.sourceOrder === undefined)) {
+      return true;
+    }
+    const earliestComputed = Math.min(
+      ...atRuleComputedEntries.map((entry) => entry.sourceOrder as number),
+    );
+    const staticAtRuleNotProvablyEarlier = staticAtRuleKeys.some((k) => {
+      const staticOrder = getConditionSourceOrder(map, k);
+      return staticOrder === undefined || staticOrder >= earliestComputed;
+    });
+    if (staticAtRuleNotProvablyEarlier) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when a computed key entry represents an at-rule (`@media`/`@container`/`@supports`),
+ * whose object position determines cascade order against sibling at-rule keys. Relation keys
+ * (`stylex.when.siblingBefore`/`ancestor`) are call expressions in a different priority tier,
+ * and CSS-variable definitions (`[vars.x]: value`, marked `prepend`/`originalCssVariableName`)
+ * are declarations, not conditions — both are excluded.
+ */
+function isAtRuleComputedKeyEntry(entry: ComputedKeyEntry): boolean {
+  if (entry.prepend || entry.originalCssVariableName) {
+    return false;
+  }
+  const keyExpr = entry.keyExpr;
+  if (!keyExpr || typeof keyExpr !== "object") {
+    return false;
+  }
+  const type = (keyExpr as { type?: string }).type;
+  return type !== "CallExpression" && type !== "OptionalCallExpression";
 }
 
 /**

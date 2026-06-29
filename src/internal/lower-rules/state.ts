@@ -132,8 +132,6 @@ export function createLowerRulesState(ctx: TransformContext) {
   const siblingMarkerParents = new Set<string>();
   /** Maps styleKey → marker variable name for sibling and descendant-has selectors (e.g. "thing" → "ThingMarker") */
   const siblingMarkerNames = new Map<string, string>();
-  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
-  const ancestorAttrsByStyleKey = new Map<string, Set<string>>();
   // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
   // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
   const relationOverridePseudoBuckets = new Map<
@@ -392,7 +390,6 @@ export function createLowerRulesState(ctx: TransformContext) {
     ancestorSelectorParents,
     siblingMarkerParents,
     siblingMarkerNames,
-    ancestorAttrsByStyleKey,
     relationOverridePseudoBuckets,
     childPseudoMarkers,
     cssHelperValuesByKey,
