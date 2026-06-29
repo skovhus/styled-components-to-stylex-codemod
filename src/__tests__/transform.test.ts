@@ -12765,6 +12765,35 @@ export const App = () => <div>{f()}<Box /></div>;
     );
   });
 
+  it("bails on function-form object attrs when the styled name is shadowed in another scope", () => {
+    const source = `
+import styled from "styled-components";
+
+function f() {
+  const Box = null;
+  return Box;
+}
+
+const Box = styled.div.attrs(() => ({ dangerouslySetInnerHTML: { __html: "x" } }))\`
+  color: red;
+\`;
+
+export const App = () => <div>{f()}<Box /></div>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Function-form attrs don't hoist, but a static object/array value still forces a
+    // wrapper whose by-name replacement would target the wrong same-named binding
+    // (here the inner `const Box` in `f`). So the shadowing bail must cover function-
+    // form object attrs too, not just object-form — otherwise the wrapper lands in the
+    // wrong scope and the real styled declaration is left unconverted.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope",
+    );
+  });
+
   it("types a hoisted attrs literal against an `as` target inherited from a local base", () => {
     const source = `
 import * as React from "react";

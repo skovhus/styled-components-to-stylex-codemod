@@ -181,21 +181,21 @@ type BlockReason =
 
 /**
  * Returns why a literal-attrs declaration cannot be hoisted safely, else null.
+ * Only called for declarations carrying an object/array literal attr, which always
+ * force a wrapper (object-form additionally hoists the literal for reference
+ * identity) — so both blockers apply regardless of attrs source kind.
  *
- * - Shadowed name: the const insertion (and the wrapper/callsite that references
- *   it) is located by name, so a same-named binding in another scope targets the
- *   wrong declaration. Only object-form attrs are blocked — they need the hoist
- *   for reference identity; function-form literals stay inline either way, which
- *   already matches styled-components.
+ * - Shadowed name: the wrapper emission (and any hoisted const / callsite that
+ *   references it) is located by name, so a same-named binding in another scope
+ *   targets the wrong declaration. This affects function-form object attrs too:
+ *   they don't hoist, but they still force a by-name wrapper replacement.
  * - Multi-declarator statement (`const a = ..., X = styled(...)`): the wrapper
  *   emission replaces the whole declaration, dropping the sibling declarators,
  *   so a literal referencing a sibling would dangle.
  */
 function hoistBlockReason(ctx: TransformContext, decl: StyledDecl): BlockReason | null {
   if (!hasSingleDeclaration(ctx, decl.localName)) {
-    return decl.attrsInfo?.sourceKind === "object"
-      ? "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope"
-      : null;
+    return "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope";
   }
   return multiDeclaratorStatementLoc(ctx, decl.localName) !== null
     ? "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
