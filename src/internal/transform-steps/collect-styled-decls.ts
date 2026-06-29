@@ -147,6 +147,13 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
     if (ctx.options.allowPartialMigration === true) {
       for (const d of unsupportedAttrsDecls) {
         d.skipTransform = true;
+        // A preserved decl that inherits an object attr from a local base still needs
+        // that base (and the chain up to it) to remain styled-components — otherwise
+        // the base converts to a plain wrapper, the attrs inheritance is lost, and the
+        // preserved decl reads `undefined` for the attr instead of the supplied value.
+        for (const baseDecl of localBasesSupplyingInheritedObjectAttrs(d, declByLocalName)) {
+          baseDecl.skipTransform = true;
+        }
       }
     } else {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
@@ -324,10 +331,8 @@ function effectiveObjectAttrKeys(
   // literals in `staticAttrs` (a function returning a constant object is still
   // static), and both diverge from styled-components when that value is read by a
   // CSS interpolation — so collect them regardless of source kind.
-  for (const [key, value] of Object.entries(decl.attrsInfo?.staticAttrs ?? {})) {
-    if (isObjectOrArrayLiteralNode(value)) {
-      keys.add(key);
-    }
+  for (const key of ownObjectAttrKeys(decl)) {
+    keys.add(key);
   }
   if (decl.base?.kind === "component") {
     const baseDecl = declByLocalName.get(decl.base.ident);
@@ -346,6 +351,53 @@ function effectiveObjectAttrKeys(
     }
   }
   return keys;
+}
+
+/** Object/array attr keys a decl declares itself (not inherited). */
+function ownObjectAttrKeys(decl: StyledDeclLike): Set<string> {
+  const keys = new Set<string>();
+  for (const [key, value] of Object.entries(decl.attrsInfo?.staticAttrs ?? {})) {
+    if (isObjectOrArrayLiteralNode(value)) {
+      keys.add(key);
+    }
+  }
+  return keys;
+}
+
+/**
+ * The local styled bases that supply a decl's inherited object/array attrs — the
+ * chain from the decl up to (and including) the base that declares each inherited
+ * key. Under partial migration these must be preserved alongside a skipped consumer
+ * so the styled-components attrs inheritance that feeds the consumer stays intact;
+ * converting a provider base to a plain wrapper would drop the inherited attr.
+ */
+function localBasesSupplyingInheritedObjectAttrs(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+): StyledDeclLike[] {
+  const own = ownObjectAttrKeys(decl);
+  const remaining = new Set(
+    [...effectiveObjectAttrKeys(decl, declByLocalName, new Set())].filter((key) => !own.has(key)),
+  );
+  if (remaining.size === 0) {
+    return [];
+  }
+  const preserved: StyledDeclLike[] = [];
+  const seen = new Set<string>([decl.localName]);
+  let current: StyledDeclLike | undefined = decl;
+  while (current && remaining.size > 0 && current.base?.kind === "component") {
+    const baseDecl = declByLocalName.get(current.base.ident);
+    if (!baseDecl || seen.has(baseDecl.localName)) {
+      break;
+    }
+    seen.add(baseDecl.localName);
+    preserved.push(baseDecl);
+    for (const key of ownObjectAttrKeys(baseDecl)) {
+      remaining.delete(key);
+    }
+    current = baseDecl;
+  }
+  return preserved;
 }
 
 /**

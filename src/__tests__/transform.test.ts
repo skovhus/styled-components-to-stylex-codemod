@@ -3405,6 +3405,48 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
   });
 
+  it("preserves the base chain supplying an inherited object attr a preserved leaf reads", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base)\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+const Unrelated = styled.div\`
+  background-color: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Child>x</Child>
+    <Unrelated>u</Unrelated>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-inheritedAttrChain.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // `Child` reads `transition`, which it inherits from `Base`'s object-form attrs,
+    // so `Child` is preserved. `Base` must ALSO be preserved as styled-components —
+    // converting it to a plain wrapper would drop the `.attrs()` inheritance and the
+    // preserved `Child` would read `undefined`.
+    expect(result.code).toMatch(/const\s+Base\s*=\s*styled\(Motion\)\.attrs\(\{\s*transition:/);
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\(Base\)`/);
+    // The unrelated sibling still migrates.
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toContain('backgroundColor: "blue"');
+  });
+
   it("preserves converted candidates referenced by a skipped styled template", () => {
     const { input, output } = readTestCase("partial-componentSelectorReference");
 
