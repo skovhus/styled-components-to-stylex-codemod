@@ -282,6 +282,16 @@ function collectCssReadNames(
       collectCssReadNames(candidate, declByLocalName, out, seen);
     }
   }
+  // A local styled base's CSS is inherited by the extender and evaluated with the
+  // extender's attrs, so a base template that reads the prop (`Base = styled.div`
+  // `width: ${p => p.config.w}px``; `Child = styled(Base).attrs({ config: {...} })`)
+  // is a read of the child's attr — walk the base chain too.
+  if (decl.base?.kind === "component") {
+    const baseDecl = declByLocalName.get(decl.base.ident);
+    if (baseDecl) {
+      collectCssReadNames(baseDecl, declByLocalName, out, seen);
+    }
+  }
 }
 
 /**
@@ -328,9 +338,10 @@ function isObjectOrArrayLiteralNode(value: unknown): boolean {
 }
 
 /**
- * Collects prop names a CSS interpolation reads: non-computed member-access
- * properties (`p.transition` → "transition") and destructured object-pattern keys
- * (`({ transition }) => ...` → "transition"), so a prop read either way is caught.
+ * Collects prop names a CSS interpolation reads: member-access properties — both
+ * `p.transition` and static computed `p["transition"]` → "transition" — and
+ * destructured object-pattern keys (`({ transition }) => ...` → "transition"), so
+ * a prop read in any of these forms is caught.
  */
 function collectCssPropReadNames(node: unknown, out: Set<string>): void {
   if (!node || typeof node !== "object") {
@@ -343,14 +354,22 @@ function collectCssPropReadNames(node: unknown, out: Set<string>): void {
     return;
   }
   const n = node as Record<string, unknown>;
-  const property = n.property as { type?: string; name?: unknown } | undefined;
-  if (
-    (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
-    n.computed !== true &&
-    property?.type === "Identifier" &&
-    typeof property.name === "string"
-  ) {
-    out.add(property.name);
+  const property = n.property as { type?: string; name?: unknown; value?: unknown } | undefined;
+  if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+    if (
+      n.computed !== true &&
+      property?.type === "Identifier" &&
+      typeof property.name === "string"
+    ) {
+      out.add(property.name);
+    } else if (
+      n.computed === true &&
+      property?.type === "StringLiteral" &&
+      typeof property.value === "string"
+    ) {
+      // Static computed read: `p["transition"]`.
+      out.add(property.value);
+    }
   }
   if (n.type === "ObjectPattern") {
     for (const prop of (n.properties as Array<Record<string, unknown>>) ?? []) {

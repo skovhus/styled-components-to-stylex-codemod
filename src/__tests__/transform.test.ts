@@ -12933,6 +12933,51 @@ export const App = () => <Box />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when a local base template reads an object attr the child adds", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Base = styled.div\`
+  width: \${(p: any) => p.config.w}px;
+\`;
+
+const Child = styled(Base).attrs({ config: { w: 1 } })\`
+  color: red;
+\`;
+
+export const App = () => <Child />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `Base`'s CSS reads `config`, which `Child` supplies via attrs. The base CSS is
+    // inherited and evaluated with the child's attrs, so the conflict lives on the
+    // child even though the read is in the base template — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object attr via a static computed key", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => p["transition"].duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `p["transition"]` is a static computed member read of the attr prop — the same
+    // conflict as `p.transition`, so it must be detected too.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";
