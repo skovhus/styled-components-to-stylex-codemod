@@ -587,9 +587,11 @@ function AttrsSxButton(props: { children?: React.ReactNode }) {
   return <SxAwareButton {...props} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]} />;
 }
 
-// Pattern 17: static attrs with object/array values must be preserved (not dropped)
-// Non-style attrs that are object or array literals are hoisted verbatim onto the
-// rendered component, alongside the merged className/style.
+// Pattern 17: static attrs with object/array values must be preserved (not dropped).
+// For object-form attrs, styled-components evaluates the literals once, so they are
+// hoisted to stable module-scope consts to keep the reference identity that memoized
+// children / effects may rely on. Function-form attrs (Pattern 17b) re-run each render,
+// so their literals stay inline.
 function Motion(props: {
   className?: string;
   initial?: string;
@@ -612,17 +614,36 @@ function Motion(props: {
   );
 }
 
+const animatedBoxTransition = {
+  duration: 0.2,
+};
+
+const animatedBoxKeyframes = [0, 0.5, 1];
+
 function AnimatedBox(props: { children?: React.ReactNode }) {
   return (
     <Motion
       {...props}
       initial="hidden"
       animate="visible"
-      transition={{
-        duration: 0.2,
-      }}
-      keyframes={[0, 0.5, 1]}
+      transition={animatedBoxTransition}
+      keyframes={animatedBoxKeyframes}
       {...stylex.props(styles.animatedBox)}
+    />
+  );
+}
+
+// Pattern 17b: function-form attrs re-run every render, so object/array literals are
+// already fresh per render — they must stay inline (no module-scope hoisting).
+function FadeBox(props: { children?: React.ReactNode }) {
+  return (
+    <Motion
+      {...props}
+      initial="fade-in"
+      transition={{
+        duration: 0.4,
+      }}
+      {...stylex.props(styles.fadeBox)}
     />
   );
 }
@@ -690,6 +711,7 @@ export const App = () => (
       Plain template title (hover to see)
     </div>
     <AnimatedBox>Animated box</AnimatedBox>
+    <FadeBox>Fade box</FadeBox>
   </>
 );
 
@@ -922,5 +944,10 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "#ede9fe",
     color: "#5b21b6",
+  },
+  fadeBox: {
+    padding: 8,
+    backgroundColor: "#fae8ff",
+    color: "#86198f",
   },
 });

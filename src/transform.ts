@@ -43,6 +43,7 @@ import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger
 import { ensureReactImportStep } from "./internal/transform-steps/ensure-react-import.js";
 import { extractCssHelpersStep } from "./internal/transform-steps/extract-css-helpers.js";
 import { finalize } from "./internal/transform-steps/finalize.js";
+import { hoistAttrsObjectLiteralsStep } from "./internal/transform-steps/hoist-attrs-object-literals.js";
 import { inlinePropConditionalCssHelpersStep } from "./internal/transform-steps/inline-prop-conditional-css-helpers.js";
 import { lowerRulesStep } from "./internal/transform-steps/lower-rules.js";
 import { postProcessStep } from "./internal/transform-steps/post-process.js";
@@ -200,6 +201,7 @@ function runTransformPipeline(
     finalizeKeyframesStep,
     detectPartialCascadeConflictStep,
     analyzeBeforeEmitStep,
+    hoistAttrsObjectLiteralsStep,
     rewriteCssHelpersStep,
     emitStylesStep,
     analyzeAfterEmitStep,

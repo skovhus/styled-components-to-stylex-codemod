@@ -476,9 +476,11 @@ const PlainTemplateTitle = styled.div.attrs({
   background-color: #fff1f2;
 `;
 
-// Pattern 17: static attrs with object/array values must be preserved (not dropped)
-// Non-style attrs that are object or array literals are hoisted verbatim onto the
-// rendered component, alongside the merged className/style.
+// Pattern 17: static attrs with object/array values must be preserved (not dropped).
+// For object-form attrs, styled-components evaluates the literals once, so they are
+// hoisted to stable module-scope consts to keep the reference identity that memoized
+// children / effects may rely on. Function-form attrs (Pattern 17b) re-run each render,
+// so their literals stay inline.
 function Motion(props: {
   className?: string;
   initial?: string;
@@ -510,6 +512,17 @@ const AnimatedBox = styled(Motion).attrs({
   padding: 8px;
   background-color: #ede9fe;
   color: #5b21b6;
+`;
+
+// Pattern 17b: function-form attrs re-run every render, so object/array literals are
+// already fresh per render — they must stay inline (no module-scope hoisting).
+const FadeBox = styled(Motion).attrs(() => ({
+  initial: "fade-in",
+  transition: { duration: 0.4 },
+}))`
+  padding: 8px;
+  background-color: #fae8ff;
+  color: #86198f;
 `;
 
 export const App = () => (
@@ -571,5 +584,6 @@ export const App = () => (
     <EscapedTemplateTitle>Escaped template title (hover to see)</EscapedTemplateTitle>
     <PlainTemplateTitle>Plain template title (hover to see)</PlainTemplateTitle>
     <AnimatedBox>Animated box</AnimatedBox>
+    <FadeBox>Fade box</FadeBox>
   </>
 );
