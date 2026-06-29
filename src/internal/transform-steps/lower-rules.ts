@@ -499,12 +499,23 @@ function dropOrphanedRelationOverrides(state: LowerRulesState, keysToDelete: Set
   if (keysToDelete.size === 0) {
     return;
   }
+  // A stored parent/child style key can be stale: the child key is captured before
+  // the child's own finalize, which may rewrite it (e.g. enum/string-mapping
+  // variants → a derived base key). Also test the decls' current style keys,
+  // resolved via their immutable local names, so a preserved decl drops its
+  // override regardless of key rewrites instead of leaving a dead StyleX entry.
+  const currentStyleKey = (localName: string | undefined): string | undefined =>
+    localName ? state.declByLocalName.get(localName)?.styleKey : undefined;
   const kept: RelationOverride[] = [];
   for (const o of state.relationOverrides) {
+    const childCurrent = currentStyleKey(o.childLocalName);
+    const parentCurrent = currentStyleKey(o.parentLocalName);
     const orphaned =
       keysToDelete.has(o.parentStyleKey) ||
       keysToDelete.has(o.childStyleKey) ||
-      keysToDelete.has(o.overrideStyleKey);
+      keysToDelete.has(o.overrideStyleKey) ||
+      (childCurrent !== undefined && keysToDelete.has(childCurrent)) ||
+      (parentCurrent !== undefined && keysToDelete.has(parentCurrent));
     if (orphaned) {
       state.resolvedStyleObjects.delete(o.overrideStyleKey);
       state.relationOverridePseudoBuckets.delete(o.overrideStyleKey);

@@ -1654,6 +1654,65 @@ export const App = () => (
     );
   });
 
+  it("drops the reveal override when both ancestor and enum-variant child are preserved", () => {
+    // Both `Card` and `Actions` use a background string-mapping (enum) variant, so
+    // both have `decl.styleKey` rewritten to a derived base key. `Actions` is
+    // preserved because a skipped block references `${Actions}` (which transitively
+    // preserves `Card`). The `${Card}:hover &` override stores the child's pre-rewrite
+    // key, so `dropOrphanedRelationOverrides()` must resolve the decls by local name
+    // (not just style key) to drop the override and avoid a dead `actionsInCard`.
+    const source = `
+import styled from "styled-components";
+
+const pickBgA = (v: string) => (v === "a" ? "crimson" : "navy");
+const pickBgB = (v: string) => (v === "x" ? "teal" : "olive");
+
+const Card = styled.div<{ $kind: "a" | "b" }>\`
+  padding: 8px;
+  background: \${(p) => pickBgA(p.$kind)};
+\`;
+
+const Actions = styled.div<{ $variant: "x" | "y" }>\`
+  background: \${(p) => pickBgB(p.$variant)};
+
+  \${Card}:hover & {
+    opacity: 1;
+  }
+\`;
+
+const SkippedBlock = styled.div\`
+  \${Actions} span.label {
+    color: green;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <SkippedBlock>
+    <span className="label">L</span>
+    <Card $kind="a">
+      <Actions $variant="x">A</Actions>
+    </Card>
+    <Footer>Footer</Footer>
+  </SkippedBlock>
+);
+`;
+    const result = runPartial(source, "partial-enumBothPreserved.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.footer\}/);
+    // Card and Actions stay styled-components; no leftover StyleX keys for either,
+    // including the now-unreachable reveal override.
+    expect(result.code).toMatch(/const\s+Card\s*=\s*styled\.div</);
+    expect(result.code).toMatch(/const\s+Actions\s*=\s*styled\.div</);
+    expect(result.code).not.toContain("actionsInCard");
+    expect(result.code).not.toContain("when.ancestor");
+    expect(result.code).not.toMatch(/\b(actions|card)[A-Za-z0-9]*:/);
+  });
+
   it.each([
     ["universal descendant selector", "& *"],
     ["universal child selector", "& > *"],
