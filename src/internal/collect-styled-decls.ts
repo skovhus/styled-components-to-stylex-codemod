@@ -1674,7 +1674,13 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
       if (defaultValue !== undefined) {
         defaultsByPropName.set(propName, defaultValue);
       }
+      continue;
     }
+    // Nested destructuring (e.g. `motion: { duration }`) binds callback-local
+    // names that are not module-scope references. Collect them so attrs values
+    // referencing them are not misclassified as static and hoisted/inlined with
+    // the wrong binding.
+    collectPatternNames(value, localNames);
   }
 
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
