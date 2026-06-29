@@ -822,12 +822,20 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
  * expressions) sit in a different StyleX priority tier and nest their own at-rules inside their
  * value, so they never collide with a top-level at-rule key and are excluded. Static pseudo
  * keys are likewise ignored.
+ *
+ * Known limitation: condition maps already serialized to an AST `ObjectExpression` (e.g. via
+ * `resolveCssBranchToInlineMap`) are not inspected here — detecting a computed-vs-static
+ * at-rule reversal inside raw AST would require a separate emit-time check. The reversal it
+ * would catch is narrow (an adapter-resolved computed `@container` plus a later static
+ * `@media`/`@supports` on the same property, both matching at once), so this is left as future
+ * work rather than expanded here.
  */
 function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(bucket)) {
     if (key.startsWith("__") || !value || typeof value !== "object") {
       continue;
     }
+    // AST-serialized condition maps are not inspected (see "Known limitation" above).
     if (Array.isArray(value) || isAstNode(value)) {
       continue;
     }
