@@ -49,4 +49,11 @@ describe("wrapExprWithStaticParts", () => {
       "`${min(size, fallback)}rem`",
     );
   });
+
+  it("drops the unit but keeps !important on a calc() value", () => {
+    // `px !important` → drop `px`, keep `!important`, so the calc stays valid.
+    expect(wrapExprWithStaticParts('"calc(40px + 8px)"', "", "px !important", "height")).toBe(
+      '"calc(40px + 8px) !important"',
+    );
+  });
 });

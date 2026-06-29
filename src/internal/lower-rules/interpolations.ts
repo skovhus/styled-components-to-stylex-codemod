@@ -101,6 +101,13 @@ export function wrapExprWithStaticParts(
     return expr;
   }
 
+  // Split a trailing `!important` off the suffix so a calc()/var() value can drop
+  // the unit while keeping importance (e.g. `px !important` → unit `px` plus a
+  // preserved ` !important`).
+  const importantMatch = suffix.match(/^([^\s!]*)(\s*!important)$/i);
+  const unitPart = importantMatch ? (importantMatch[1] ?? "") : suffix;
+  const importantPart = importantMatch ? (importantMatch[2] ?? "") : "";
+
   // A CSS math/var function (`calc(...)`) is already a complete length, so a
   // trailing unit suffix must not be appended (it would yield invalid CSS like
   // `calc(40px + 8px)px`). This requires knowing the property: custom properties
@@ -111,7 +118,7 @@ export function wrapExprWithStaticParts(
     prefix === "" &&
     cssProperty !== undefined &&
     !cssProperty.startsWith("--") &&
-    isRecognizedCssUnitSuffix(suffix) &&
+    isRecognizedCssUnitSuffix(unitPart) &&
     startsWithCssValueFunction(content);
 
   // Check if expr is a string literal (matches "..." or '...')
@@ -119,7 +126,8 @@ export function wrapExprWithStaticParts(
   if (stringMatch) {
     const content = stringMatch[1] ?? "";
     if (dropsUnitAfterCssFunction(content)) {
-      return JSON.stringify(content);
+      // Drop the unit but keep any `!important`.
+      return JSON.stringify(content + importantPart);
     }
     // Combine into a single string literal for cleaner output
     return JSON.stringify(prefix + content + suffix);
@@ -138,7 +146,8 @@ export function wrapExprWithStaticParts(
   // JS expression source, so a bare `min(size, fallback)` is a function call, not
   // CSS text, and must still receive its unit suffix.
   if (expr.startsWith("`") && dropsUnitAfterCssFunction(expr.slice(1))) {
-    return expr;
+    // Drop the unit but keep any `!important`, splicing it before the closing backtick.
+    return importantPart ? `${expr.slice(0, -1)}${importantPart}\`` : expr;
   }
 
   // Use template literal for non-literal expressions
