@@ -126,7 +126,18 @@ function collectStyledDeclsImpl(args: {
 
     const fillFromObject = (obj: any, attrsParamInfo: AttrsParamInfo = emptyAttrsParamInfo()) => {
       for (const prop of obj.properties ?? []) {
-        if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
+        if (!prop) {
+          continue;
+        }
+        if (prop.type !== "ObjectProperty" && prop.type !== "Property") {
+          // Spreading the callback's own props param just re-forwards props (the
+          // emitted wrapper already does `{...props}`), so it can be dropped. Any
+          // other non-property entry — spreads of external objects, getters/setters
+          // — supplies values we cannot enumerate, so mark unsupported and let the
+          // decl bail instead of silently erasing those props.
+          if (!isPropsParamSpread(prop, attrsParamInfo)) {
+            out.hasUnsupportedValues = true;
+          }
           continue;
         }
         const key =
@@ -1588,6 +1599,19 @@ function emptyAttrsParamInfo(): AttrsParamInfo {
     rootNames: new Set(),
     localNames: new Set(),
   };
+}
+
+/**
+ * True when `prop` is a spread of the attrs callback's props parameter
+ * (e.g. `({ ...props }) => ({ ...props, role: "x" })`). Such a spread merely
+ * re-forwards props the wrapper already passes through, so it can be dropped.
+ */
+function isPropsParamSpread(prop: any, attrsParamInfo: AttrsParamInfo): boolean {
+  if (prop?.type !== "SpreadElement" && prop?.type !== "SpreadProperty") {
+    return false;
+  }
+  const arg = prop.argument;
+  return arg?.type === "Identifier" && attrsParamInfo.rootNames.has(arg.name);
 }
 
 function extractPropName(value: any, attrsParamInfo: AttrsParamInfo): string | null {

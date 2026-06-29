@@ -12516,6 +12516,29 @@ export const App = () => <Box id="box" />;
     expect(result.code).not.toContain("p.id");
   });
 
+  it("drops a props-param forward spread in attrs but keeps the added prop", () => {
+    const source = `
+import styled from "styled-components";
+
+function Base(props: { role?: string; className?: string }) {
+  return <div className={props.className} role={props.role} />;
+}
+
+const Box = styled(Base).attrs((props) => ({ ...props, role: "button" }))\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The `...props` spread merely re-forwards props the wrapper already passes
+    // through, so it is dropped while the added `role` attr is preserved.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('role="button"');
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";
