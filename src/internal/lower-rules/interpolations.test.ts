@@ -41,4 +41,12 @@ describe("wrapExprWithStaticParts", () => {
       "`calc(${x}px + 8px)`",
     );
   });
+
+  it("keeps the suffix on a bare call expression that resembles a CSS function", () => {
+    // `min(size, fallback)` is a JS call returned by an adapter, not CSS text, so
+    // the authored unit must be preserved by wrapping it in a template literal.
+    expect(wrapExprWithStaticParts("min(size, fallback)", "", "rem", "width")).toBe(
+      "`${min(size, fallback)}rem`",
+    );
+  });
 });

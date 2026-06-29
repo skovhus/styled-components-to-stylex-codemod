@@ -132,10 +132,12 @@ export function wrapExprWithStaticParts(
     return JSON.stringify(prefix + expr + suffix);
   }
 
-  // A template-literal or bare expression source that is already a CSS math/var
-  // function (e.g. `calc(${x}px + 8px)`) is kept as-is rather than nested inside
-  // another template with the unit appended.
-  if (dropsUnitAfterCssFunction(expr.replace(/^`/, ""))) {
+  // A template-literal source that is already a CSS math/var function
+  // (e.g. `calc(${x}px + 8px)`) is kept as-is rather than nested inside another
+  // template with the unit appended. Only template literals qualify: `expr` is a
+  // JS expression source, so a bare `min(size, fallback)` is a function call, not
+  // CSS text, and must still receive its unit suffix.
+  if (expr.startsWith("`") && dropsUnitAfterCssFunction(expr.slice(1))) {
     return expr;
   }
 

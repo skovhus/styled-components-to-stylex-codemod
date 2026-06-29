@@ -33,6 +33,10 @@ import { normalizeSpecificityHacks, parseSelector } from "../selectors.js";
 import { addPropComments } from "./comments.js";
 import { buildSpecificityStrippedComment } from "./specificity-comments.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
+import {
+  isRecognizedCssUnitSuffix,
+  startsWithCssValueFunction,
+} from "../utilities/stylex-numeric-values.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -864,7 +868,20 @@ export function createCssHelperResolver(args: {
         ): Record<string, unknown> | null => {
           const branchStyle: Record<string, unknown> = {};
           if (branchResolved.staticValue !== undefined) {
-            const rawValue = `${branchStaticParts.prefix}${branchResolved.staticValue}${branchStaticParts.suffix}`;
+            const cssProperty = (d.property ?? "").trim();
+            // A trailing unit suffix must not be concatenated onto a branch that
+            // is already a complete CSS math/var function (`calc(...)`) — that
+            // would yield invalid CSS like `calc(40px + 8px)px`. Custom properties
+            // are excluded (opaque token streams).
+            const dropTrailingUnit =
+              branchStaticParts.prefix === "" &&
+              !cssProperty.startsWith("--") &&
+              typeof branchResolved.staticValue === "string" &&
+              isRecognizedCssUnitSuffix(branchStaticParts.suffix) &&
+              startsWithCssValueFunction(branchResolved.staticValue);
+            const rawValue = dropTrailingUnit
+              ? String(branchResolved.staticValue)
+              : `${branchStaticParts.prefix}${branchResolved.staticValue}${branchStaticParts.suffix}`;
             if (
               d.property?.trim() === "background" &&
               isUnsupportedBackgroundShorthandValue(rawValue)
