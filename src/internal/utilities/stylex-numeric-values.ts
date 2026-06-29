@@ -149,8 +149,10 @@ export function buildStylexValueWithStaticParts(
   // the unit. Triggering only on math/var functions keeps this away from
   // identifier-valued properties (e.g. `animation-name: ${...}in`), where the
   // trailing token is part of the value rather than a unit, and needs no
-  // per-property length classification.
-  if (prefix === "" && isRecognizedCssUnitSuffix(suffix)) {
+  // per-property length classification. Custom properties (`--*`) are excluded:
+  // their value is an opaque token stream where a trailing token (even after a
+  // `var()`) may be intentional (e.g. `var(--prefix)in`).
+  if (prefix === "" && !stylexProp.startsWith("--") && isRecognizedCssUnitSuffix(suffix)) {
     if (expr.type === "ConditionalExpression" && conditionalHasCssMathFunctionBranch(expr)) {
       return {
         ...expr,

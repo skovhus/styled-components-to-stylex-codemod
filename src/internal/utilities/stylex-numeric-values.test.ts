@@ -114,4 +114,12 @@ describe("buildStylexValueWithStaticParts", () => {
       '`${cond ? "200m" : delay}s`',
     );
   });
+
+  it("keeps the suffix on custom properties even past a var() branch", () => {
+    // A custom property is an opaque token stream: `var(--prefix)in` may be an
+    // intentional value (e.g. resolving to `slide-in`), so the `in` must stay.
+    expect(build('cond ? "var(--prefix)" : "slide-"', "", "in", "--token")).toBe(
+      '`${cond ? "var(--prefix)" : "slide-"}in`',
+    );
+  });
 });
