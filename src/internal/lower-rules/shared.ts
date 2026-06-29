@@ -4,8 +4,56 @@
  * and relation override bucket management.
  */
 import type { JSCodeshift } from "jscodeshift";
+import type { StyledDecl } from "../transform-types.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
+import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import type { ExpressionKind } from "./decl-types.js";
-import type { RelationOverride } from "./state.js";
+import type { LowerRulesState, RelationOverride } from "./state.js";
+
+const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
+
+/**
+ * Collects the local names of components interpolated as *selectors* in a decl's
+ * template (e.g. `${Card}:hover &`, `${Badge} { ... }`), filtering out
+ * interpolations used as values. Shared by the rule-processing and post-lowering
+ * preservation passes so both detect the same selector references.
+ */
+export function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  if (!decl.rawCss) {
+    return identifiers;
+  }
+  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
+  }
+  return identifiers;
+}
+
+/**
+ * True when a decl's template interpolates an imported component as a selector.
+ * A reveal child preserved as raw styled-components would strand that cross-file
+ * selector if its target converted to StyleX in its own file (the consumer
+ * bridge patcher skips files that otherwise transform), so callers bail.
+ */
+export function declReferencesCrossFileSelector(state: LowerRulesState, decl: StyledDecl): boolean {
+  if (state.crossFileSelectorsByLocal.size === 0) {
+    return false;
+  }
+  for (const ref of collectTemplateSelectorIdentifiers(decl)) {
+    if (state.crossFileSelectorsByLocal.has(ref)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function findPlaceholderBlock(
   rawCss: string,

@@ -17,6 +17,7 @@ import {
 import { extractRootAndPath, getNodeLocStart, isAstNode } from "../utilities/jscodeshift-utils.js";
 import { SOURCE_CSS_PROPERTIES_KEY, literalToAst, toStyleKey } from "../transform/helpers.js";
 import {
+  declReferencesCrossFileSelector,
   getOrCreateRelationOverrideBucket,
   makeDescendantKeyExpr,
   tagRelationOverrideLocals,
@@ -534,6 +535,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // patcher. A same-file ancestor referenced via `${Ancestor}` is always
         // declared before this child, so its skip state is already settled here.
         if (parentDecl?.skipTransform) {
+          // If this preserved-as-styled-components child also interpolates an
+          // imported component as a selector, preserving it raw would strand that
+          // cross-file selector: its target may have converted to StyleX in its own
+          // file, and the consumer bridge patcher skips this file because it
+          // otherwise transforms. Escalate to a whole-file bail so the original
+          // cross-file selector behavior is preserved. (Mirrors the post-lowering
+          // guard in preserveReverseRevealChildrenOfPreservedAncestors, which only
+          // covers ancestors preserved *after* this decl was processed.)
+          if (declReferencesCrossFileSelector(state, decl)) {
+            state.bail = true;
+            break;
+          }
           bailWithSelectorWarning(PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING, rule, decl, {
             child: decl.localName,
             ancestor: parentDecl.localName,

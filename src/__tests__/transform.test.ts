@@ -1617,6 +1617,71 @@ export const App = () => (
     expect(result.code).toBeNull();
   });
 
+  it("bails when an early-preserved reveal child holds a cross-file selector", () => {
+    // Same hazard as the previous test, but via the *early* preservation path:
+    // `Card` is skipped from the start (unsupported `& a.active`), so when
+    // `Actions` (`${Card}:hover &`) is processed its ancestor is already
+    // `skipTransform` and the reveal child is preserved inline in process-rules —
+    // before the post-lowering reference-propagation guard runs. `Actions` also
+    // interpolates the imported `${ImportedChild}`, so the same cross-file bail
+    // must fire here too, otherwise the otherwise-transformed file strands the
+    // selector.
+    const source = `
+import styled from "styled-components";
+import { ImportedChild } from "./lib/imported-child";
+
+const Card = styled.div\`
+  padding: 8px;
+  & a.active {
+    color: red;
+  }
+\`;
+
+const Actions = styled.div\`
+  opacity: 0;
+  \${Card}:hover & {
+    opacity: 1;
+  }
+  \${ImportedChild} {
+    width: 30px;
+  }
+\`;
+
+const Footer = styled.div\`
+  color: gray;
+\`;
+
+export const App = () => (
+  <Card>
+    <a className="active">link</a>
+    <Actions>
+      <ImportedChild />
+    </Actions>
+    <Footer>Footer</Footer>
+  </Card>
+);
+`;
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        allowPartialMigration: true,
+        crossFileInfo: {
+          selectorUsages: [
+            {
+              localName: "ImportedChild",
+              importSource: "./lib/imported-child",
+              importedName: "ImportedChild",
+              resolvedPath: "/repo/lib/imported-child.tsx",
+            },
+          ],
+        },
+      },
+      "consumer.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("prunes derived after-base mixin keys of a component preserved via reference", () => {
     // `Button` composes an after-base css mixin with a contextual (`&:hover`)
     // override, which `postProcessAfterBaseMixins` lowers into a per-use derived

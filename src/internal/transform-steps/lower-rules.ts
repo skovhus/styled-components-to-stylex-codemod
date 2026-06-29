@@ -14,7 +14,11 @@ import { postProcessAfterBaseMixins } from "../lower-rules/after-base-mixins.js"
 import { preScanCssHelperPlaceholders } from "../lower-rules/pre-scan.js";
 import { processDeclRules } from "../lower-rules/process-rules.js";
 import { finalizeRelationOverrides } from "../lower-rules/relation-overrides.js";
-import { makeCssPropKey } from "../lower-rules/shared.js";
+import {
+  collectTemplateSelectorIdentifiers,
+  declReferencesCrossFileSelector,
+  makeCssPropKey,
+} from "../lower-rules/shared.js";
 import {
   createLowerRulesState,
   type LowerRulesState,
@@ -599,7 +603,7 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
       // "transformed" the consumer bridge patcher skips it. The cross-file marker
       // path that conversion would have used is gone. Bail the whole file so the
       // original cross-file selector behavior is preserved.
-      if (childReferencesCrossFileSelector(state, childDecl)) {
+      if (declReferencesCrossFileSelector(state, childDecl)) {
         state.bail = true;
       }
       state.warnings.push({
@@ -610,23 +614,6 @@ function preserveReverseRevealChildrenOfPreservedAncestors(
       });
     }
   }
-}
-
-/**
- * True when the (newly preserved) reveal child's template interpolates an imported
- * component as a selector. Preserving the child raw would strand that cross-file
- * selector if its target converted to StyleX, so the caller bails the file.
- */
-function childReferencesCrossFileSelector(state: LowerRulesState, childDecl: StyledDecl): boolean {
-  if (state.crossFileSelectorsByLocal.size === 0) {
-    return false;
-  }
-  for (const ref of collectTemplateSelectorIdentifiers(childDecl)) {
-    if (state.crossFileSelectorsByLocal.has(ref)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function collectPreservedReferencedStyledDecls(
@@ -851,25 +838,6 @@ function collectRemovableCssHelperFunctions(
     }
   }
   return removable;
-}
-
-function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
-  const identifiers = new Set<string>();
-  if (!decl.rawCss) {
-    return identifiers;
-  }
-  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
-    const slotId = Number(match[1]);
-    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
-    if (
-      expr?.type === "Identifier" &&
-      expr.name &&
-      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
-    ) {
-      identifiers.add(expr.name);
-    }
-  }
-  return identifiers;
 }
 
 function collectCssHelperFunctionSelectorIdentifiers(
