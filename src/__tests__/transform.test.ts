@@ -12539,6 +12539,30 @@ export const App = () => <Box />;
     expect(result.code).toContain('role="button"');
   });
 
+  it("bails when a props-param spread follows an attr it could override", () => {
+    const source = `
+import styled from "styled-components";
+
+function Base(props: { role?: string; className?: string }) {
+  return <div className={props.className} role={props.role} />;
+}
+
+const Box = styled(Base).attrs((props) => ({ role: "button", ...props }))\`
+  color: red;
+\`;
+
+export const App = () => <Box role="link" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Here `...props` comes *after* `role`, so the caller's role overrides the
+    // attr default. Static attrs are emitted after `{...props}`, which cannot
+    // reproduce that, so the decl must bail rather than force `role="button"`.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() callback pattern");
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";

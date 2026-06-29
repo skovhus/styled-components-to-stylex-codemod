@@ -125,17 +125,23 @@ function collectStyledDeclsImpl(args: {
     };
 
     const fillFromObject = (obj: any, attrsParamInfo: AttrsParamInfo = emptyAttrsParamInfo()) => {
-      for (const prop of obj.properties ?? []) {
+      const properties = obj.properties ?? [];
+      for (let i = 0; i < properties.length; i++) {
+        const prop = properties[i];
         if (!prop) {
           continue;
         }
         if (prop.type !== "ObjectProperty" && prop.type !== "Property") {
-          // Spreading the callback's own props param just re-forwards props (the
-          // emitted wrapper already does `{...props}`), so it can be dropped. Any
-          // other non-property entry — spreads of external objects, getters/setters
-          // — supplies values we cannot enumerate, so mark unsupported and let the
-          // decl bail instead of silently erasing those props.
-          if (!isPropsParamSpread(prop, attrsParamInfo)) {
+          // A spread of the callback's own props param just re-forwards props the
+          // emitted wrapper already passes via `{...props}`, so it can be dropped —
+          // but only when it is the first entry. A props spread placed *after*
+          // earlier attrs (`{ role: "button", ...props }`) overrides them with the
+          // caller's values, which we cannot reproduce once static attrs are emitted
+          // after `{...props}`. Any other non-property entry (external spreads,
+          // getters/setters) supplies values we cannot enumerate. In all these
+          // cases mark unsupported and let the decl bail instead of silently
+          // erasing or mis-ordering props.
+          if (!(i === 0 && isPropsParamSpread(prop, attrsParamInfo))) {
             out.hasUnsupportedValues = true;
           }
           continue;
