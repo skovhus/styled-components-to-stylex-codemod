@@ -559,6 +559,36 @@ const ChainedMotionBox = styled(StyledMotion).attrs({
   color: #701a75;
 `;
 
+// `as` target rendering a <span>; same `transition` shape (literal-union `ease`)
+// as Motion but a distinct component, so the hoisted const must be typed against
+// *this* component when attrs override `as`.
+function MotionSpan(props: {
+  className?: string;
+  transition?: { duration: number; ease?: "linear" | "easeIn" };
+  children?: React.ReactNode;
+}) {
+  const { className, transition, children } = props;
+  return (
+    <span className={className} data-ease={transition?.ease}>
+      {children}
+    </span>
+  );
+}
+
+// Pattern 17e: object-form attrs that also override `as`. The rendered component
+// is `MotionSpan`, not the `Motion` base, so the hoisted const must be typed
+// against `typeof MotionSpan` (preserving the `ease` literal union) — not the base.
+// (Inheriting an `as` override from a local base is covered by a unit test, since
+// extending an `as`-overridden base also exercises unrelated sx propagation.)
+const AsOverrideBox = styled(Motion).attrs({
+  as: MotionSpan,
+  transition: { duration: 0.3, ease: "linear" },
+})`
+  padding: 6px;
+  background-color: #fce7f3;
+  color: #9d174d;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -621,5 +651,6 @@ export const App = () => (
     <FadeBox>Fade box</FadeBox>
     <TabbableAnimatedBox>Tabbable animated box</TabbableAnimatedBox>
     <ChainedMotionBox>Chained motion box</ChainedMotionBox>
+    <AsOverrideBox>As override box</AsOverrideBox>
   </>
 );

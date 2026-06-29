@@ -12678,6 +12678,39 @@ export const App = () => <div>{f()}<Box /></div>;
     );
   });
 
+  it("types a hoisted attrs literal against an `as` target inherited from a local base", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+function MotionSpan(props: { className?: string; transition?: { ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <span className={props.className} data-ease={props.transition?.ease}>{props.children}</span>;
+}
+
+const AsBase = styled(Motion).attrs({ as: MotionSpan })\`
+  color: red;
+\`;
+
+const InheritsAsBox = styled(AsBase).attrs({ transition: { ease: "easeIn" } })\`
+  padding: 6px;
+\`;
+
+export const App = () => <InheritsAsBox>x</InheritsAsBox>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `InheritsAsBox` inherits `as: MotionSpan` from `AsBase` through the attrs
+    // merge, so it renders `MotionSpan`. The hoisted `transition` const must be
+    // typed against the inherited `as` target, not `AsBase`'s underlying `Motion`.
+    expect(result.code).toContain('React.ComponentPropsWithRef<typeof MotionSpan>["transition"]');
+    expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";

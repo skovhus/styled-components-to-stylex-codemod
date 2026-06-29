@@ -103,12 +103,12 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
 }
 
 /**
- * Builds a type annotation that pins the hoisted const to the wrapped
+ * Builds a type annotation that pins the hoisted const to the rendered
  * component's prop type, e.g. `React.ComponentPropsWithRef<typeof Base>["key"]`.
  * Without it, lifting a literal into an unannotated `const` widens it (e.g.
  * `{ type: "spring" }` → `{ type: string }`, `[0, 1]` → `number[]`), which can
  * fail TypeScript when the prop expects a literal union or tuple. Returns null
- * for JS output, polymorphic `as` overrides, or unresolvable bases.
+ * for JS output or unresolvable bases.
  */
 function buildAttrPropTypeAnnotation(
   ctx: TransformContext,
@@ -119,33 +119,21 @@ function buildAttrPropTypeAnnotation(
   if (!filePath.endsWith(".ts") && !filePath.endsWith(".tsx")) {
     return null;
   }
-  // With an `as` override the rendered component (and thus the prop type) differs
-  // from the base, so skip rather than risk an incorrect annotation.
-  if (decl.attrsInfo?.attrsAsTag) {
-    return null;
-  }
-  // A local styled base is itself transformed by the codemod, and `styled(Local)`
-  // chains are flattened at emit time to render the ultimate base directly. Resolve
-  // through any local styled bases to that final rendered base: annotating against
-  // `typeof LocalStyled` could dangle (the local base may be inlined away), while
-  // dropping the annotation entirely would widen the literal (e.g. `ease: "easeIn"`
-  // → `string`) and fail the type the final base expects. The final base's prop
-  // type is what the hoisted value is actually passed to.
-  const base = resolveFinalRenderedBase(ctx, decl.base);
-  // If resolution still lands on a local styled component (e.g. a cyclic base),
-  // `typeof Base` is not a safe target — skip the annotation.
-  if (base.kind === "component" && isLocalStyledComponent(ctx, base.ident)) {
+  // Resolve the component this decl actually renders, honoring polymorphic `as`
+  // overrides (its own and any inherited from a local base) and flattened
+  // `styled(Local)` chains. The hoisted value is passed to that rendered
+  // component, so its prop type is the correct annotation target — annotating
+  // against the raw `base` would dangle (a local base may be inlined away) or be
+  // wrong (an `as` override renders something else), while dropping the
+  // annotation entirely would widen the literal.
+  const base = resolveRenderedBase(ctx, decl);
+  if (!base) {
     return null;
   }
   const baseProps =
     base.kind === "component"
       ? `React.ComponentPropsWithRef<typeof ${base.ident}>`
-      : base.kind === "intrinsic"
-        ? `React.ComponentPropsWithRef<${JSON.stringify(base.tagName)}>`
-        : null;
-  if (!baseProps) {
-    return null;
-  }
+      : `React.ComponentPropsWithRef<${JSON.stringify(base.tagName)}>`;
   try {
     return ctx.j(`const _x: ${baseProps}[${JSON.stringify(key)}] = null`).get().node.program.body[0]
       .declarations[0].id.typeAnnotation;
@@ -187,31 +175,40 @@ function isLocalStyledComponent(ctx: TransformContext, name: string): boolean {
 }
 
 /**
- * Walks a base through any local styled components to the final rendered base.
- * `styled(LocalStyled)` chains are flattened at emit time to render the ultimate
- * non-styled component or intrinsic directly, so an attrs literal on the leaf is
- * passed to that final base — its prop type is the correct annotation target.
- * Stops at the first non-local-styled base; guards against cyclic bases.
+ * Resolves the component a decl actually renders, for typing a hoisted attrs
+ * literal. `styled(LocalStyled)` chains are flattened at emit time to render the
+ * ultimate non-styled component or intrinsic directly, and a polymorphic `as`
+ * override (the decl's own or one inherited from a local base via the attrs
+ * merge) replaces the rendered component entirely. Walk through local styled
+ * bases — preferring each level's `as` target — to that final rendered base.
+ * Returns null when the chain is cyclic or a base decl is missing.
  */
-function resolveFinalRenderedBase(
-  ctx: TransformContext,
-  base: StyledDecl["base"],
-): StyledDecl["base"] {
-  let current = base;
-  const seen = new Set<string>();
+function resolveRenderedBase(ctx: TransformContext, decl: StyledDecl): StyledDecl["base"] | null {
+  const seen = new Set<string>([decl.localName]);
+  let current = renderedBaseOf(decl);
   while (current.kind === "component" && isLocalStyledComponent(ctx, current.ident)) {
     const ident = current.ident;
     if (seen.has(ident)) {
-      break;
+      return null;
     }
     seen.add(ident);
-    const localBase = (ctx.styledDecls ?? []).find((d) => d.localName === ident)?.base;
-    if (!localBase) {
-      break;
+    const baseDecl = (ctx.styledDecls ?? []).find((d) => d.localName === ident);
+    if (!baseDecl) {
+      return null;
     }
-    current = localBase;
+    current = renderedBaseOf(baseDecl);
   }
   return current;
+}
+
+/**
+ * The component a decl renders: its polymorphic `as` override when present
+ * (mirroring `propsTarget = attrsAsTag ?? base.ident` in the wrapper emitter),
+ * otherwise its declared base.
+ */
+function renderedBaseOf(decl: StyledDecl): StyledDecl["base"] {
+  const asTag = decl.attrsInfo?.attrsAsTag;
+  return asTag ? { kind: "component", ident: asTag } : decl.base;
 }
 
 /** True when exactly one `VariableDeclaration` in the file declares `localName`. */
