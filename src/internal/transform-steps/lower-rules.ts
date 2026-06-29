@@ -4,6 +4,7 @@
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
+import { PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING } from "../logger.js";
 import { TransformContext } from "../transform-context.js";
 import { getUseLogicalProperties, setUseLogicalProperties } from "../css-prop-mapping.js";
 import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "../keyframes.js";
@@ -216,6 +217,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // for skipped decls.
   let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
+    skipChildrenOfPreservedAncestorReveals(state);
     pruneSkippedDeclsFromState(state);
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
@@ -425,6 +427,60 @@ function collectOwnedDeclStyleKeys(decl: StyledDecl): Set<string> {
   return keys;
 }
 
+/**
+ * Reverse component-selector reveals (`${Ancestor}:hover &`, `${Ancestor} &`)
+ * lower into a child override gated on the ancestor rendering a StyleX marker
+ * (`stylex.defaultMarker()` or a scoped `defineMarker()`). When the ancestor
+ * declaration was preserved as styled-components (skipped — e.g. it hit an
+ * unsupported pattern), it cannot render that marker, so the override can never
+ * apply: the emitted `stylex.when.ancestor()` style would be unreachable and the
+ * hover behavior would be silently dropped.
+ *
+ * Preserve the child declaration too. Keeping both as styled-components retains
+ * the original reveal and lets `pruneSkippedDeclsFromState` drop the now-orphaned
+ * override style. Runs as a fixpoint because a newly-preserved child may itself
+ * be the ancestor of another reverse reveal.
+ *
+ * Only same-file ancestors matter — cross-file reveals are wired through the
+ * consumer patcher and do not depend on a local declaration converting.
+ */
+function skipChildrenOfPreservedAncestorReveals(state: LowerRulesState): void {
+  if (!state.styledDecls.some((d) => d.skipTransform)) {
+    return;
+  }
+  const declByStyleKey = new Map<string, StyledDecl>();
+  for (const decl of state.styledDecls) {
+    if (!decl.isCssHelper) {
+      declByStyleKey.set(decl.styleKey, decl);
+    }
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const override of state.relationOverrides) {
+      if (override.crossFile) {
+        continue;
+      }
+      const ancestorDecl = declByStyleKey.get(override.parentStyleKey);
+      if (!ancestorDecl?.skipTransform) {
+        continue;
+      }
+      const childDecl = declByStyleKey.get(override.childStyleKey);
+      if (!childDecl || childDecl.skipTransform) {
+        continue;
+      }
+      childDecl.skipTransform = true;
+      changed = true;
+      state.warnings.push({
+        severity: "warning",
+        type: PARTIAL_PRESERVED_ANCESTOR_REVEAL_WARNING,
+        loc: childDecl.loc,
+        context: { child: childDecl.localName, ancestor: ancestorDecl.localName },
+      });
+    }
+  }
+}
+
 function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   const skipped = state.styledDecls.filter((d: StyledDecl) => d.skipTransform);
   if (skipped.length === 0) {
@@ -471,12 +527,22 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
     state.siblingMarkerNames.delete(key);
   }
   if (keysToDelete.size > 0) {
-    const kept = state.relationOverrides.filter(
-      (o) =>
-        !keysToDelete.has(o.parentStyleKey) &&
-        !keysToDelete.has(o.childStyleKey) &&
-        !keysToDelete.has(o.overrideStyleKey),
-    );
+    const kept: RelationOverride[] = [];
+    for (const o of state.relationOverrides) {
+      const orphaned =
+        keysToDelete.has(o.parentStyleKey) ||
+        keysToDelete.has(o.childStyleKey) ||
+        keysToDelete.has(o.overrideStyleKey);
+      if (orphaned) {
+        // The override's parent or child decl was preserved as styled-components,
+        // so its generated override style is unreachable. Drop the style object
+        // too — otherwise emission leaves an unused StyleX style behind.
+        state.resolvedStyleObjects.delete(o.overrideStyleKey);
+        state.relationOverridePseudoBuckets.delete(o.overrideStyleKey);
+        continue;
+      }
+      kept.push(o);
+    }
     state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
   }
 }
