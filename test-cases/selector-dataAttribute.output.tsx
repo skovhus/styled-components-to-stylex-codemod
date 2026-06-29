@@ -32,16 +32,16 @@ export function App() {
         Visible
       </div>
       <div sx={[styles.box, styles.boxHidden]}>Hidden</div>
-      <div aria-checked="true" sx={stylex.defaultMarker()}>
+      <div aria-checked="true">
         <div sx={[styles.menuItem, styles.menuItemChecked]}>Checked</div>
       </div>
       <div>
         <div sx={[styles.menuItem, styles.menuItemDefault]}>Default</div>
       </div>
-      <div data-active="true" sx={stylex.defaultMarker()}>
+      <div data-active="true">
         <div sx={styles.indicator}>Active</div>
       </div>
-      <div data-state="active" data-size="lg" sx={stylex.defaultMarker()}>
+      <div data-state="active" data-size="lg">
         <div sx={styles.compoundItem}>Compound</div>
       </div>
       <StyledMotionDiv data-animating="true" style={{ backgroundColor: "lavender" }}>
@@ -63,10 +63,10 @@ const styles = stylex.create({
   menuItem: {
     opacity: {
       default: 0.5,
-      [stylex.when.ancestor(':is([aria-checked="true"])')]: 1,
-      [stylex.when.ancestor(':is([data-focused="true"])')]: 1,
-      [stylex.when.ancestor(':is([aria-selected="true"])')]: 1,
-      [stylex.when.ancestor(':is([aria-checked="mixed"])')]: 1,
+      ':is([aria-checked="true"] *)': 1,
+      ':is([data-focused="true"] *)': 1,
+      ':is([aria-selected="true"] *)': 1,
+      ':is([aria-checked="mixed"] *)': 1,
     },
     paddingBlock: 8,
     paddingInline: 12,
@@ -75,7 +75,7 @@ const styles = stylex.create({
   indicator: {
     opacity: {
       default: 0,
-      [stylex.when.ancestor(':is([data-active="true"])')]: 1,
+      ':is([data-active="true"] *)': 1,
     },
     backgroundColor: "lightcyan",
     padding: 10,
@@ -84,7 +84,7 @@ const styles = stylex.create({
   compoundItem: {
     opacity: {
       default: 0,
-      [stylex.when.ancestor(':is([data-state="active"][data-size="lg"])')]: 1,
+      ':is([data-state="active"][data-size="lg"] *)': 1,
     },
     backgroundColor: "thistle",
     padding: 10,

@@ -55,7 +55,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     pseudoElement,
     attrTarget,
     resolvedSelectorMedia,
-    hasAncestorAttributeScope,
     applyResolvedPropValue,
   } = args;
   const {
@@ -809,7 +808,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         pseudoElement,
         attrTarget,
         resolvedSelectorMedia,
-        hasAncestorAttributeScope,
         applyResolvedPropValue,
         res,
         slotId,

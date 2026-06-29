@@ -77,7 +77,6 @@ export type ResolvedDynamicNodeContext = Pick<
   | "pseudoElement"
   | "attrTarget"
   | "resolvedSelectorMedia"
-  | "hasAncestorAttributeScope"
   | "applyResolvedPropValue"
 > & {
   res: ReturnType<typeof resolveDynamicNode>;
@@ -111,7 +110,6 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
     pseudoElement,
     attrTarget,
     resolvedSelectorMedia,
-    hasAncestorAttributeScope,
     applyResolvedPropValue,
     res,
     expr,
@@ -329,14 +327,7 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
 
   // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
   if (res && res.type === "splitThemeBooleanVariants") {
-    if (
-      pseudos?.length ||
-      media ||
-      pseudoElement ||
-      attrTarget ||
-      resolvedSelectorMedia ||
-      hasAncestorAttributeScope
-    ) {
+    if (pseudos?.length || media || pseudoElement || attrTarget || resolvedSelectorMedia) {
       flags.bail = true;
       return true;
     }
@@ -479,14 +470,7 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
   // is emitted as a conditional inline style using the useTheme() hook.
   if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
     // Inline style fallback cannot preserve pseudo/media context — bail
-    if (
-      pseudos?.length ||
-      media ||
-      pseudoElement ||
-      attrTarget ||
-      resolvedSelectorMedia ||
-      hasAncestorAttributeScope
-    ) {
+    if (pseudos?.length || media || pseudoElement || attrTarget || resolvedSelectorMedia) {
       flags.bail = true;
       return true;
     }
