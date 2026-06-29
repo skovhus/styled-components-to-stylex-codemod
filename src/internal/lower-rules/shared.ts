@@ -172,6 +172,33 @@ export function cssPropertyToIdentifier(prop: string, avoidNames?: Set<string>):
 }
 
 /**
+ * Tag every relation override registered under `overrideStyleKey` with the
+ * immutable local names of the decls it relates. Post-lowering preservation and
+ * pruning resolve decls by these names because a decl's style key can be
+ * rewritten after the override is registered (e.g. enum/string-mapping variants
+ * rewrite `decl.styleKey` to a derived base key). Call at every override-creation
+ * site so the tags don't depend on which path created the override.
+ */
+export function tagRelationOverrideLocals(
+  relationOverrides: RelationOverride[],
+  overrideStyleKey: string,
+  parentLocalName: string | undefined,
+  childLocalName: string | undefined,
+): void {
+  for (const o of relationOverrides) {
+    if (o.overrideStyleKey !== overrideStyleKey) {
+      continue;
+    }
+    if (parentLocalName) {
+      o.parentLocalName = parentLocalName;
+    }
+    if (childLocalName) {
+      o.childLocalName = childLocalName;
+    }
+  }
+}
+
+/**
  * Get or create a pseudo bucket for a relation override style key.
  * Registers the override in `relationOverrides` if not already present.
  */

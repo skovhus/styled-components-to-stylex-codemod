@@ -30,6 +30,7 @@ import {
   parseSimpleParentPseudoSelectorList,
   readPrefixSinceLastBlockBoundary,
   readSelectorBeforeBlock,
+  tagRelationOverrideLocals,
 } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
 import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
@@ -329,6 +330,12 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         relationOverrides,
         relationOverridePseudoBuckets,
       );
+
+      // Tag with immutable local names (mirror of the process-rules paths) so
+      // preservation/pruning can resolve these decls after style-key rewrites,
+      // regardless of whether this finalize path or processDeclRules created the
+      // override.
+      tagRelationOverrideLocals(relationOverrides, overrideStyleKey, decl.localName, childLocal);
 
       const declLines = declsText
         .split(";")

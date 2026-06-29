@@ -20,6 +20,7 @@ import {
   getOrCreateRelationOverrideBucket,
   makeAncestorKeyExpr,
   makeDescendantKeyExpr,
+  tagRelationOverrideLocals,
 } from "./shared.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { setConditionSourceOrder } from "./condition-source-order.js";
@@ -591,14 +592,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // Record immutable local names so post-lowering preservation propagation
         // can resolve these decls even after finalize rewrites their style keys
         // (e.g. an enum/string-mapping child's `decl.styleKey` becomes its base key).
-        for (const o of relationOverrides) {
-          if (o.overrideStyleKey === overrideStyleKey) {
-            o.childLocalName = decl.localName;
-            if (parentDecl) {
-              o.parentLocalName = parentDecl.localName;
-            }
-          }
-        }
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          parentDecl?.localName,
+          decl.localName,
+        );
 
         // For same-file no-pseudo reverse, set markerVarName on the override so
         // finalizeRelationOverrides emits stylex.when.ancestor(":is(*)", Marker).
@@ -757,14 +756,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // finalize rewrites their style keys (e.g. enum/string-mapping variants).
         // The parent here is the declaring decl, whose own finalize runs *after*
         // this registration, so its `parentStyleKey` is captured pre-rewrite.
-        for (const o of relationOverrides) {
-          if (o.overrideStyleKey === overrideStyleKey) {
-            o.parentLocalName = decl.localName;
-            if (childDecl) {
-              o.childLocalName = childDecl.localName;
-            }
-          }
-        }
+        tagRelationOverrideLocals(
+          relationOverrides,
+          overrideStyleKey,
+          decl.localName,
+          childDecl?.localName,
+        );
 
         const forwardResult = processDeclarationsIntoBucket(
           rule,
