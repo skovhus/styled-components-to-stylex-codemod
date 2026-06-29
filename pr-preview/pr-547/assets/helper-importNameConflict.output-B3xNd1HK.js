@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-D50K3hv9.js";import{O as n}from"./helpers-C9iq-5A-.js";t();var r=e(),i=n(`fast`),a=()=>(0,r.jsxs)(`div`,{children:[(0,r.jsx)(`div`,{children:i}),(0,r.jsx)(`div`,{className:`x4lopbt`})]});export{a as App};
