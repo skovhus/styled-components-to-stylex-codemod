@@ -197,15 +197,20 @@ function runTransformPipeline(
     markPartialImportedRootsStep,
     detectUnsupportedPatternsStep,
     detectCascadeConflictStep,
+    // Hoisting can mark a blocked object-form attrs decl `skipTransform` (under
+    // partial migration), so it must run *before* any step that treats that decl
+    // as transformable based on its own pre-skip read:
+    //  - `lowerRulesStep` inlines and removes a local `css` helper consumed only
+    //    by transformable decls; if the decl is skipped afterwards, its preserved
+    //    template would reference a now-deleted helper.
+    //  - `detectPartialCascadeConflictStep` must see the skip so a StyleX leaf
+    //    wrapping the preserved styled-components base bails instead of slipping
+    //    through.
+    // None of these steps *set* `skipTransform`, so running hoisting first costs
+    // it no skip visibility.
+    hoistAttrsObjectLiteralsStep,
     lowerRulesStep,
     finalizeKeyframesStep,
-    // Hoisting can mark a blocked object-form attrs decl `skipTransform` (under
-    // partial migration), so it must run *before* the partial cascade check —
-    // otherwise a newly skipped local base would not be seen and an unsafe
-    // StyleX-leaf-over-styled-components-base cascade could slip through. The
-    // cascade step only reads `skipTransform` (it never sets it), so running
-    // hoisting first costs the hoist no skip visibility.
-    hoistAttrsObjectLiteralsStep,
     detectPartialCascadeConflictStep,
     analyzeBeforeEmitStep,
     rewriteCssHelpersStep,

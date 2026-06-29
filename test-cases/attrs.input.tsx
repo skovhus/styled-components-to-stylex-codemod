@@ -540,17 +540,19 @@ const TabbableAnimatedBox = styled(AnimatedBox).attrs((props) => ({
 `;
 
 // Pattern 17d: object-form attrs on a component whose base is a *local styled*
-// component. The codemod transforms/flattens that base, so the hoisted const must
-// NOT be annotated with `React.ComponentPropsWithRef<typeof StyledMotion>[...]`
-// (which could dangle or omit the attrs prop). It is emitted unannotated instead,
-// unlike the Motion-based consts above whose base is a non-styled component.
+// component. `styled(StyledMotion)` is flattened to render the ultimate base
+// (`Motion`) directly, so the hoisted const must NOT be annotated with
+// `typeof StyledMotion` (which could dangle when the local base is inlined away)
+// nor left unannotated (which would widen `ease` to `string`). The hoist resolves
+// through the local styled base to the final rendered base and annotates against
+// `typeof Motion`, preserving the `ease` literal union.
 const StyledMotion = styled(Motion)`
   opacity: 0.9;
 `;
 
 const ChainedMotionBox = styled(StyledMotion).attrs({
   initial: "enter",
-  transition: { duration: 0.5 },
+  transition: { duration: 0.5, ease: "easeIn" },
 })`
   padding: 8px;
   background-color: #f5d0fe;

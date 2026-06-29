@@ -3278,6 +3278,50 @@ export const App = () => (
     );
   });
 
+  it("does not orphan a css helper consumed by an attrs-hoist-blocked decl", () => {
+    // `Blocked` shares a multi-declarator statement, so attrs hoisting blocks it and
+    // (under partial migration) marks it `skipTransform`. It also interpolates a local
+    // `css` helper. Hoisting runs *before* `lowerRulesStep`, so lower-rules sees
+    // `Blocked` as already skipped and does not inline-and-delete the helper. If
+    // hoisting ran after lower-rules, the `accent` declaration would be removed while
+    // `Blocked`'s preserved styled template still references `${accent}`, dangling at
+    // runtime.
+    const source = `
+import styled, { css } from "styled-components";
+
+const accent = css\`
+  color: rebeccapurple;
+\`;
+
+const Blocked = styled.div.attrs({ "data-meta": { a: 1 } })\`
+  \${accent}
+  padding: 8px;
+\`,
+  sentinel = 1;
+
+const Ok = styled.div\`
+  color: green;
+\`;
+
+export const App = () => (
+  <div>
+    {sentinel}
+    <Blocked>blocked</Blocked>
+    <Ok>ok</Ok>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsHelperOrphan.input.tsx");
+
+    // The helper must never be orphaned: if any preserved template still references
+    // `${accent}`, the `accent` declaration must still exist (otherwise the file
+    // bails to null). The pre-fix ordering left `${accent}` with no `const accent`.
+    const code = result.code ?? "";
+    const referencesHelper = code.includes("${accent}");
+    const declaresHelper = /const\s+accent\b/.test(code);
+    expect(referencesHelper && !declaresHelper).toBe(false);
+  });
+
   it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
     // `Derived` has an unsupported selector and stays as styled-components.
     // `Base` is simple and converts to StyleX. styled-components injects its

@@ -124,12 +124,16 @@ function buildAttrPropTypeAnnotation(
   if (decl.attrsInfo?.attrsAsTag) {
     return null;
   }
-  const base = decl.base;
-  // A local styled base is itself transformed by the codemod — flattened/inlined,
-  // or rewritten with its attrs-provided props omitted — so `typeof Base` may no
-  // longer exist or no longer expose this prop. Annotating against it can turn
-  // valid input into a type error, so skip (emit an unannotated const). Only
-  // imported or non-styled component bases keep the contextual prop type.
+  // A local styled base is itself transformed by the codemod, and `styled(Local)`
+  // chains are flattened at emit time to render the ultimate base directly. Resolve
+  // through any local styled bases to that final rendered base: annotating against
+  // `typeof LocalStyled` could dangle (the local base may be inlined away), while
+  // dropping the annotation entirely would widen the literal (e.g. `ease: "easeIn"`
+  // → `string`) and fail the type the final base expects. The final base's prop
+  // type is what the hoisted value is actually passed to.
+  const base = resolveFinalRenderedBase(ctx, decl.base);
+  // If resolution still lands on a local styled component (e.g. a cyclic base),
+  // `typeof Base` is not a safe target — skip the annotation.
   if (base.kind === "component" && isLocalStyledComponent(ctx, base.ident)) {
     return null;
   }
@@ -180,6 +184,34 @@ function hoistBlockReason(ctx: TransformContext, decl: StyledDecl): BlockReason 
 /** True when `name` is the local name of a styled component declared in this file. */
 function isLocalStyledComponent(ctx: TransformContext, name: string): boolean {
   return (ctx.styledDecls ?? []).some((d) => d.localName === name);
+}
+
+/**
+ * Walks a base through any local styled components to the final rendered base.
+ * `styled(LocalStyled)` chains are flattened at emit time to render the ultimate
+ * non-styled component or intrinsic directly, so an attrs literal on the leaf is
+ * passed to that final base — its prop type is the correct annotation target.
+ * Stops at the first non-local-styled base; guards against cyclic bases.
+ */
+function resolveFinalRenderedBase(
+  ctx: TransformContext,
+  base: StyledDecl["base"],
+): StyledDecl["base"] {
+  let current = base;
+  const seen = new Set<string>();
+  while (current.kind === "component" && isLocalStyledComponent(ctx, current.ident)) {
+    const ident = current.ident;
+    if (seen.has(ident)) {
+      break;
+    }
+    seen.add(ident);
+    const localBase = (ctx.styledDecls ?? []).find((d) => d.localName === ident)?.base;
+    if (!localBase) {
+      break;
+    }
+    current = localBase;
+  }
+  return current;
 }
 
 /** True when exactly one `VariableDeclaration` in the file declares `localName`. */
