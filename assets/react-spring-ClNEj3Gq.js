@@ -1,0 +1,1 @@
+import{s as e,t}from"./jsx-runtime-D4ePz0Hl.js";import{m as n}from"./index-DDMzVFbN.js";var r=e(n(),1),i=t(),a={div:r.forwardRef((e,t)=>(0,i.jsx)(`div`,{ref:t,...e})),path:r.forwardRef((e,t)=>(0,i.jsx)(`path`,{ref:t,...e}))};function o(e){return[e(),{start:()=>{}}]}export{o as n,a as t};
