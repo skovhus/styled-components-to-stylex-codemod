@@ -809,8 +809,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
  * breakpoint, as in `mediaQuery-helper` — is preserved. A static at-rule key whose source
  * order is later, OR is untracked (e.g. a value copied into a variant bucket by
  * `patchEarlierDynamicConditionValues` without source-order metadata), is treated as a
- * possible reversal and bails. Static pseudo keys are ignored — they sit in a different
- * StyleX priority tier, so their order relative to at-rules never affects the cascade.
+ * possible reversal and bails. Symmetrically, when a static at-rule key is present but no
+ * computed at-rule key carries a recorded source order, the ordering cannot be proven and
+ * the property bails too. Static pseudo keys are ignored — they sit in a different StyleX
+ * priority tier, so their order relative to at-rules never affects the cascade.
  */
 function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(bucket)) {
@@ -825,17 +827,25 @@ function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): bo
     if (!Array.isArray(computedKeys) || computedKeys.length === 0) {
       continue;
     }
+    // Top-level static at-rule keys on the same property. Relation computed keys
+    // (stylex.when.siblingBefore/ancestor) nest their at-rules inside their own value, so a
+    // sibling/ancestor map never exposes an at-rule here — only genuine at-rule-vs-at-rule
+    // collisions are considered. Static pseudo keys are excluded (different priority tier).
+    const staticAtRuleKeys = Object.keys(map).filter((k) => k.startsWith("@"));
+    if (staticAtRuleKeys.length === 0) {
+      continue;
+    }
     const computedSourceOrders = (computedKeys as ComputedKeyEntry[])
       .map((entry) => entry.sourceOrder)
       .filter((order): order is number => order !== undefined);
+    // No computed at-rule key carries a recorded source order (e.g. produced by a resolver
+    // path that doesn't stamp it). With a static at-rule key also present we cannot prove the
+    // computed key isn't an earlier at-rule that the emitter would wrongly move last, so bail.
     if (computedSourceOrders.length === 0) {
-      continue;
+      return true;
     }
     const earliestComputed = Math.min(...computedSourceOrders);
-    const staticAtRuleNotProvablyEarlier = Object.keys(map).some((k) => {
-      if (!k.startsWith("@")) {
-        return false;
-      }
+    const staticAtRuleNotProvablyEarlier = staticAtRuleKeys.some((k) => {
       const staticOrder = getConditionSourceOrder(map, k);
       return staticOrder === undefined || staticOrder >= earliestComputed;
     });
