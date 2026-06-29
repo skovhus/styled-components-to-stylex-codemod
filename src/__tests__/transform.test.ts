@@ -12843,6 +12843,50 @@ export const App = () => <Box />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
+  it("bails when a destructured CSS interpolation reads an object-form attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${({ transition }: any) => transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The interpolation destructures the attr prop (`{ transition }`) rather than
+    // member-accessing it, but the conflict is the same — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object-form attr inherited from a local base", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Base = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base)\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Child />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `Child` reads `transition` in CSS but inherits that object attr from `Base`
+    // via the attrs merge, so the conflict must be detected across the base chain.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
   it("unwraps defaulted object-pattern attrs parameters", () => {
     const source = `
 import styled from "styled-components";

@@ -114,20 +114,26 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   // interpolations, so the emitted style would read the caller's prop (or throw on
   // an omitted one) while the attr is applied separately — diverging from
   // styled-components, which feeds the attr value into the CSS.
-  const unsupportedAttrsDecls = styledDecls.filter(
-    (d) =>
-      !d.skipTransform &&
+  const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
+  const unsupportedAttrsDecls = styledDecls.filter((d) => {
+    if (d.skipTransform) {
+      return false;
+    }
+    const ownUnsupported =
       (d.attrsInfo?.sourceKind === "function" || d.attrsInfo?.sourceKind === "object") &&
-      (d.attrsInfo.hasUnsupportedValues || objectAttrConsumedByCss(d)),
-  );
+      d.attrsInfo.hasUnsupportedValues === true;
+    // The CSS-read check also covers decls with no own attrs that inherit an
+    // object attr from a local base, so it is evaluated independently.
+    return ownUnsupported || objectAttrConsumedByCss(d, declByLocalName);
+  });
   if (unsupportedAttrsDecls.length > 0) {
     for (const d of unsupportedAttrsDecls) {
       ctx.warnings.push({
         severity: "warning",
         type:
-          d.attrsInfo?.sourceKind === "object"
-            ? "Unsupported .attrs() object value"
-            : "Unsupported .attrs() callback pattern",
+          d.attrsInfo?.sourceKind === "function" && d.attrsInfo.hasUnsupportedValues === true
+            ? "Unsupported .attrs() callback pattern"
+            : "Unsupported .attrs() object value",
         loc: d.loc,
       });
     }
@@ -225,47 +231,84 @@ function markUniversalSelectorCssHelperConsumersSkipped(
 type StyledDeclLike = NonNullable<TransformContext["styledDecls"]>[number];
 
 /**
- * True when an object/array static attr's key is read via member access in a CSS
- * interpolation (e.g. `${p => p.transition.duration}` with a `transition` object
- * attr). The lowering only substitutes primitive static attrs into interpolations,
- * so the emitted style would read the caller's prop (or throw on an omitted one)
- * while the attr is applied separately — diverging from styled-components, which
- * feeds the attr value into the CSS. These cases bail.
+ * True when an object/array attr's key is read by a CSS interpolation (e.g.
+ * `${p => p.transition.duration}` or `${({ transition }) => transition.duration}`
+ * with a `transition` object attr). The lowering only substitutes primitive static
+ * attrs into interpolations, so the emitted style would read the caller's prop (or
+ * throw on an omitted one) while the attr is applied separately — diverging from
+ * styled-components, which feeds the attr value into the CSS. These cases bail.
+ *
+ * Considers attrs inherited from local styled bases (`Child = styled(Base)`),
+ * since the attrs merge passes the inherited object attr down to the child.
  */
-function objectAttrConsumedByCss(decl: StyledDeclLike): boolean {
-  const attrsInfo = decl.attrsInfo;
-  if (attrsInfo?.sourceKind !== "object") {
-    return false;
-  }
-  const objectKeys = new Set<string>();
-  for (const [key, value] of Object.entries(attrsInfo.staticAttrs ?? {})) {
-    // jscodeshift AST nodes are loosely typed; unwrap TS casts to reach the literal.
-    let node = value as { type?: string; expression?: unknown };
-    while (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
-      node = node.expression as { type?: string; expression?: unknown };
-    }
-    if (node?.type === "ObjectExpression" || node?.type === "ArrayExpression") {
-      objectKeys.add(key);
-    }
-  }
+function objectAttrConsumedByCss(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+): boolean {
+  const objectKeys = effectiveObjectAttrKeys(decl, declByLocalName, new Set());
   if (objectKeys.size === 0) {
     return false;
   }
-  const memberNames = new Set<string>();
+  const readNames = new Set<string>();
   for (const expr of decl.templateExpressions ?? []) {
-    collectMemberPropertyNames(expr, memberNames);
+    collectCssPropReadNames(expr, readNames);
   }
-  return [...objectKeys].some((key) => memberNames.has(key));
+  return [...objectKeys].some((key) => readNames.has(key));
 }
 
-/** Collects non-computed member-access property names (`a.b` → "b") from an AST subtree. */
-function collectMemberPropertyNames(node: unknown, out: Set<string>): void {
+/**
+ * Object/array attr keys a decl carries, including those inherited from local
+ * styled bases (the attrs merge copies a base's attrs into its extenders).
+ */
+function effectiveObjectAttrKeys(
+  decl: StyledDeclLike,
+  declByLocalName: ReadonlyMap<string, StyledDeclLike>,
+  seen: Set<string>,
+): Set<string> {
+  const keys = new Set<string>();
+  if (seen.has(decl.localName)) {
+    return keys;
+  }
+  seen.add(decl.localName);
+  if (decl.attrsInfo?.sourceKind === "object") {
+    for (const [key, value] of Object.entries(decl.attrsInfo.staticAttrs ?? {})) {
+      if (isObjectOrArrayLiteralNode(value)) {
+        keys.add(key);
+      }
+    }
+  }
+  if (decl.base?.kind === "component") {
+    const baseDecl = declByLocalName.get(decl.base.ident);
+    if (baseDecl) {
+      for (const key of effectiveObjectAttrKeys(baseDecl, declByLocalName, seen)) {
+        keys.add(key);
+      }
+    }
+  }
+  return keys;
+}
+
+/** True when a (possibly TS-cast) attrs value node is an object/array literal. */
+function isObjectOrArrayLiteralNode(value: unknown): boolean {
+  let node = value as { type?: string; expression?: unknown };
+  while (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+    node = node.expression as { type?: string; expression?: unknown };
+  }
+  return node?.type === "ObjectExpression" || node?.type === "ArrayExpression";
+}
+
+/**
+ * Collects prop names a CSS interpolation reads: non-computed member-access
+ * properties (`p.transition` → "transition") and destructured object-pattern keys
+ * (`({ transition }) => ...` → "transition"), so a prop read either way is caught.
+ */
+function collectCssPropReadNames(node: unknown, out: Set<string>): void {
   if (!node || typeof node !== "object") {
     return;
   }
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectMemberPropertyNames(child, out);
+      collectCssPropReadNames(child, out);
     }
     return;
   }
@@ -279,6 +322,19 @@ function collectMemberPropertyNames(node: unknown, out: Set<string>): void {
   ) {
     out.add(property.name);
   }
+  if (n.type === "ObjectPattern") {
+    for (const prop of (n.properties as Array<Record<string, unknown>>) ?? []) {
+      if (prop?.computed === true) {
+        continue;
+      }
+      const key = prop?.key as { type?: string; name?: unknown; value?: unknown } | undefined;
+      if (key?.type === "Identifier" && typeof key.name === "string") {
+        out.add(key.name);
+      } else if (key?.type === "StringLiteral" && typeof key.value === "string") {
+        out.add(key.value);
+      }
+    }
+  }
   for (const key of Object.keys(n)) {
     if (
       key === "loc" ||
@@ -289,6 +345,6 @@ function collectMemberPropertyNames(node: unknown, out: Set<string>): void {
     ) {
       continue;
     }
-    collectMemberPropertyNames(n[key], out);
+    collectCssPropReadNames(n[key], out);
   }
 }
