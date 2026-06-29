@@ -12563,7 +12563,7 @@ export const App = () => <Box role="link" />;
     expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() callback pattern");
   });
 
-  it("leaves object attrs inline when the styled name is shadowed in another scope", () => {
+  it("bails on object-form attrs when the styled name is shadowed in another scope", () => {
     const source = `
 import styled from "styled-components";
 
@@ -12581,14 +12581,13 @@ export const App = () => <div>{f()}<Box /></div>;
 
     const result = runTransformWithDiagnostics(source);
 
-    // The styled name is ambiguous (also bound inside `f`), so a name-based
-    // const insertion could target the wrong scope. The hoist is skipped and the
-    // object attr stays inline (always in scope) instead of referencing an
-    // out-of-scope hoisted const. (Resolving the shadowed declaration itself is a
-    // separate, pre-existing concern in the emit path.)
-    expect(result.code).not.toBeNull();
-    expect(result.code).not.toMatch(/const \w*[Dd]angerouslySetInnerHTML\b/);
-    expect(result.code).toContain("dangerouslySetInnerHTML={{");
+    // The styled name is ambiguous (also bound inside `f`), so the hoist cannot
+    // safely locate the declaration by name. Object-form attrs need the hoist for
+    // reference identity, so the codemod bails rather than degrade to inline.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope",
+    );
   });
 
   it("does not treat partial object rest as the full props object", () => {

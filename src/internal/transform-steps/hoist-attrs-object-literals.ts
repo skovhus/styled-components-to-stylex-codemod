@@ -34,40 +34,37 @@ export function hoistAttrsObjectLiteralsStep(ctx: TransformContext): StepResult 
   // original styled source, so hoisting would insert unused consts and the
   // multi-declarator bail must not fire for a component we are not rewriting.
   const decls = (ctx.styledDecls ?? []).filter((d) => !d.skipTransform) as StyledDecl[];
-  // Only operate on declarations whose name resolves to a single declaration in
-  // the file. The const insertion (and the wrapper/callsite that references it)
-  // is located by name, so a same-named binding in another scope would target
-  // the wrong declaration and produce an out-of-scope reference. Leaving such a
-  // decl's attrs inline is always in scope; only its reference identity is lost.
-  const declsWithLiteralAttrs = decls.filter(
-    (d) => hasReferenceLiteralAttr(d) && hasSingleDeclaration(ctx, d.localName),
-  );
+  const declsWithLiteralAttrs = decls.filter(hasReferenceLiteralAttr);
   if (declsWithLiteralAttrs.length === 0) {
     return CONTINUE;
   }
 
-  // A styled component sharing a multi-declarator statement (`const a = ..., X =
-  // styled(...)`) becomes a wrapper whose emission replaces the whole declaration,
-  // dropping the sibling declarators. A preserved object/array attrs literal (and
-  // any sibling it references) can no longer be represented safely there, so bail
-  // the file rather than emit a dangling reference.
-  for (const decl of declsWithLiteralAttrs) {
-    const loc = multiDeclaratorStatementLoc(ctx, decl.localName);
-    if (loc) {
-      ctx.warnings.push({
-        severity: "warning",
-        type: "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement",
-        loc,
-      });
+  // Declarations whose object/array attrs literal cannot be hoisted safely. We
+  // bail (or, under partial migration, preserve just that declaration) rather
+  // than degrade to inline: inline would drop styled-components' definition-time
+  // reference identity and — for the blocked cases — also produces broken output.
+  const blocked = declsWithLiteralAttrs
+    .map((decl) => ({ decl, reason: hoistBlockReason(ctx, decl) }))
+    .filter((entry): entry is { decl: StyledDecl; reason: BlockReason } => entry.reason !== null);
+  if (blocked.length > 0) {
+    for (const { decl, reason } of blocked) {
+      ctx.warnings.push({ severity: "warning", type: reason, loc: decl.loc });
+    }
+    if (ctx.options.allowPartialMigration === true) {
+      for (const { decl } of blocked) {
+        decl.skipTransform = true;
+      }
+    } else {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
   }
 
   const reservedNames = collectReservedNames(ctx);
+  const blockedDecls = new Set(blocked.map((entry) => entry.decl));
 
   for (const decl of declsWithLiteralAttrs) {
     const attrsInfo = decl.attrsInfo;
-    if (!attrsInfo || attrsInfo.sourceKind !== "object") {
+    if (blockedDecls.has(decl) || !attrsInfo || attrsInfo.sourceKind !== "object") {
       continue;
     }
 
@@ -143,6 +140,33 @@ function buildAttrPropTypeAnnotation(
   } catch {
     return null;
   }
+}
+
+type BlockReason =
+  | "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
+  | "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope";
+
+/**
+ * Returns why a literal-attrs declaration cannot be hoisted safely, else null.
+ *
+ * - Shadowed name: the const insertion (and the wrapper/callsite that references
+ *   it) is located by name, so a same-named binding in another scope targets the
+ *   wrong declaration. Only object-form attrs are blocked — they need the hoist
+ *   for reference identity; function-form literals stay inline either way, which
+ *   already matches styled-components.
+ * - Multi-declarator statement (`const a = ..., X = styled(...)`): the wrapper
+ *   emission replaces the whole declaration, dropping the sibling declarators,
+ *   so a literal referencing a sibling would dangle.
+ */
+function hoistBlockReason(ctx: TransformContext, decl: StyledDecl): BlockReason | null {
+  if (!hasSingleDeclaration(ctx, decl.localName)) {
+    return decl.attrsInfo?.sourceKind === "object"
+      ? "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope"
+      : null;
+  }
+  return multiDeclaratorStatementLoc(ctx, decl.localName) !== null
+    ? "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
+    : null;
 }
 
 /** True when exactly one `VariableDeclaration` in the file declares `localName`. */

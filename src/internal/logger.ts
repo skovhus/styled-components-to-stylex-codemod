@@ -74,6 +74,7 @@ export type WarningType =
   | "Unsupported .attrs() callback pattern"
   | "Unsupported .attrs() object value"
   | "Unsupported .attrs() object/array value on a styled component sharing a multi-declarator statement"
+  | "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope"
   | "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)"
   | "Unsupported interpolation: arrow function"
   | "Unsupported interpolation: call expression"
