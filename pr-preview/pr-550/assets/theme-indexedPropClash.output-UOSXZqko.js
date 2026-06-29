@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t,o as n}from"./index-B3wC_Q0j.js";import{t as r}from"./colorMixins.stylex-B07H5AD-.js";t();var i=e();function a(e){let{children:t,colors:a}=e;return(0,i.jsx)(`div`,{...n(r.backgroundColor[a]),children:t})}var o=()=>(0,i.jsx)(a,{colors:`labelBase`,children:`Hello`});export{o as App};
