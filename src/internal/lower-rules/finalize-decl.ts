@@ -823,12 +823,16 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
  * value, so they never collide with a top-level at-rule key and are excluded. Static pseudo
  * keys are likewise ignored.
  *
- * Known limitation: condition maps already serialized to an AST `ObjectExpression` (e.g. via
- * `resolveCssBranchToInlineMap`) are not inspected here — detecting a computed-vs-static
- * at-rule reversal inside raw AST would require a separate emit-time check. The reversal it
- * would catch is narrow (an adapter-resolved computed `@container` plus a later static
- * `@media`/`@supports` on the same property, both matching at once), so this is left as future
- * work rather than expanded here.
+ * Known limitations (both narrow, both left as future work to keep this guard focused):
+ *  - Condition maps already serialized to an AST `ObjectExpression` (e.g. via
+ *    `resolveCssBranchToInlineMap`) are not inspected; detecting a reversal inside raw AST
+ *    would require a separate emit-time check.
+ *  - The shorthand/directional merge helpers clone condition maps without copying the
+ *    `conditionSourceOrders` WeakMap, so after a merge a static at-rule key's source order can
+ *    read as `undefined` even when it was provably-earlier pre-merge. This guard then bails
+ *    conservatively (safe/lossless: the declaration is left untransformed rather than emitted
+ *    with a possibly-wrong cascade), which can over-bail an actually-safe merged property.
+ *    Preserving the metadata through those merges would tighten this.
  */
 function hasComputedAndStaticAtRuleConflict(bucket: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(bucket)) {
