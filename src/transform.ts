@@ -43,6 +43,10 @@ import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger
 import { ensureReactImportStep } from "./internal/transform-steps/ensure-react-import.js";
 import { extractCssHelpersStep } from "./internal/transform-steps/extract-css-helpers.js";
 import { finalize } from "./internal/transform-steps/finalize.js";
+import {
+  hoistAttrsObjectLiteralsStep,
+  markBlockedAttrsHoistsStep,
+} from "./internal/transform-steps/hoist-attrs-object-literals.js";
 import { inlinePropConditionalCssHelpersStep } from "./internal/transform-steps/inline-prop-conditional-css-helpers.js";
 import { lowerRulesStep } from "./internal/transform-steps/lower-rules.js";
 import { postProcessStep } from "./internal/transform-steps/post-process.js";
@@ -196,9 +200,22 @@ function runTransformPipeline(
     markPartialImportedRootsStep,
     detectUnsupportedPatternsStep,
     detectCascadeConflictStep,
+    // Attrs-literal hoisting is split to break a skip-ordering cycle:
+    //  - `markBlockedAttrsHoistsStep` marks un-hoistable object-form attrs decls
+    //    `skipTransform` *before* the steps that read that flag: `lowerRulesStep`
+    //    (its inlined-`css`-helper cleanup must not delete a helper a now-preserved
+    //    decl references) and `detectPartialCascadeConflictStep` (must see the skip
+    //    so a StyleX leaf over a preserved styled-components base bails).
+    //  - `hoistAttrsObjectLiteralsStep` does the const insertion *after* every
+    //    per-decl skip is final (e.g. `lowerRulesStep` skipping a decl for
+    //    unsupported CSS), so a preserved declaration never gets an unused hoist.
+    // Insertion still runs before `analyzeBeforeEmitStep` so an inherited base
+    // literal is rewritten to its hoisted reference before the attrs merge.
+    markBlockedAttrsHoistsStep,
     lowerRulesStep,
     finalizeKeyframesStep,
     detectPartialCascadeConflictStep,
+    hoistAttrsObjectLiteralsStep,
     analyzeBeforeEmitStep,
     rewriteCssHelpersStep,
     emitStylesStep,

@@ -717,12 +717,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ? emitter.buildAttrsFromAttrsInfo({
             attrsInfo: attrsInfoForJsx,
             propExprFor: (prop) => j.identifier(prop),
+            // With a `{...rest}` spread, static attrs override caller props and are
+            // emitted after it (below); without one they stay inline here.
+            includeStatic: !includeRest,
           })
         : []),
       ...(shouldForwardRefExplicitly
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+      ...(includeRest
+        ? emitter.buildStaticAttrsFromRecord(attrsInfoForJsx?.staticAttrs ?? {})
+        : []),
       ...emitter.buildDynamicAttrsFromProps({
         dynamicAttrs: attrsInfoForJsx?.dynamicAttrs ?? [],
         propExprFor: (prop) => j.identifier(prop),

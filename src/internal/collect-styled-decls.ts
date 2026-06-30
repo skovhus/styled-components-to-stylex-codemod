@@ -125,17 +125,42 @@ function collectStyledDeclsImpl(args: {
     };
 
     const fillFromObject = (obj: any, attrsParamInfo: AttrsParamInfo = emptyAttrsParamInfo()) => {
-      for (const prop of obj.properties ?? []) {
-        if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
+      const properties = obj.properties ?? [];
+      for (let i = 0; i < properties.length; i++) {
+        const prop = properties[i];
+        if (!prop) {
           continue;
         }
+        if (prop.type !== "ObjectProperty" && prop.type !== "Property") {
+          // A spread of the callback's own props param just re-forwards props the
+          // emitted wrapper already passes via `{...props}`, so it can be dropped —
+          // but only when it is the first entry. A props spread placed *after*
+          // earlier attrs (`{ role: "button", ...props }`) overrides them with the
+          // caller's values, which we cannot reproduce once static attrs are emitted
+          // after `{...props}`. Any other non-property entry (external spreads,
+          // getters/setters) supplies values we cannot enumerate. In all these
+          // cases mark unsupported and let the decl bail instead of silently
+          // erasing or mis-ordering props.
+          if (!(i === 0 && isPropsParamSpread(prop, attrsParamInfo))) {
+            out.hasUnsupportedValues = true;
+          }
+          continue;
+        }
+        // A bare identifier key (`{ attrName: ... }`) names the prop literally, but
+        // a *computed* identifier key (`{ [attrName]: ... }`) is a runtime value —
+        // we cannot know which prop it targets. A string-literal key resolves to
+        // its value whether computed (`["data-x"]`) or not.
         const key =
-          prop.key.type === "Identifier"
+          prop.key.type === "Identifier" && !prop.computed
             ? prop.key.name
             : prop.key.type === "StringLiteral"
               ? prop.key.value
               : null;
         if (!key) {
+          // An unresolvable key (computed identifier/member, numeric, etc.) means
+          // we don't know which prop the value targets — mark unsupported and bail
+          // rather than drop it or emit a wrongly-named static attr.
+          out.hasUnsupportedValues = true;
           continue;
         }
 
@@ -178,7 +203,11 @@ function collectStyledDeclsImpl(args: {
           continue;
         }
 
-        if (isStaticAttrExpression(v, attrsParamInfo)) {
+        // Hoist static value expressions (module-scope references plus object/
+        // array literals composed of static parts) verbatim. The `style` key is
+        // intentionally excluded so the stylex extraction below stays
+        // authoritative for inline style objects.
+        if (key !== "style" && isStaticValueExpression(v, attrsParamInfo)) {
           out.staticAttrs[key] = cloneAstNode(v);
           continue;
         }
@@ -287,7 +316,9 @@ function collectStyledDeclsImpl(args: {
         if (ret?.argument?.type === "ObjectExpression") {
           fillFromObject(ret.argument, {
             ...attrsParamInfo,
-            localNames: collectBlockLocalNames(body),
+            // Merge (not replace) so nested param destructuring bindings collected
+            // by getAttrsParamInfo are kept alongside block-local declarations.
+            localNames: new Set([...attrsParamInfo.localNames, ...collectBlockLocalNames(body)]),
           });
           return out;
         }
@@ -316,6 +347,14 @@ function collectStyledDeclsImpl(args: {
       if (typeof inv?.jsxProp === "string") {
         props.add(inv.jsxProp);
       }
+    }
+    // Object/array attrs literals are hoisted to a module-scope const (for stable
+    // reference identity) and, per styled-components semantics, override caller
+    // props. Both require a wrapper: the direct-inline path only adds a static attr
+    // when the call site omits it, which would drop the override and leave the
+    // hoisted const orphaned. Intrinsic bases otherwise inline static attrs.
+    if (attrsHasObjectOrArrayLiteral(attrsInfo)) {
+      return true;
     }
     // If attrs depend on transient props ($...), emit a wrapper so we can consume those props
     // (and avoid forwarding them to the DOM) without trying to specialize per callsite.
@@ -1584,6 +1623,19 @@ function emptyAttrsParamInfo(): AttrsParamInfo {
   };
 }
 
+/**
+ * True when `prop` is a spread of the attrs callback's props parameter
+ * (e.g. `({ ...props }) => ({ ...props, role: "x" })`). Such a spread merely
+ * re-forwards props the wrapper already passes through, so it can be dropped.
+ */
+function isPropsParamSpread(prop: any, attrsParamInfo: AttrsParamInfo): boolean {
+  if (prop?.type !== "SpreadElement" && prop?.type !== "SpreadProperty") {
+    return false;
+  }
+  const arg = prop.argument;
+  return arg?.type === "Identifier" && attrsParamInfo.rootNames.has(arg.name);
+}
+
 function extractPropName(value: any, attrsParamInfo: AttrsParamInfo): string | null {
   if (
     value?.type === "Identifier" &&
@@ -1670,7 +1722,13 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
       if (defaultValue !== undefined) {
         defaultsByPropName.set(propName, defaultValue);
       }
+      continue;
     }
+    // Nested destructuring (e.g. `motion: { duration }`) binds callback-local
+    // names that are not module-scope references. Collect them so attrs values
+    // referencing them are not misclassified as static and hoisted/inlined with
+    // the wrong binding.
+    collectPatternNames(value, localNames);
   }
 
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
@@ -1694,6 +1752,75 @@ function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): bool
     !attrsParamInfo.rootNames.has(rootName) &&
     !attrsParamInfo.localNames.has(rootName)
   );
+}
+
+/**
+ * Returns true when `node` is a value expression that can be hoisted verbatim
+ * into the rendered JSX as an attribute value. This covers primitive literals,
+ * static references (module-scope identifiers/members), and object/array
+ * literals composed only of such hoistable parts. None of these reference the
+ * attrs callback's props, so styled-components and the inlined JSX attribute
+ * resolve them to the same value — making the hoist lossless.
+ */
+function isStaticValueExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (node.type === "TSAsExpression" || node.type === "TSSatisfiesExpression") {
+    return isStaticValueExpression(node.expression, attrsParamInfo);
+  }
+  // Primitive literals (strings, numbers, booleans, null, unary numbers, static templates, ...).
+  if (literalStaticValueFromNode(node) !== undefined) {
+    return true;
+  }
+  // Module-scope identifier / member references (e.g. an imported component).
+  if (isStaticAttrExpression(node, attrsParamInfo)) {
+    return true;
+  }
+  if (node.type === "ArrayExpression") {
+    return (node.elements ?? []).every(
+      (el: any) =>
+        // Array holes (`[,]`) are represented as null elements.
+        el == null ||
+        (el.type !== "SpreadElement" &&
+          el.type !== "RestElement" &&
+          isStaticValueExpression(el, attrsParamInfo)),
+    );
+  }
+  if (node.type === "ObjectExpression") {
+    return (node.properties ?? []).every((prop: any) => {
+      if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
+        // Spread elements, getters/setters, etc. are not safely hoistable.
+        return false;
+      }
+      // Computed keys could reference props; only accept statically-named keys.
+      if (prop.computed) {
+        return false;
+      }
+      return isStaticValueExpression(prop.value, attrsParamInfo);
+    });
+  }
+  return false;
+}
+
+/**
+ * True when any collected static attr value is an object/array literal node —
+ * i.e. a value the hoist step lifts to a module const. Such attrs force a wrapper
+ * (see `shouldForceWrapperForAttrs`) so the hoisted const is referenced and the
+ * styled-components override of caller props is preserved. Mirrors the hoist
+ * step's `isReferenceLiteralNode`, including TS-cast unwrapping.
+ */
+function attrsHasObjectOrArrayLiteral(attrsInfo: StyledDecl["attrsInfo"]): boolean {
+  for (const value of Object.values(attrsInfo?.staticAttrs ?? {})) {
+    let node: any = value;
+    while (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+      node = node.expression;
+    }
+    if (node?.type === "ObjectExpression" || node?.type === "ArrayExpression") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getStaticAttrExpressionRootName(node: any): string | null {

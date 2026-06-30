@@ -1834,6 +1834,7 @@ export class WrapperEmitter {
   buildAttrsFromAttrsInfo(args: {
     attrsInfo: StyledDecl["attrsInfo"];
     propExprFor: (prop: string) => ExpressionKind;
+    includeStatic?: boolean;
   }): JsxAttr[] {
     return jb.buildAttrsFromAttrsInfo(this.j, args);
   }

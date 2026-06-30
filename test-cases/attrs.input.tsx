@@ -476,6 +476,132 @@ const PlainTemplateTitle = styled.div.attrs({
   background-color: #fff1f2;
 `;
 
+// Pattern 17: static attrs with object/array values must be preserved (not dropped).
+// For object-form attrs, styled-components evaluates the literals once, so they are
+// hoisted to stable module-scope consts to keep the reference identity that memoized
+// children / effects may rely on. Function-form attrs (Pattern 17b) re-run each render,
+// so their literals stay inline.
+function Motion(props: {
+  className?: string;
+  initial?: string;
+  animate?: string;
+  // `ease` is a literal union: hoisting the attrs object must keep it from
+  // widening to `string`, so the hoisted const is annotated with this prop type.
+  transition?: { duration: number; ease?: "linear" | "easeIn" };
+  keyframes?: number[];
+  tabIndex?: number;
+  children?: React.ReactNode;
+}) {
+  const { className, initial, animate, transition, keyframes, tabIndex, children } = props;
+  return (
+    <div
+      className={className}
+      data-initial={initial}
+      data-animate={animate}
+      data-duration={transition?.duration}
+      data-ease={transition?.ease}
+      data-keyframes={keyframes?.join(",")}
+      tabIndex={tabIndex}
+    >
+      {children}
+    </div>
+  );
+}
+
+const AnimatedBox = styled(Motion).attrs({
+  initial: "hidden",
+  animate: "visible",
+  transition: { duration: 0.2, ease: "easeIn" },
+  keyframes: [0, 0.5, 1],
+})`
+  padding: 8px;
+  background-color: #ede9fe;
+  color: #5b21b6;
+`;
+
+// Pattern 17b: function-form attrs re-run every render, so object/array literals are
+// already fresh per render — they must stay inline (no module-scope hoisting).
+const FadeBox = styled(Motion).attrs(() => ({
+  initial: "fade-in",
+  transition: { duration: 0.4 },
+}))`
+  padding: 8px;
+  background-color: #fae8ff;
+  color: #86198f;
+`;
+
+// Pattern 17c: an extension whose own attrs are function-form still inherits the base's
+// object-form literal. The inherited literal must keep referencing the base's hoisted
+// const (stable reference), not be re-inlined in the derived wrapper.
+const TabbableAnimatedBox = styled(AnimatedBox).attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+}))`
+  background-color: #ddd6fe;
+`;
+
+// Pattern 17d: object-form attrs on a component whose base is a *local styled*
+// component. `styled(StyledMotion)` is flattened to render the ultimate base
+// (`Motion`) directly, so the hoisted const must NOT be annotated with
+// `typeof StyledMotion` (which could dangle when the local base is inlined away)
+// nor left unannotated (which would widen `ease` to `string`). The hoist resolves
+// through the local styled base to the final rendered base and annotates against
+// `typeof Motion`, preserving the `ease` literal union.
+const StyledMotion = styled(Motion)`
+  opacity: 0.9;
+`;
+
+const ChainedMotionBox = styled(StyledMotion).attrs({
+  initial: "enter",
+  transition: { duration: 0.5, ease: "easeIn" },
+})`
+  padding: 8px;
+  background-color: #f5d0fe;
+  color: #701a75;
+`;
+
+// `as` target rendering a <span>; same `transition` shape (literal-union `ease`)
+// as Motion but a distinct component, so the hoisted const must be typed against
+// *this* component when attrs override `as`.
+function MotionSpan(props: {
+  className?: string;
+  transition?: { duration: number; ease?: "linear" | "easeIn" };
+  children?: React.ReactNode;
+}) {
+  const { className, transition, children } = props;
+  return (
+    <span className={className} data-ease={transition?.ease}>
+      {children}
+    </span>
+  );
+}
+
+// Pattern 17e: object-form attrs that also override `as`. The rendered component
+// is `MotionSpan`, not the `Motion` base, so the hoisted const must be typed
+// against `typeof MotionSpan` (preserving the `ease` literal union) — not the base.
+// (Inheriting an `as` override from a local base is covered by a unit test, since
+// extending an `as`-overridden base also exercises unrelated sx propagation.)
+const AsOverrideBox = styled(Motion).attrs({
+  as: MotionSpan,
+  transition: { duration: 0.3, ease: "linear" },
+})`
+  padding: 6px;
+  background-color: #fce7f3;
+  color: #9d174d;
+`;
+
+// Pattern 18: object-form attrs on an *intrinsic* element. styled-components
+// evaluates the object once and its attrs override caller props, so the codemod
+// emits a wrapper (rather than inlining the element) — the hoisted const is
+// referenced and the attr is applied with override semantics, instead of leaving
+// an orphaned hoist and dropping the override on the direct-inline path.
+const HtmlBox = styled.div.attrs({
+  dangerouslySetInnerHTML: { __html: "<b>Bold</b> and normal" },
+})`
+  padding: 8px;
+  background-color: #f0fdfa;
+  color: #134e4a;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -534,5 +660,11 @@ export const App = () => (
     <AttrsSxButton>Attrs sx</AttrsSxButton>
     <EscapedTemplateTitle>Escaped template title (hover to see)</EscapedTemplateTitle>
     <PlainTemplateTitle>Plain template title (hover to see)</PlainTemplateTitle>
+    <AnimatedBox>Animated box</AnimatedBox>
+    <FadeBox>Fade box</FadeBox>
+    <TabbableAnimatedBox>Tabbable animated box</TabbableAnimatedBox>
+    <ChainedMotionBox>Chained motion box</ChainedMotionBox>
+    <AsOverrideBox>As override box</AsOverrideBox>
+    <HtmlBox />
   </>
 );

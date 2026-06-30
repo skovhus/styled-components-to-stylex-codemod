@@ -3234,6 +3234,139 @@ export const App = () => (
     );
   });
 
+  it("bails when attrs-hoist skips a local base whose leaf would convert (hoist runs before the cascade check)", () => {
+    // `Base` shares a multi-declarator statement, so its object-form attrs
+    // literal cannot be hoisted — under partial migration the hoist step marks
+    // `Base` `skipTransform`. `Derived` extends `Base` and would otherwise
+    // convert to StyleX, which is the unsafe cascade direction. The hoist step
+    // runs *before* `detectPartialCascadeConflictStep`, so the cascade check
+    // sees `Base`'s freshly added skip and bails. If the cascade check ran first
+    // (before hoisting), it would miss the skip and silently emit a StyleX leaf
+    // wrapping a preserved styled-components base.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Motion = (props: React.ComponentProps<"div"> & { transition?: { duration: number } }) => {
+  const { transition, ...rest } = props;
+  return <div data-duration={transition?.duration} {...rest} />;
+};
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`,
+  sentinel = 1;
+
+const Derived = styled(Base)\`
+  color: blue;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <div>
+    {sentinel}
+    <Base>b</Base>
+    <Derived>d</Derived>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsCascadeMultiDeclarator.input.tsx");
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles",
+    );
+  });
+
+  it("does not orphan a css helper consumed by an attrs-hoist-blocked decl", () => {
+    // `Blocked` shares a multi-declarator statement, so attrs hoisting blocks it and
+    // (under partial migration) marks it `skipTransform`. It also interpolates a local
+    // `css` helper. Hoisting runs *before* `lowerRulesStep`, so lower-rules sees
+    // `Blocked` as already skipped and does not inline-and-delete the helper. If
+    // hoisting ran after lower-rules, the `accent` declaration would be removed while
+    // `Blocked`'s preserved styled template still references `${accent}`, dangling at
+    // runtime.
+    const source = `
+import styled, { css } from "styled-components";
+
+const accent = css\`
+  color: rebeccapurple;
+\`;
+
+const Blocked = styled.div.attrs({ "data-meta": { a: 1 } })\`
+  \${accent}
+  padding: 8px;
+\`,
+  sentinel = 1;
+
+const Ok = styled.div\`
+  color: green;
+\`;
+
+export const App = () => (
+  <div>
+    {sentinel}
+    <Blocked>blocked</Blocked>
+    <Ok>ok</Ok>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsHelperOrphan.input.tsx");
+
+    // The helper must never be orphaned: if any preserved template still references
+    // `${accent}`, the `accent` declaration must still exist (otherwise the file
+    // bails to null). The pre-fix ordering left `${accent}` with no `const accent`.
+    const code = result.code ?? "";
+    const referencesHelper = code.includes("${accent}");
+    const declaresHelper = /const\s+accent\b/.test(code);
+    expect(referencesHelper && !declaresHelper).toBe(false);
+  });
+
+  it("does not emit an unused attrs hoist for a decl lower-rules later preserves", () => {
+    // `Sib` carries an object-form attrs literal *and* an unsupported descendant
+    // selector. The hoist's skip-marking runs before lower-rules, but the const
+    // insertion runs *after* lower-rules marks `Sib` `skipTransform` for the
+    // selector — so `Sib` is preserved as styled-components with no orphaned
+    // `sibTransition` const (which would also double-evaluate any reads in the
+    // literal). The convertible sibling `Ok` still migrates.
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Sib = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+
+  & .inner {
+    color: blue;
+  }
+\`;
+
+const Ok = styled.div\`
+  color: green;
+\`;
+
+export const App = () => (
+  <div>
+    <Sib>a</Sib>
+    <Ok>ok</Ok>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-attrsHoistPreserved.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // `Sib` is preserved as styled-components (selector unsupported)...
+    expect(result.code).toContain("const Sib = styled(Motion)");
+    // ...with no orphaned hoist for its attrs literal...
+    expect(result.code).not.toContain("sibTransition");
+    // ...while the convertible sibling still migrates.
+    expect(result.code).toContain("styles.ok");
+  });
+
   it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
     // `Derived` has an unsupported selector and stays as styled-components.
     // `Base` is simple and converts to StyleX. styled-components injects its
@@ -3270,6 +3403,48 @@ export const App = () => (
     expect(result.code).toMatch(/function\s+Base\s*</);
     // Derived stays as styled-components and references the Base wrapper.
     expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
+  });
+
+  it("preserves the base chain supplying an inherited object attr a preserved leaf reads", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base)\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+const Unrelated = styled.div\`
+  background-color: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Child>x</Child>
+    <Unrelated>u</Unrelated>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-inheritedAttrChain.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // `Child` reads `transition`, which it inherits from `Base`'s object-form attrs,
+    // so `Child` is preserved. `Base` must ALSO be preserved as styled-components —
+    // converting it to a plain wrapper would drop the `.attrs()` inheritance and the
+    // preserved `Child` would read `undefined`.
+    expect(result.code).toMatch(/const\s+Base\s*=\s*styled\(Motion\)\.attrs\(\{\s*transition:/);
+    expect(result.code).toMatch(/const\s+Child\s*=\s*styled\(Base\)`/);
+    // The unrelated sibling still migrates.
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toContain('backgroundColor: "blue"');
   });
 
   it("preserves converted candidates referenced by a skipped styled template", () => {
@@ -12516,6 +12691,219 @@ export const App = () => <Box id="box" />;
     expect(result.code).not.toContain("p.id");
   });
 
+  it("drops a props-param forward spread in attrs but keeps the added prop", () => {
+    const source = `
+import styled from "styled-components";
+
+function Base(props: { role?: string; className?: string }) {
+  return <div className={props.className} role={props.role} />;
+}
+
+const Box = styled(Base).attrs((props) => ({ ...props, role: "button" }))\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The `...props` spread merely re-forwards props the wrapper already passes
+    // through, so it is dropped while the added `role` attr is preserved.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('role="button"');
+  });
+
+  it("bails when a props-param spread follows an attr it could override", () => {
+    const source = `
+import styled from "styled-components";
+
+function Base(props: { role?: string; className?: string }) {
+  return <div className={props.className} role={props.role} />;
+}
+
+const Box = styled(Base).attrs((props) => ({ role: "button", ...props }))\`
+  color: red;
+\`;
+
+export const App = () => <Box role="link" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Here `...props` comes *after* `role`, so the caller's role overrides the
+    // attr default. Static attrs are emitted after `{...props}`, which cannot
+    // reproduce that, so the decl must bail rather than force `role="button"`.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() callback pattern");
+  });
+
+  it("bails on object-form attrs when the styled name is shadowed in another scope", () => {
+    const source = `
+import styled from "styled-components";
+
+function f() {
+  const Box = null;
+  return Box;
+}
+
+const Box = styled.div.attrs({ dangerouslySetInnerHTML: { __html: "x" } })\`
+  color: red;
+\`;
+
+export const App = () => <div>{f()}<Box /></div>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The styled name is ambiguous (also bound inside `f`), so the hoist cannot
+    // safely locate the declaration by name. Object-form attrs need the hoist for
+    // reference identity, so the codemod bails rather than degrade to inline.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope",
+    );
+  });
+
+  it("bails on function-form object attrs when the styled name is shadowed in another scope", () => {
+    const source = `
+import styled from "styled-components";
+
+function f() {
+  const Box = null;
+  return Box;
+}
+
+const Box = styled.div.attrs(() => ({ dangerouslySetInnerHTML: { __html: "x" } }))\`
+  color: red;
+\`;
+
+export const App = () => <div>{f()}<Box /></div>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Function-form attrs don't hoist, but a static object/array value still forces a
+    // wrapper whose by-name replacement would target the wrong same-named binding
+    // (here the inner `const Box` in `f`). So the shadowing bail must cover function-
+    // form object attrs too, not just object-form — otherwise the wrapper lands in the
+    // wrong scope and the real styled declaration is left unconverted.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported .attrs() object/array value on a styled component whose name is shadowed in another scope",
+    );
+  });
+
+  it("types a hoisted attrs literal against an `as` target inherited from a local base", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+function MotionSpan(props: { className?: string; transition?: { ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <span className={props.className} data-ease={props.transition?.ease}>{props.children}</span>;
+}
+
+const AsBase = styled(Motion).attrs({ as: MotionSpan })\`
+  color: red;
+\`;
+
+const InheritsAsBox = styled(AsBase).attrs({ transition: { ease: "easeIn" } })\`
+  padding: 6px;
+\`;
+
+export const App = () => <InheritsAsBox>x</InheritsAsBox>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `InheritsAsBox` inherits `as: MotionSpan` from `AsBase` through the attrs
+    // merge, so it renders `MotionSpan`. The hoisted `transition` const must be
+    // typed against the inherited `as` target, not `AsBase`'s underlying `Motion`.
+    expect(result.code).toContain('React.ComponentPropsWithRef<typeof MotionSpan>["transition"]');
+    expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
+  });
+
+  it("types a hoisted attrs literal against an `as` target that is a local styled component", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number; ease?: "linear" | "easeIn" }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const StyledMotion = styled(Motion)\`
+  opacity: 0.9;
+\`;
+
+const Box = styled.div.attrs({ as: StyledMotion, transition: { duration: 0.2, ease: "easeIn" } })\`
+  color: red;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The `as` target is rendered directly (`<StyledMotion .../>`), so the hoisted
+    // const is typed against `typeof StyledMotion`. The resolver must NOT flatten the
+    // `as` target through to its underlying `Motion` base — only `styled(LocalBase)`
+    // *bases* are flattened, and `StyledMotion`'s prop surface may differ from `Motion`.
+    expect(result.code).toContain('React.ComponentPropsWithRef<typeof StyledMotion>["transition"]');
+    expect(result.code).not.toContain('React.ComponentPropsWithRef<typeof Motion>["transition"]');
+  });
+
+  it("omits the literal-widening annotation when a hoisted attr key is not a valid identifier", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ "data-config": { mode: "compact" } })\`
+  color: red;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `data-config` is a JSX-only attribute, so indexing the props type with it
+    // (`Props["data-config"]`) does not type-check even though `<div data-config />`
+    // is valid. Such keys also accept any value, so there is no literal to widen —
+    // hoist the const without a type annotation rather than emit an unindexable one.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("data-config={boxDataConfig}");
+    expect(result.code).not.toContain('["data-config"]');
+  });
+
+  it("hoists an object-form `sx` literal to preserve its reference identity", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { SxAwareButton } from "./lib/sx-aware-component";
+
+const Btn = styled(SxAwareButton).attrs({ sx: { opacity: 1 }, type: "button" })\`
+  color: red;
+\`;
+
+export const App = () => <Btn>x</Btn>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // styled-components evaluates an object-form attrs argument once, so an `sx`
+    // object literal keeps a stable reference. It must be hoisted to a module
+    // const (like any other object/array attrs literal) rather than re-inlined
+    // fresh every render, which would break memoized sx-aware consumers.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('["sx"] = {');
+    expect(result.code).not.toContain("sx={{");
+  });
+
   it("does not treat partial object rest as the full props object", () => {
     const source = `
 import styled from "styled-components";
@@ -12532,6 +12920,435 @@ export const App = () => <Box id="box" />;
     const result = runTransformWithDiagnostics(source);
 
     expect(result.code).toBeNull();
+  });
+
+  it("bails on a computed object-form attrs key instead of mis-naming the attr", () => {
+    const source = `
+import styled from "styled-components";
+
+const attrName = "data-x";
+
+const Box = styled.div.attrs({ [attrName]: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The key `[attrName]` is a runtime value, so we cannot know which prop the
+    // object targets. Treating it as the literal string "attrName" would emit a
+    // wrongly-named static `attrName={...}` — bail instead.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when an object-form attr is read by a CSS interpolation", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The CSS reads `p.transition.duration`, but the lowering only substitutes
+    // *primitive* static attrs into interpolations — so it would emit a style that
+    // reads the (omitted) caller prop and throws at runtime, instead of feeding the
+    // attr's `0.2` into the CSS the way styled-components does. Bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a destructured CSS interpolation reads an object-form attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${({ transition }: any) => transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The interpolation destructures the attr prop (`{ transition }`) rather than
+    // member-accessing it, but the conflict is the same — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object-form attr inherited from a local base", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Base = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base)\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Child />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `Child` reads `transition` in CSS but inherits that object attr from `Base`
+    // via the attrs merge, so the conflict must be detected across the base chain.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads a function-form attr returning a static object", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs(() => ({ transition: { duration: 0.2 } }))\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // A function returning a constant object still records a static object attr,
+    // so the same CSS-read divergence applies as for object-form attrs — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a referenced css helper reads an object-form attr", () => {
+    const source = `
+import * as React from "react";
+import styled, { css } from "styled-components";
+
+const motionStyles = css\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+  \${motionStyles}
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The read of `p.transition.duration` is hidden inside the referenced `css`
+    // helper, not the styled template's own interpolations, but it is inlined into
+    // the component and reads its props — so the conflict must still be detected.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a local base template reads an object attr the child adds", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Base = styled.div\`
+  width: \${(p: any) => p.config.w}px;
+\`;
+
+const Child = styled(Base).attrs({ config: { w: 1 } })\`
+  color: red;
+\`;
+
+export const App = () => <Child />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `Base`'s CSS reads `config`, which `Child` supplies via attrs. The base CSS is
+    // inherited and evaluated with the child's attrs, so the conflict lives on the
+    // child even though the read is in the base template — bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object attr via a static computed key", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => p["transition"].duration}s;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `p["transition"]` is a static computed member read of the attr prop — the same
+    // conflict as `p.transition`, so it must be detected too.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("does not bail when CSS reads an unrelated object sharing the attr's key name", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
+const palette = { transition: "blue" };
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: \${palette.transition};
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // `palette.transition` is a member read of an unrelated module-scope object, not
+    // of the component's props, so it does not consume the `transition` attr. The
+    // static color lowers and the object attr hoists instead of an over-cautious bail.
+    // A component base (not an intrinsic element) is used so the only thing under
+    // test is the props-read detection, not the intrinsic-leak bail below.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("color: palette.transition");
+    expect(result.code).toContain("transition={boxTransition}");
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when an intrinsic element carries a custom non-DOM object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ config: { mode: "compact" } })<{ config?: { mode: "compact" | "full" } }>\`
+  color: red;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The wrapper would pass \`config\` straight to \`<div>\`, which fails TypeScript
+    // (non-hyphenated unknown attrs are rejected on intrinsics) and leaks a prop
+    // styled-components filters from the host element — even though the explicit
+    // styled generic declares it. Neither is representable losslessly, so bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a styled(localIntrinsic) chain leaks a custom object attr to its element", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const LocalDiv = styled.div\`
+  color: red;
+\`;
+
+const Box = styled(LocalDiv).attrs({ transition: { duration: 0.2 } })\`
+  padding: 4px;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`styled(LocalDiv)\` flattens to render a \`<div>\` directly, so the inherited
+    // \`transition\` object attr still leaks to an intrinsic element — bail through the
+    // local styled base, not just for a direct \`styled.div\` base.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("does not bail when an intrinsic element carries a forwardable object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Box = styled.div.attrs({ dangerouslySetInnerHTML: { __html: "<b>x</b>" } })\`
+  color: red;
+\`;
+
+const DataBox = styled.div.attrs({ "data-config": { mode: "compact" } })\`
+  color: blue;
+\`;
+
+export const App = () => (
+  <>
+    <Box />
+    <DataBox>Box</DataBox>
+  </>
+);
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`dangerouslySetInnerHTML\` and \`data-*\` are valid DOM attributes that intrinsics
+    // accept and styled-components forwards, so they hoist to a wrapper rather than
+    // triggering the intrinsic-leak bail.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("dangerouslySetInnerHTML={");
+    expect(result.code).toContain("data-config={");
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a component-base CSS interpolation reads an object attr", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className} data-d={props.transition?.duration}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => p.transition.duration}s;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // A component base sidesteps the intrinsic-leak bail, so this isolates the
+    // props-read detection: the CSS reads the \`transition\` object attr, which the
+    // lowering cannot substitute, so it must still bail.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("does not bail when a child overrides an inherited object attr with a primitive", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number } | string; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Base = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: red;
+\`;
+
+const Child = styled(Base).attrs({ transition: "none" })\`
+  transition-property: \${(p: any) => p.transition};
+\`;
+
+export const App = () => <Child>x</Child>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // Child overrides the inherited \`transition\` object attr with a primitive, so the
+    // effective value is \`"none"\` — a lowerable primitive, not an object. The
+    // unsupported-attrs scan must honor that override (as the attrs merge does) and
+    // not bail on the base's shadowed object literal: the CSS read resolves to the
+    // primitive and lowers.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('transition="none"');
+    expect(result.code).toContain('transitionProperty: "none"');
+    expect(result.warnings.map((w) => w.type)).not.toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object attr through a body destructure of props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => {
+    const { transition } = p;
+    return transition.duration;
+  }}s;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The interpolation destructures the attr prop in its body (\`const { transition } = p\`)
+    // rather than member-accessing it directly, but it still reads the object attr — the
+    // scan must follow the props binding through the destructure, not miss it and emit
+    // divergent output. (A component base isolates this from the intrinsic-leak bail.)
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when CSS reads an object attr through an alias of props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  transition-duration: \${(p: any) => {
+    const q = p;
+    return q.transition.duration;
+  }}s;
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // \`const q = p\` aliases the props binding, so \`q.transition\` is a read of the attr —
+    // the scan resolves aliases (to a fixpoint) before checking member reads.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
+  });
+
+  it("bails when a CSS interpolation uses its props binding opaquely", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Motion(props: { className?: string; transition?: { duration: number }; children?: React.ReactNode }) {
+  return <div className={props.className}>{props.children}</div>;
+}
+
+const Box = styled(Motion).attrs({ transition: { duration: 0.2 } })\`
+  color: \${(p: any) => String(p)};
+\`;
+
+export const App = () => <Box>x</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The props binding is passed whole to a function, so the scan cannot tell which
+    // prop is read and cannot rule out the object attr — bail rather than risk emitting
+    // output that reads the caller's omitted prop while applying the attr separately.
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain("Unsupported .attrs() object value");
   });
 
   it("unwraps defaulted object-pattern attrs parameters", () => {
@@ -12635,6 +13452,35 @@ export const App = () => <Box size={1} data-size={2} />;
 
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
+  });
+
+  it("emits intrinsic static attrs after rest spreads so attrs override caller props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+// Exported so the wrapper accepts arbitrary DOM props and spreads \`{...rest}\`.
+export const HtmlBox = styled.div.attrs({
+  dangerouslySetInnerHTML: { __html: "<b>fixed</b>" },
+})<{ $pad?: number }>\`
+  padding: \${(props) => props.$pad ?? 0}px;
+\`;
+
+export const App = () => <HtmlBox $pad={4} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    // The transient \`$pad\` forces a \`{...rest}\` spread. The static object attr must be
+    // emitted *after* \`{...rest}\` so a caller's \`dangerouslySetInnerHTML\` (still part
+    // of \`rest\`) cannot override it — styled-components object-form attrs always win.
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /\{\.\.\.rest\}\s+dangerouslySetInnerHTML=\{htmlBoxDangerouslySetInnerHTML\}/,
+    );
+    expect(result.code).not.toMatch(
+      /dangerouslySetInnerHTML=\{htmlBoxDangerouslySetInnerHTML\}\s+\{\.\.\.rest\}/,
+    );
   });
 
   it("places shared dynamic attrs after rest spreads so attrs override target props", () => {

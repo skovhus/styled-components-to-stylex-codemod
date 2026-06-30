@@ -265,9 +265,13 @@ export function buildAttrsFromAttrsInfo(
   args: {
     attrsInfo: StyledDecl["attrsInfo"];
     propExprFor: (prop: string) => ExpressionKind;
+    // Static attrs override caller props, so on a wrapper that spreads `{...rest}`
+    // they must be emitted *after* the spread. Pass `false` to omit them here and
+    // emit them after the rest spread via `buildStaticAttrsFromRecord` instead.
+    includeStatic?: boolean;
   },
 ): JsxAttr[] {
-  const { attrsInfo, propExprFor } = args;
+  const { attrsInfo, propExprFor, includeStatic = true } = args;
   if (!attrsInfo) {
     return [];
   }
@@ -284,7 +288,7 @@ export function buildAttrsFromAttrsInfo(
       invertedBoolAttrs: attrsInfo.invertedBoolAttrs ?? [],
       testExprFor: propExprFor,
     }),
-    ...buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}),
+    ...(includeStatic ? buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}) : []),
   ];
 }
 

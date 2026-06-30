@@ -244,8 +244,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         ...emitter.buildAttrsFromAttrsInfo({
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
+          includeStatic: false,
         }),
         j.jsxSpreadAttribute(restId),
+        // Static attrs override caller props, so they are emitted after `{...rest}`.
+        ...emitter.buildStaticAttrsFromRecord(attrsInfoWithoutForwardedAsStatic?.staticAttrs ?? {}),
         ...emitter.buildDynamicAttrsFromProps({
           dynamicAttrs: attrsInfoWithoutForwardedAsStatic?.dynamicAttrs ?? [],
           propExprFor: (prop) => j.identifier(prop),
