@@ -5,21 +5,50 @@ function findStylexCreateBlockEnd(code: string, blockStart: number): number {
   let blockEnd = blockStart;
   let inString: string | null = null;
   let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let i = blockStart; i < code.length && depth > 0; i++) {
     const ch = code[i];
-    if (escaped) {
-      escaped = false;
+    const next = code[i + 1];
+
+    // Comments are skipped so quotes/braces inside them (e.g. an apostrophe in
+    // `base's`, or `${Foo}` in a selector note) don't derail string/brace tracking.
+    if (inLineComment) {
+      if (ch === "\n") {
+        inLineComment = false;
+      }
       continue;
     }
-    if (ch === "\\") {
-      escaped = true;
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
       continue;
     }
     if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
       if (ch === inString) {
         inString = null;
       }
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
       continue;
     }
     if (ch === '"' || ch === "'" || ch === "`") {
@@ -69,22 +98,43 @@ function transformStylexCreateBlocks(
 /**
  * Remove blank lines inside stylex.create({...}) blocks.
  * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
- * then removes blank lines between properties within that region.
+ * then drops every blank line within that region so style entries stay adjacent.
+ * Blank lines inside multiline template-literal values are preserved, since they
+ * are part of the CSS value and removing them would not be lossless.
  */
 function removeBlankLinesInStylexCreate(code: string): string {
-  return transformStylexCreateBlocks(code, (blockContent) =>
-    blockContent
-      // Remove blank lines after closing braces followed by property
-      .replace(
-        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|\d+|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
-        "$1\n$2",
-      )
-      // Remove blank lines after commas followed by property or comment
-      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
-      // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
-      .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
-      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'"),
-  );
+  return transformStylexCreateBlocks(code, (blockContent) => {
+    const lines = blockContent.split("\n");
+    const kept: string[] = [];
+    let inTemplate = false;
+    for (const line of lines) {
+      if (!inTemplate && line.trim() === "") {
+        continue;
+      }
+      kept.push(line);
+      if (countUnescapedBackticks(line) % 2 === 1) {
+        inTemplate = !inTemplate;
+      }
+    }
+    return (
+      kept
+        .join("\n")
+        // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
+        .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
+        .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'")
+    );
+  });
+}
+
+/** Counts backtick characters on a line that are not backslash-escaped. */
+function countUnescapedBackticks(line: string): number {
+  let count = 0;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === "`" && (i === 0 || line[i - 1] !== "\\")) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /**

@@ -36,7 +36,6 @@ const styles = stylex.create({
     },
     backgroundColor: {
       default: null,
-
       [stylex.when.siblingBefore(":hover", LinkMarker)]: {
         default: null,
         "@media (min-width: 768px)": "lightyellow",

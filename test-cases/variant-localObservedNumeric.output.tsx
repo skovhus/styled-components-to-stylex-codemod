@@ -190,7 +190,6 @@ const faderOpacityVariants = stylex.create({
   0.4: {
     opacity: 0.4,
   },
-
   0.8: {
     opacity: 0.8,
   },
@@ -200,7 +199,6 @@ const transientFaderOpacityVariants = stylex.create({
   0.5: {
     opacity: 0.5,
   },
-
   0.9: {
     opacity: 0.9,
   },

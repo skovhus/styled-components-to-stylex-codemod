@@ -19,7 +19,6 @@ const styles = stylex.create({
     padding: 8,
     marginTop: {
       default: null,
-
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: {
         default: null,
         "@media (min-width: 768px)": 16,
