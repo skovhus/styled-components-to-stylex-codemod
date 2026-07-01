@@ -14421,6 +14421,76 @@ export const App = () => <Box>test</Box>;
     expect(result.code).toContain("paddingLeft: 4");
   });
 
+  it("should keep forwarded sx TODOs when conflict normalization expands shorthands", () => {
+    const buttonPath = toRealPath("/workspace/src/sx-dynamic-flex.tsx");
+    const source = `
+import styled, { css } from "styled-components";
+import { Button } from "./sx-dynamic-flex";
+
+const StyledButton = styled(Button)<{ active?: boolean; compact?: boolean }>\`
+  \${(props) =>
+    props.active &&
+    css\`
+      margin: 4px;
+    \`}
+  \${(props) =>
+    props.compact &&
+    css\`
+      margin-bottom: 2px;
+    \`}
+\`;
+
+export const App = () => (
+  <>
+    <StyledButton active>active</StyledButton>
+    <StyledButton compact>compact</StyledButton>
+  </>
+);
+`;
+    const sxAwareAdapter = {
+      ...fixtureAdapter,
+      wrappedComponentInterface(ctx) {
+        if (ctx.importSource === "./sx-dynamic-flex") {
+          return { acceptsSx: true };
+        }
+        return fixtureAdapter.wrappedComponentInterface?.(ctx);
+      },
+    } satisfies Adapter;
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: sxAwareAdapter,
+        resolveModule: (_fromFile, specifier) =>
+          specifier === "./sx-dynamic-flex" ? buttonPath : undefined,
+        transformedFileSources: new Map([
+          [
+            buttonPath,
+            `
+export function Button({ sx, externalStyles, ...rest }) {
+  return <button {...rest} sx={[externalStyles, sx]} />;
+}
+`,
+          ],
+        ]),
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    const activeBlock = result.code!.match(/buttonActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(activeBlock).toBeTruthy();
+    expect(activeBlock).not.toMatch(/\bmargin:/);
+    expect(activeBlock).toContain("flat marginTop override is safe");
+    expect(activeBlock).toContain("flat marginRight override is safe");
+    expect(activeBlock).toContain("flat marginBottom override is safe");
+    expect(activeBlock).toContain("flat marginLeft override is safe");
+    expect(activeBlock).toContain("marginTop: 4");
+    expect(activeBlock).toContain("marginRight: 4");
+    expect(activeBlock).toContain("marginBottom: 4");
+    expect(activeBlock).toContain("marginLeft: 4");
+  });
+
   it("should expand variant borderRadius when the base expands to corner longhands", () => {
     // StyleX gives corner longhands (priority 4000) precedence over the
     // borderRadius shorthand (priority 2000) regardless of application order.

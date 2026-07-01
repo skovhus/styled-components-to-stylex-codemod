@@ -36,6 +36,53 @@ export function addPropComments(target: any, prop: string, comments: PropComment
   (target as any)[key] = map;
 }
 
+export function propagatePropComments(
+  target: Record<string, unknown>,
+  sourceProp: string,
+  targetProps: readonly string[],
+): void {
+  const sourceComments = propCommentsFor(target, sourceProp);
+  if (!sourceComments) {
+    return;
+  }
+  for (const targetProp of targetProps) {
+    if (!(targetProp in target)) {
+      continue;
+    }
+    copyPropComments(target, targetProp, sourceComments);
+  }
+}
+
+function copyPropComments(
+  target: Record<string, unknown>,
+  targetProp: string,
+  comments: PropCommentMetadata,
+): void {
+  const existing = propCommentsFor(target, targetProp);
+  addPropComments(target, targetProp, {
+    leading: existing?.leading ?? comments.leading,
+    trailingLine: existing?.trailingLine ?? comments.trailingLine,
+  });
+  appendPropLeadingLine(target, targetProp, comments.leadingLine);
+}
+
+function propCommentsFor(target: unknown, prop: string): PropCommentMetadata | null {
+  const propComments = isRecord(target) ? target.__propComments : null;
+  if (!isRecord(propComments)) {
+    return null;
+  }
+  const metadata = propComments[prop];
+  if (!isRecord(metadata)) {
+    return null;
+  }
+  const comments = {
+    leading: stringValue(metadata.leading),
+    leadingLine: stringValue(metadata.leadingLine),
+    trailingLine: stringValue(metadata.trailingLine),
+  };
+  return comments.leading || comments.leadingLine || comments.trailingLine ? comments : null;
+}
+
 /** Joins a new line comment onto an existing one, or returns it standalone. */
 export function joinLineComment(existing: string | null | undefined, next: string): string {
   return existing ? `${existing}\n${next}` : next;
@@ -63,13 +110,13 @@ export function appendPropLeadingLine(
 }
 
 function propLeadingLine(target: any, prop: string): string | null {
-  const comments = target?.__propComments;
-  if (!comments || typeof comments !== "object" || Array.isArray(comments)) {
-    return null;
-  }
-  const propComments = comments[prop];
-  if (!propComments || typeof propComments !== "object") {
-    return null;
-  }
-  return typeof propComments.leadingLine === "string" ? propComments.leadingLine : null;
+  return propCommentsFor(target, prop)?.leadingLine ?? null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }

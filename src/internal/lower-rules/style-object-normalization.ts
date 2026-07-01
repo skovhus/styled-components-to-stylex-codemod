@@ -3,7 +3,7 @@ import {
   expandBorderRadiusInStyleObject,
   expandBorderRadiusShorthandValue,
 } from "../css-border-radius.js";
-import { addPropComments, appendPropLeadingLine, type PropCommentMetadata } from "./comments.js";
+import { propagatePropComments } from "./comments.js";
 
 export function expandStyleObjectShorthands(
   styleObj: Record<string, unknown>,
@@ -49,62 +49,4 @@ export function staticStringValue(value: unknown): string | null {
     return quasi?.value?.cooked ?? quasi?.value?.raw ?? null;
   }
   return null;
-}
-
-function propagatePropComments(
-  styleObj: Record<string, unknown>,
-  sourceProp: string,
-  targetProps: readonly string[],
-): void {
-  const sourceComments = propCommentsFor(styleObj, sourceProp);
-  if (!sourceComments) {
-    return;
-  }
-  for (const targetProp of targetProps) {
-    if (!(targetProp in styleObj)) {
-      continue;
-    }
-    copyPropComments(styleObj, targetProp, sourceComments);
-  }
-}
-
-function copyPropComments(
-  styleObj: Record<string, unknown>,
-  targetProp: string,
-  comments: PropCommentMetadata,
-): void {
-  const existing = propCommentsFor(styleObj, targetProp);
-  addPropComments(styleObj, targetProp, {
-    leading: existing?.leading ?? comments.leading,
-    trailingLine: existing?.trailingLine ?? comments.trailingLine,
-  });
-  appendPropLeadingLine(styleObj, targetProp, comments.leadingLine);
-}
-
-function propCommentsFor(
-  styleObj: Record<string, unknown>,
-  prop: string,
-): PropCommentMetadata | null {
-  const propComments = styleObj.__propComments;
-  if (!isRecord(propComments)) {
-    return null;
-  }
-  const metadata = propComments[prop];
-  if (!isRecord(metadata)) {
-    return null;
-  }
-  const comments = {
-    leading: stringValue(metadata.leading),
-    leadingLine: stringValue(metadata.leadingLine),
-    trailingLine: stringValue(metadata.trailingLine),
-  };
-  return comments.leading || comments.leadingLine || comments.trailingLine ? comments : null;
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
 }
