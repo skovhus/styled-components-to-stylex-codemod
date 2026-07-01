@@ -1088,17 +1088,26 @@ function analyzeStyleSequence(
   prop: string,
 ): PropertyInference {
   let current: PropertyInference = { kind: "absent" };
+  let unproven: PropertyInference | null = null;
   for (const arg of styleArgs) {
     const next = analyzeStyleArg(arg, analysisCtx, prop);
     if (next.kind === "absent") {
       continue;
     }
-    if (next.kind === "unknown") {
-      return next;
+    if (next.kind === "unknown" || next.kind === "unavailable") {
+      unproven ??= next;
+      continue;
     }
     current = next;
   }
-  return current;
+  return mergeWithUnprovenInference(current, unproven);
+}
+
+function mergeWithUnprovenInference(
+  inference: PropertyInference,
+  unproven: PropertyInference | null,
+): PropertyInference {
+  return unproven ? mergePropertyInferences([unproven, inference]) : inference;
 }
 
 function analyzeStyleArg(
