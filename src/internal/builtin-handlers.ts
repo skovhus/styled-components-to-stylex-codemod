@@ -242,10 +242,10 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  const expr = getPropArrowFn(node);
-  if (!expr) {
+  if (!isArrowFunctionExpression(node.expr)) {
     return null;
   }
+  const expr = node.expr;
 
   // Support both (props) => ... and ({ theme }) => ...
   const info = getArrowFnThemeParamInfo(expr);
@@ -267,18 +267,28 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   const propsParamName = info.kind === "propsParam" ? info.propsName : undefined;
   const themeBindingName = info.kind === "themeBinding" ? info.themeName : undefined;
 
-  // Verify at least one arg is a theme member access
+  // Verify at least one arg is the whole theme object or a theme member access.
   const hasThemeArg = args.some((arg: any) => {
-    if (!arg || arg.type !== "MemberExpression") {
+    if (!arg) {
+      return false;
+    }
+    if (
+      arg.type === "Identifier" &&
+      typeof themeBindingName === "string" &&
+      arg.name === themeBindingName
+    ) {
+      return true;
+    }
+    if (arg.type !== "MemberExpression") {
       return false;
     }
     if (propsParamName) {
       const parts = getMemberPathFromIdentifier(arg, propsParamName);
-      return parts !== null && parts[0] === "theme" && parts.length > 1;
+      return parts !== null && parts[0] === "theme";
     }
     if (themeBindingName) {
       const parts = getMemberPathFromIdentifier(arg, themeBindingName);
-      return parts !== null && parts.length > 0;
+      return parts !== null;
     }
     return false;
   });

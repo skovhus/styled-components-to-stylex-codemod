@@ -498,18 +498,26 @@ function callArgFromNode(
     return { kind: "unknown" };
   }
   const type = (node as { type?: string }).type;
+  if (
+    type === "Identifier" &&
+    typeof themeBindingName === "string" &&
+    themeBindingName &&
+    (node as { name?: string }).name === themeBindingName
+  ) {
+    return { kind: "theme", path: "" };
+  }
   if (type === "MemberExpression") {
-    // Pattern: (props) => helper(props.theme.color.X) — path starts with "theme"
+    // Pattern: (props) => helper(props.theme) or helper(props.theme.color.X)
     if (typeof propsParamName === "string" && propsParamName) {
       const parts = getMemberPathFromIdentifier(node as any, propsParamName);
-      if (parts && parts[0] === "theme" && parts.length > 1) {
+      if (parts && parts[0] === "theme") {
         return { kind: "theme", path: parts.slice(1).join(".") };
       }
     }
-    // Pattern: ({ theme }) => helper(theme.color.X) — root IS the theme binding
+    // Pattern: ({ theme }) => helper(theme) or helper(theme.color.X)
     if (typeof themeBindingName === "string" && themeBindingName) {
       const parts = getMemberPathFromIdentifier(node as any, themeBindingName);
-      if (parts && parts.length > 0) {
+      if (parts) {
         return { kind: "theme", path: parts.join(".") };
       }
     }

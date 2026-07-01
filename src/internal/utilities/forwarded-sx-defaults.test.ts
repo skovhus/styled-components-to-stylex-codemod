@@ -389,6 +389,41 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("reads satisfies-wrapped computed maps before forwarded sx", () => {
+    const styleObj = { marginBottom: 16 };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        import { InternalButtonVariables } from "./Button.stylex";
+
+        export function Base({ sx, variant, ...rest }) {
+          return <button {...rest} sx={[buttonVariants[variant], sx]} />;
+        }
+
+        const buttonVariants = stylex.create({
+          primary: {
+            color: {
+              default: "base",
+              ":highlightMixin": "hover",
+            },
+          },
+          borderless: {
+            [InternalButtonVariables["--btn-overlay-shadow"]]: "0 0 0 1px currentColor",
+            color: {
+              default: "muted",
+              ":highlightMixin": "title",
+            },
+          },
+        }) satisfies Record<string, unknown>;
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({ marginBottom: 16 });
+  });
+
   it("bails when a later helper call spread can override a static variant", () => {
     const styleObj = { color: "muted" };
     const ctx = forwardedSxContext({

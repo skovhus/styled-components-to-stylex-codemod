@@ -214,7 +214,7 @@ type AstRecord = Record<string, unknown> & { type?: string };
 type StyleEntry =
   | { kind: "object"; props: Map<string, PropValue>; complete: boolean }
   | { kind: "function"; props: Map<string, PropValue>; complete: boolean };
-type PropValue = Exclude<PropertyShape, { kind: "absent" }>;
+type PropValue = Exclude<PropertyShape, { kind: "absent" }> | { kind: "unknownConditionalMap" };
 type StyleMap = {
   entries: Map<string, StyleEntry>;
   complete: boolean;
@@ -489,7 +489,7 @@ function collectStylexCreateMaps(ast: unknown, moduleBindings: ExpressionBinding
         continue;
       }
       const id = node.id;
-      const init = node.init;
+      const init = unwrapExpression(node.init);
       if (!isIdentifier(id) || !isRecord(init) || !isStylexCreateCall(init)) {
         continue;
       }
@@ -564,13 +564,14 @@ function readStyleObjectProps(
       if (dynamicValueNames.has(resolution.name)) {
         props.set(key, { kind: "dynamic" });
       } else {
-        complete = false;
+        props.set(key, { kind: "unknownConditionalMap" });
       }
       continue;
     }
     const valueNode = resolution.node;
     if (isObjectExpression(valueNode) && objectExpressionHasUnreadProperties(valueNode)) {
-      complete = false;
+      props.set(key, { kind: "unknownConditionalMap" });
+      continue;
     }
     const value = readAstPropertyShape(valueNode, moduleBindings);
     if (value.kind !== "absent") {
@@ -1234,6 +1235,9 @@ function analyzeStyleEntry(
   if (!value) {
     return { kind: "absent" };
   }
+  if (value.kind === "unknownConditionalMap") {
+    return { kind: "variableConditionalMap", conditionKeys: [] };
+  }
   if (styleEntry.kind === "function" || called || value.kind === "dynamic") {
     // The runtime value varies, but a conditional-map shape still means the
     // earlier style can carry condition states a later flat value would erase.
@@ -1747,6 +1751,8 @@ function unwrapExpression(node: unknown): unknown {
     isRecord(current) &&
     (current.type === "TSAsExpression" ||
       current.type === "TSTypeAssertion" ||
+      current.type === "TSNonNullExpression" ||
+      current.type === "TSSatisfiesExpression" ||
       current.type === "ParenthesizedExpression")
   ) {
     current = current.expression;
@@ -1825,6 +1831,9 @@ function getFunctionParams(node: AstRecord): unknown[] {
 
 function readPropertyKey(property: AstRecord): string | null {
   const key = property.key;
+  if (property.computed === true) {
+    return readComputedPropertyKey(key);
+  }
   if (isIdentifier(key)) {
     return key.name;
   }
@@ -1832,6 +1841,25 @@ function readPropertyKey(property: AstRecord): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
+}
+
+function readComputedPropertyKey(key: unknown): string | null {
+  const literalKey = readStringLiteralKey(key);
+  if (literalKey) {
+    return literalKey;
+  }
+  if (!isRecord(key) || key.type !== "MemberExpression") {
+    return null;
+  }
+  const memberKey = readStringLiteralKey(key.property);
+  return memberKey?.startsWith("--") ? memberKey : null;
+}
+
+function readStringLiteralKey(key: unknown): string | null {
+  if (!isRecord(key) || (key.type !== "StringLiteral" && key.type !== "Literal")) {
+    return null;
+  }
+  return typeof key.value === "string" ? key.value : null;
 }
 
 function isStaticValue(value: unknown): value is StaticStyleValue {
