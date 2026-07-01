@@ -4,7 +4,11 @@ import { draggableRegion } from "./lib/helpers";
 
 const DraggableBar = styled.div`
   pointer-events: all;
-  ${draggableRegion(true)};
+  ${draggableRegion()};
+
+  &:hover {
+    color: white;
+  }
 `;
 
 export function App() {

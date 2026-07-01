@@ -18,6 +18,7 @@ export type WarningType =
   | "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper"
   | "Adapter resolveCall returned undefined for helper call"
   | "Adapter resolveBaseComponent threw an error"
+  | "Adapter resolved className-only helper cannot be applied under nested selectors/at-rules"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
   | "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping"
   | "Adapter resolved imported StyleX value under nested selectors/at-rules but did not provide cssText for property expansion — add cssText to resolveValue result to enable pseudo-wrapping"

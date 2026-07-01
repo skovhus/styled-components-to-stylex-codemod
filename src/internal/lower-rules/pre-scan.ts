@@ -112,7 +112,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
                   calleeSource: importEntry.source,
                   args: [],
                 });
-                if (!resolved || !("expr" in resolved)) {
+                if (!isResolvedImportedHelperForPreScan(resolved, rule)) {
                   // Can't resolve this imported function call - bail for safety
                   hasImportedCssHelper = true;
                   importedCssHelperLoc ??= getNodeLocStart(expr as ASTNode);
@@ -156,4 +156,20 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
   }
 
   return true;
+}
+
+function isResolvedImportedHelperForPreScan(
+  resolved: ReturnType<DeclProcessingState["state"]["resolveCall"]>,
+  rule: { selector: string; atRuleStack?: string[] },
+): boolean {
+  if (!resolved) {
+    return false;
+  }
+  if ("expr" in resolved) {
+    return true;
+  }
+  if ("extraClassNames" in resolved) {
+    return rule.selector.trim() === "&" && (rule.atRuleStack ?? []).length === 0;
+  }
+  return false;
 }

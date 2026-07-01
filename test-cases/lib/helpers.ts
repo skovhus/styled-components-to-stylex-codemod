@@ -275,7 +275,7 @@ export const scrollFadeMaskStyles = (size: number, direction?: "top" | "bottom" 
 
 // Draggable region helper — returns a css`` RuleSet that applies electron draggable region styles.
 // The adapter resolves this to a CSS module className instead of a StyleX expression.
-export const draggableRegion = (_enable: boolean) => css`
+export const draggableRegion = (_enable: boolean = false) => css`
   -webkit-app-region: drag;
   & > * {
     -webkit-app-region: no-drag;

@@ -28,7 +28,7 @@ import {
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
 import { extractStaticPartsForDecl, wrapExprWithStaticParts } from "./interpolations.js";
-import { ensureShouldForwardPropDrop } from "./types.js";
+import { ensureShouldForwardPropDrop, markDeclNeedsUseThemeHook } from "./types.js";
 import { buildStylexValueWithStaticParts } from "./inline-styles.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
 import {
@@ -206,6 +206,9 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
       expr: exprAst as any,
       afterBase: hasStaticPropsBefore,
     });
+    if (resolvedStylesUsesThemeArg(res)) {
+      markDeclNeedsUseThemeHook(decl);
+    }
     // Store any extra className expressions (from CSS modules) on the decl
     if (res.extraClassNames) {
       collectExtraClassNames(res.extraClassNames);
@@ -218,9 +221,31 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
   }
 
   if (res && res.type === "resolvedClassNames") {
+    if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+      const resolveCallMeta =
+        res.resolveCallContext && res.resolveCallResult
+          ? {
+              resolveCallContext: res.resolveCallContext,
+              resolveCallResult: res.resolveCallResult,
+            }
+          : undefined;
+      warnings.push({
+        severity: "warning",
+        type: "Adapter resolved className-only helper cannot be applied under nested selectors/at-rules",
+        loc,
+        context: resolveCallMeta
+          ? { selector: rule.selector, atRuleStack: rule.atRuleStack, ...resolveCallMeta }
+          : { selector: rule.selector, atRuleStack: rule.atRuleStack },
+      });
+      flags.bail = true;
+      return true;
+    }
     // Adapter returned className-only result (no StyleX expr).
     // Store the className expressions on the decl for the emitter to merge.
     collectExtraClassNames(res.extraClassNames);
+    if (resolvedStylesUsesThemeArg(res)) {
+      markDeclNeedsUseThemeHook(decl);
+    }
     decl.needsWrapperComponent = true;
     return true;
   }
@@ -1105,4 +1130,12 @@ export function tryHandleResolvedDynamicNode(rc: ResolvedDynamicNodeContext): bo
   }
 
   return tryHandleResolvedStyleFunctionNode(rc);
+}
+
+function resolvedStylesUsesThemeArg(res: {
+  resolveCallContext?: {
+    args?: Array<{ kind: string }>;
+  };
+}): boolean {
+  return res.resolveCallContext?.args?.some((arg) => arg.kind === "theme") ?? false;
 }

@@ -12,5 +12,9 @@ export function App() {
 const styles = stylex.create({
   draggableBar: {
     pointerEvents: "all",
+    color: {
+      default: null,
+      ":hover": "white",
+    },
   },
 });

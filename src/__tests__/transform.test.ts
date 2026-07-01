@@ -7451,6 +7451,139 @@ export const Box = styled.div\`
     );
   });
 
+  it("should resolve imported helper calls with the whole theme object argument", () => {
+    const source = `
+import styled from "styled-components";
+import { baseBgGradient } from "./helpers";
+
+const Background = styled.div\`
+  min-height: 100%;
+  \${(props) => baseBgGradient(props.theme)}
+\`;
+
+export const App = () => <Background>Background</Background>;
+`;
+    const resolveCalls: CallResolveContext[] = [];
+
+    const adapterWithThemeObjectMixin = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        resolveCalls.push(ctx);
+        if (
+          ctx.calleeImportedName === "baseBgGradient" &&
+          ctx.args[0]?.kind === "theme" &&
+          ctx.args[0].path === ""
+        ) {
+          return {
+            usage: "props" as const,
+            expr: 'baseBgGradient[theme.isDark ? "dark" : "light"]',
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./helpers.stylex" },
+                names: [{ imported: "baseBgGradient" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: true,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeObjectMixin.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithThemeObjectMixin },
+    );
+
+    expect(resolveCalls[0]).toMatchObject({
+      calleeImportedName: "baseBgGradient",
+      args: [{ kind: "theme", path: "" }],
+    });
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('import { useTheme } from "styled-components";');
+    expect(code).toContain('baseBgGradient[theme.isDark ? "dark" : "light"]');
+  });
+
+  it("should add useTheme for className-only helper calls with the whole theme object argument", () => {
+    const source = `
+import styled from "styled-components";
+import { themedClassName } from "./helpers";
+
+const Background = styled.div\`
+  min-height: 100%;
+  \${(props) => themedClassName(props.theme)}
+\`;
+
+export const App = () => <Background>Background</Background>;
+`;
+
+    const adapterWithThemeClassNameMixin = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (
+          ctx.calleeImportedName === "themedClassName" &&
+          ctx.args[0]?.kind === "theme" &&
+          ctx.args[0].path === ""
+        ) {
+          return {
+            extraClassNames: [
+              {
+                expr: 'themeClasses[theme.isDark ? "dark" : "light"]',
+                imports: [
+                  {
+                    from: { kind: "specifier" as const, value: "./helpers.module.css" },
+                    names: [{ imported: "default", local: "themeClasses" }],
+                  },
+                ],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: true,
+      usePhysicalProperties: true,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-themeClassNameMixin.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithThemeClassNameMixin },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('import { useTheme } from "styled-components";');
+    expect(code).toContain('themeClasses[theme.isDark ? "dark" : "light"]');
+  });
+
   it.each([
     {
       name: "member helper arithmetic expression",
@@ -18168,6 +18301,74 @@ export const App = () => <Box $spacing="sm">Content</Box>;
     if (result.code) {
       expect(result.code).not.toMatch(/\bpadding:/);
     }
+  });
+});
+
+describe("extraClassNames scoping", () => {
+  it("bails on zero-arg className-only helpers in nested selectors during pre-scan", () => {
+    const source = `
+import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
+
+const DraggableBar = styled.div\`
+  pointer-events: all;
+
+  &:hover {
+    \${draggableRegion()};
+  }
+\`;
+
+export function App() {
+  return <DraggableBar>Draggable</DraggableBar>;
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "mixin-extraClassNames.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling",
+    );
+  });
+
+  it("bails on className-only helpers with args in nested selectors", () => {
+    const source = `
+import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
+
+const DraggableBar = styled.div\`
+  pointer-events: all;
+
+  &:hover {
+    \${draggableRegion(true)};
+  }
+\`;
+
+export function App() {
+  return <DraggableBar>Draggable</DraggableBar>;
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "mixin-extraClassNames.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Adapter resolved className-only helper cannot be applied under nested selectors/at-rules",
+    );
   });
 });
 

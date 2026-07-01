@@ -119,7 +119,8 @@ export type CallResolveContext = {
   /**
    * Call arguments.
    * - literals are surfaced precisely
-   * - theme member access can be surfaced as `{ kind: "theme", path }`
+   * - theme object/member access can be surfaced as `{ kind: "theme", path }`
+   *   (`path === ""` means the whole theme object)
    * - everything else is `unknown`
    */
   args: Array<
