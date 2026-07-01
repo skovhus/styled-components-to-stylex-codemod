@@ -1241,13 +1241,16 @@ function analyzeStyleEntry(
 }
 
 function mergePropertyInferences(inferences: readonly PropertyInference[]): PropertyInference {
+  const unproven = inferences.find(
+    (inference) => inference.kind === "unknown" || inference.kind === "unavailable",
+  );
+  if (unproven) {
+    return variableConditionalInferenceFromBranches(inferences) ?? unproven;
+  }
   let merged: PropertyInference = { kind: "absent" };
   let sawAbsent = false;
   let sawContributor = false;
   for (const inference of inferences) {
-    if (inference.kind === "unknown" || inference.kind === "unavailable") {
-      return inference;
-    }
     if (inference.kind === "variable" || inference.kind === "variableConditionalMap") {
       return variableInferenceFromBranches(inferences);
     }
@@ -1318,13 +1321,22 @@ function staticConditionsEqual(
 }
 
 function variableInferenceFromBranches(branches: readonly PropertyInference[]): PropertyInference {
-  const conditionKeys = uniqueStrings(branches.flatMap(conditionKeysForWarning));
+  return variableConditionalInferenceFromBranches(branches) ?? { kind: "variable" };
+}
+
+function variableConditionalInferenceFromBranches(
+  branches: readonly PropertyInference[],
+): Extract<PropertyInference, { kind: "variableConditionalMap" }> | null {
   const mayBeConditional = branches.some(
     (branch) => branch.kind === "conditionalMap" || branch.kind === "variableConditionalMap",
   );
-  return mayBeConditional
-    ? { kind: "variableConditionalMap", conditionKeys }
-    : { kind: "variable" };
+  if (!mayBeConditional) {
+    return null;
+  }
+  return {
+    kind: "variableConditionalMap",
+    conditionKeys: uniqueStrings(branches.flatMap(conditionKeysForWarning)),
+  };
 }
 
 function conditionKeysForWarning(inferred: PropertyInference): string[] {

@@ -938,6 +938,34 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(styleObj).toEqual({ color: "muted" });
   });
 
+  it("bails when one sx sink is unproven and another has conditional states", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, externalStyles, ...rest }) {
+          return (
+            <div>
+              <span sx={[externalStyles, sx]} />
+              <div {...rest} sx={[styles.hover, sx]} />
+            </div>
+          );
+        }
+        const styles = stylex.create({
+          hover: { color: { default: "base", ":hover": "hoverColor" } },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.droppedConditionKeys).toBe(":hover");
+    expect(styleObj).toEqual({ color: "muted" });
+  });
+
   it("adds a TODO for cyclic const style bindings without hanging", () => {
     const styleObj = { color: "muted" };
     const ctx = forwardedSxContext({
