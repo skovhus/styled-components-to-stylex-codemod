@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`div`,{"data-open":`true`,className:`xb3r6kr xqtp20y x199yv28 x8j7t73 x1s11cyk xg01cxk x1r7fyky x1humd01 xjsts90`,children:(0,t.jsx)(`div`,{children:`Open content`})}),(0,t.jsx)(`div`,{className:`x1mqxbix x1grelhj x1xyehpw`,children:`Hover order`})]});export{n as App};
