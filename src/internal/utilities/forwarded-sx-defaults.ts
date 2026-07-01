@@ -223,7 +223,7 @@ type StyleMaps = Map<string, StyleMap>;
 type PropertyInference =
   | PropertyShape
   | { kind: "absent" }
-  | { kind: "variable" }
+  | { kind: "variable"; mayBeAbsent: boolean }
   | { kind: "variableConditionalMap"; conditionKeys: string[] }
   | { kind: "unknown" }
   | { kind: "unavailable" };
@@ -1078,7 +1078,7 @@ function analyzeStyleSequence(
     const conditional = conditionalEvidenceFromInference(next);
     if (conditional) {
       possibleConditional = conditional;
-    } else if (next.kind === "flat") {
+    } else if (clearsPriorConditionalEvidence(next)) {
       possibleConditional = null;
     }
   }
@@ -1092,6 +1092,10 @@ function conditionalEvidenceFromInference(inference: PropertyInference): Propert
   return inference.kind === "conditionalMap" || inference.kind === "variableConditionalMap"
     ? inference
     : null;
+}
+
+function clearsPriorConditionalEvidence(inference: PropertyInference): boolean {
+  return inference.kind === "flat" || (inference.kind === "variable" && !inference.mayBeAbsent);
 }
 
 function mergeWithUnprovenInference(
@@ -1235,7 +1239,7 @@ function analyzeStyleEntry(
     // earlier style can carry condition states a later flat value would erase.
     return value.kind === "conditionalMap"
       ? { kind: "variableConditionalMap", conditionKeys: value.conditionKeys }
-      : { kind: "variable" };
+      : { kind: "variable", mayBeAbsent: false };
   }
   return value;
 }
@@ -1321,7 +1325,18 @@ function staticConditionsEqual(
 }
 
 function variableInferenceFromBranches(branches: readonly PropertyInference[]): PropertyInference {
-  return variableConditionalInferenceFromBranches(branches) ?? { kind: "variable" };
+  return (
+    variableConditionalInferenceFromBranches(branches) ?? {
+      kind: "variable",
+      mayBeAbsent: branches.some(inferenceMayBeAbsent),
+    }
+  );
+}
+
+function inferenceMayBeAbsent(inference: PropertyInference): boolean {
+  return (
+    inference.kind === "absent" || (inference.kind === "variable" && inference.mayBeAbsent === true)
+  );
 }
 
 function variableConditionalInferenceFromBranches(

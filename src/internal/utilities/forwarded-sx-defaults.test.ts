@@ -1015,6 +1015,35 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(styleObj).toEqual({ color: "muted" });
   });
 
+  it("adds a TODO when a guaranteed flat variable clears conditional states before unproven sx", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, active, externalStyles, ...rest }) {
+          return <div {...rest} sx={[styles.hover, active ? styles.flatA : styles.flatB, externalStyles, sx]} />;
+        }
+        const styles = stylex.create({
+          hover: { color: { default: "base", ":hover": "hoverColor" } },
+          flatA: { color: "flatA" },
+          flatB: { color: "flatB" },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toMatchObject({
+      color: "muted",
+      __propComments: {
+        color: {
+          leadingLine: expect.stringContaining("flat color override is safe"),
+        },
+      },
+    });
+  });
+
   it("adds a TODO for cyclic const style bindings without hanging", () => {
     const styleObj = { color: "muted" };
     const ctx = forwardedSxContext({
