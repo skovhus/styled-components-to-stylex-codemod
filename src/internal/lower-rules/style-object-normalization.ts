@@ -1,7 +1,9 @@
 import {
+  BORDER_RADIUS_LONGHAND_PROPS,
   expandBorderRadiusInStyleObject,
   expandBorderRadiusShorthandValue,
 } from "../css-border-radius.js";
+import { propagatePropComments } from "./comments.js";
 
 export function expandStyleObjectShorthands(
   styleObj: Record<string, unknown>,
@@ -14,7 +16,9 @@ export function expandStyleObjectShorthands(
   if (!expanded) {
     return styleObj;
   }
-  return expandBorderRadiusInStyleObject(styleObj, expanded);
+  const normalized = expandBorderRadiusInStyleObject(styleObj, expanded);
+  propagatePropComments(normalized, "borderRadius", BORDER_RADIUS_LONGHAND_PROPS);
+  return normalized;
 }
 
 /**

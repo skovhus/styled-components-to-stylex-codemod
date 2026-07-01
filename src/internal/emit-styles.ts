@@ -12,6 +12,7 @@ import {
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { propagatePropComments } from "./lower-rules/comments.js";
 import { expandStyleObjectShorthands } from "./lower-rules/style-object-normalization.js";
 import { findUncollectedStyledTemplateLoc } from "./utilities/uncollected-styled-template.js";
 import {
@@ -914,18 +915,26 @@ function replacePropsInPlace(
   replacements: Map<string, Array<{ prop: string; value: unknown }>>,
 ): void {
   const entries = Object.entries(style);
+  const propCommentTargets: Array<{ sourceProp: string; targetProps: string[] }> = [];
   for (const key of Object.keys(style)) {
     delete style[key];
   }
   for (const [key, val] of entries) {
     const replacement = replacements.get(key);
     if (replacement) {
+      propCommentTargets.push({
+        sourceProp: key,
+        targetProps: replacement.map((r) => r.prop),
+      });
       for (const r of replacement) {
         style[r.prop] = r.value;
       }
     } else {
       style[key] = val;
     }
+  }
+  for (const { sourceProp, targetProps } of propCommentTargets) {
+    propagatePropComments(style, sourceProp, targetProps);
   }
 }
 

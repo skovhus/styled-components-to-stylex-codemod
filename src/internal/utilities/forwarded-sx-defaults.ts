@@ -25,6 +25,7 @@ import {
   type StaticStyleValue,
 } from "./conditional-style-defaults.js";
 import { buildStyleKeySequence } from "./style-composition-plan.js";
+import { appendPropLeadingLine } from "../lower-rules/comments.js";
 
 export function guardForwardedSxConditionalDefaults(
   ctx: TransformContext,
@@ -93,17 +94,24 @@ function guardForwardedSxStyleObject(
       prop,
       warningType: FLAT_ERASES_CONDITIONAL_WARNING,
       applyInference: (inferred) => {
-        return patchFlatValueAgainstPropertyInference(styleObj, prop, inferred);
+        const applied = patchFlatValueAgainstPropertyInference(styleObj, prop, inferred);
+        if (applied !== "bail") {
+          return applied;
+        }
+        // An unproven base (unknown/dynamic) can't be shown to carry conditional
+        // states, so keep the flat override and flag it with a TODO instead of
+        // bailing the whole file.
+        if (shouldAnnotateUnprovenForwardedFlatValue(inferred)) {
+          addFlatSxOverrideTodo(styleObj, prop, wrappedComponentIdent(decl));
+          return "safe";
+        }
+        return "bail";
       },
       warningContext: (inferred) => ({
         reason:
           inferred.kind === "variableConditionalMap"
             ? "wrapped component base property can be conditional for this prop before sx is applied"
-            : inferred.kind === "unknown" ||
-                inferred.kind === "variable" ||
-                inferred.kind === "dynamic"
-              ? "wrapped component base property could not be proven before sx is applied"
-              : "a forwarded flat sx value would replace wrapped component conditional property states",
+            : "a forwarded flat sx value would replace wrapped component conditional property states",
         droppedConditionKeys: conditionKeysForWarning(inferred).join(", "),
         example: flatStylexValueErasureExample(prop),
         todo: `TODO: lift ${prop} into a conditional map on the forwarded sx style, or avoid overriding it with a flat value.`,
@@ -145,6 +153,26 @@ function guardForwardedSxStyleObject(
   return "ok";
 }
 
+function shouldAnnotateUnprovenForwardedFlatValue(inferred: PropertyInference): boolean {
+  return inferred.kind === "unknown" || inferred.kind === "dynamic";
+}
+
+function addFlatSxOverrideTodo(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  wrappedComponent: string,
+): void {
+  appendPropLeadingLine(
+    styleObj,
+    prop,
+    `TODO: Verify this flat ${prop} override is safe; add explicit conditional defaults if ${wrappedComponent}'s root sx sets ${prop} states before caller sx.`,
+  );
+}
+
+function wrappedComponentIdent(decl: StyledDecl): string {
+  return decl.base.kind === "component" ? decl.base.ident : "";
+}
+
 function applyForwardedSxDefault(args: {
   ctx: TransformContext;
   decl: StyledDecl;
@@ -154,7 +182,7 @@ function applyForwardedSxDefault(args: {
   warningContext: (value: PropertyInference) => Record<string, unknown>;
 }): "ok" | "bail" {
   const { ctx, decl, prop, warningType, applyInference, warningContext } = args;
-  const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
+  const wrappedComponent = wrappedComponentIdent(decl);
   const inferred = inferWrappedComponentSxProperty(
     ctx,
     wrappedComponent,
@@ -195,7 +223,7 @@ type StyleMaps = Map<string, StyleMap>;
 type PropertyInference =
   | PropertyShape
   | { kind: "absent" }
-  | { kind: "variable" }
+  | { kind: "variable"; mayBeAbsent: boolean }
   | { kind: "variableConditionalMap"; conditionKeys: string[] }
   | { kind: "unknown" }
   | { kind: "unavailable" };
@@ -1035,17 +1063,46 @@ function analyzeStyleSequence(
   prop: string,
 ): PropertyInference {
   let current: PropertyInference = { kind: "absent" };
+  let unproven: PropertyInference | null = null;
+  let possibleConditional: PropertyInference | null = null;
   for (const arg of styleArgs) {
     const next = analyzeStyleArg(arg, analysisCtx, prop);
     if (next.kind === "absent") {
       continue;
     }
-    if (next.kind === "unknown") {
-      return next;
+    if (next.kind === "unknown" || next.kind === "unavailable") {
+      unproven ??= next;
+      continue;
     }
     current = next;
+    const conditional = conditionalEvidenceFromInference(next);
+    if (conditional) {
+      possibleConditional = conditional;
+    } else if (clearsPriorConditionalEvidence(next)) {
+      possibleConditional = null;
+    }
   }
-  return current;
+  if (unproven && possibleConditional) {
+    return mergePropertyInferences([unproven, possibleConditional, current]);
+  }
+  return mergeWithUnprovenInference(current, unproven);
+}
+
+function conditionalEvidenceFromInference(inference: PropertyInference): PropertyInference | null {
+  return inference.kind === "conditionalMap" || inference.kind === "variableConditionalMap"
+    ? inference
+    : null;
+}
+
+function clearsPriorConditionalEvidence(inference: PropertyInference): boolean {
+  return inference.kind === "flat" || (inference.kind === "variable" && !inference.mayBeAbsent);
+}
+
+function mergeWithUnprovenInference(
+  inference: PropertyInference,
+  unproven: PropertyInference | null,
+): PropertyInference {
+  return unproven ? mergePropertyInferences([unproven, inference]) : inference;
 }
 
 function analyzeStyleArg(
@@ -1182,19 +1239,22 @@ function analyzeStyleEntry(
     // earlier style can carry condition states a later flat value would erase.
     return value.kind === "conditionalMap"
       ? { kind: "variableConditionalMap", conditionKeys: value.conditionKeys }
-      : { kind: "variable" };
+      : { kind: "variable", mayBeAbsent: false };
   }
   return value;
 }
 
 function mergePropertyInferences(inferences: readonly PropertyInference[]): PropertyInference {
+  const unproven = inferences.find(
+    (inference) => inference.kind === "unknown" || inference.kind === "unavailable",
+  );
+  if (unproven) {
+    return variableConditionalInferenceFromBranches(inferences) ?? unproven;
+  }
   let merged: PropertyInference = { kind: "absent" };
   let sawAbsent = false;
   let sawContributor = false;
   for (const inference of inferences) {
-    if (inference.kind === "unknown" || inference.kind === "unavailable") {
-      return inference;
-    }
     if (inference.kind === "variable" || inference.kind === "variableConditionalMap") {
       return variableInferenceFromBranches(inferences);
     }
@@ -1265,13 +1325,33 @@ function staticConditionsEqual(
 }
 
 function variableInferenceFromBranches(branches: readonly PropertyInference[]): PropertyInference {
-  const conditionKeys = uniqueStrings(branches.flatMap(conditionKeysForWarning));
+  return (
+    variableConditionalInferenceFromBranches(branches) ?? {
+      kind: "variable",
+      mayBeAbsent: branches.some(inferenceMayBeAbsent),
+    }
+  );
+}
+
+function inferenceMayBeAbsent(inference: PropertyInference): boolean {
+  return (
+    inference.kind === "absent" || (inference.kind === "variable" && inference.mayBeAbsent === true)
+  );
+}
+
+function variableConditionalInferenceFromBranches(
+  branches: readonly PropertyInference[],
+): Extract<PropertyInference, { kind: "variableConditionalMap" }> | null {
   const mayBeConditional = branches.some(
     (branch) => branch.kind === "conditionalMap" || branch.kind === "variableConditionalMap",
   );
-  return mayBeConditional
-    ? { kind: "variableConditionalMap", conditionKeys }
-    : { kind: "variable" };
+  if (!mayBeConditional) {
+    return null;
+  }
+  return {
+    kind: "variableConditionalMap",
+    conditionKeys: uniqueStrings(branches.flatMap(conditionKeysForWarning)),
+  };
 }
 
 function conditionKeysForWarning(inferred: PropertyInference): string[] {

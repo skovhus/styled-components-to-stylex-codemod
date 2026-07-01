@@ -9,6 +9,9 @@ import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { normalizeWhitespace } from "../utilities/string-utils.js";
 import type { WarningLog } from "../logger.js";
 import type { UnsupportedCssUsage } from "./css-helpers.js";
+import type { PropCommentMetadata } from "../lower-rules/comments.js";
+
+export type { PropCommentMetadata } from "../lower-rules/comments.js";
 
 export function toStyleKey(name: string): string {
   // If the entire name is uppercase (e.g. "SVG", "URL"), lowercase it entirely
@@ -63,12 +66,6 @@ export type ComputedKeyEntry = {
    * at the top of the rule). Default (false) emits at the end (e.g. media queries).
    */
   prepend?: boolean;
-};
-
-export type PropCommentMetadata = {
-  leading?: string | null;
-  leadingLine?: string | null;
-  trailingLine?: string | null;
 };
 
 export const SOURCE_CSS_PROPERTIES_KEY = "__sourceCssProperties";
