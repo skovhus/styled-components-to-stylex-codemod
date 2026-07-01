@@ -1064,6 +1064,7 @@ function analyzeStyleSequence(
 ): PropertyInference {
   let current: PropertyInference = { kind: "absent" };
   let unproven: PropertyInference | null = null;
+  let possibleConditional: PropertyInference | null = null;
   for (const arg of styleArgs) {
     const next = analyzeStyleArg(arg, analysisCtx, prop);
     if (next.kind === "absent") {
@@ -1074,8 +1075,23 @@ function analyzeStyleSequence(
       continue;
     }
     current = next;
+    const conditional = conditionalEvidenceFromInference(next);
+    if (conditional) {
+      possibleConditional = conditional;
+    } else if (next.kind === "flat") {
+      possibleConditional = null;
+    }
+  }
+  if (unproven && possibleConditional) {
+    return mergePropertyInferences([unproven, possibleConditional, current]);
   }
   return mergeWithUnprovenInference(current, unproven);
+}
+
+function conditionalEvidenceFromInference(inference: PropertyInference): PropertyInference | null {
+  return inference.kind === "conditionalMap" || inference.kind === "variableConditionalMap"
+    ? inference
+    : null;
 }
 
 function mergeWithUnprovenInference(
