@@ -34,7 +34,6 @@ const styles = stylex.create({
     borderColor: "initial",
     borderRadius: 4,
   },
-
   // This is also exported but won't use shouldSupportExternalStyling (for comparison)
   internalBox: {
     backgroundColor: "#f0f0f0",

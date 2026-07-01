@@ -54,20 +54,16 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
   },
-
   containerAfter1: {
     padding: 16,
   },
-
   // Pattern 3: Multiple css helpers
   complexFade: {
     position: "relative",
   },
-
   complexFadeAfter1: {
     backgroundColor: "white",
   },
-
   // Pattern 4: Helper with overlapping property — the static display:block after the helper
   // must override flexCenter's display:flex. If cascade order is wrong, children would be
   // centered (flex) instead of stacking normally (block), producing a visible pixel diff.
@@ -75,20 +71,16 @@ const styles = stylex.create({
     backgroundColor: "lightblue",
     padding: 16,
   },
-
   overrideDisplayAfter1: {
     display: "block",
   },
-
   runtimeAfterHelper: {
     position: "relative",
   },
-
   runtimeAfterHelperAfter1: {
     top: 1,
     backgroundColor: "lavender",
   },
-
   runtimeAfterHelperBrowserIsTouchDevice: {
     top: 5,
   },

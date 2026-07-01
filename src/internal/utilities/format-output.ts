@@ -5,21 +5,50 @@ function findStylexCreateBlockEnd(code: string, blockStart: number): number {
   let blockEnd = blockStart;
   let inString: string | null = null;
   let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let i = blockStart; i < code.length && depth > 0; i++) {
     const ch = code[i];
-    if (escaped) {
-      escaped = false;
+    const next = code[i + 1];
+
+    // Comments are skipped so quotes/braces inside them (e.g. an apostrophe in
+    // `base's`, or `${Foo}` in a selector note) don't derail string/brace tracking.
+    if (inLineComment) {
+      if (ch === "\n") {
+        inLineComment = false;
+      }
       continue;
     }
-    if (ch === "\\") {
-      escaped = true;
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
       continue;
     }
     if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
       if (ch === inString) {
         inString = null;
       }
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
       continue;
     }
     if (ch === '"' || ch === "'" || ch === "`") {
@@ -69,22 +98,99 @@ function transformStylexCreateBlocks(
 /**
  * Remove blank lines inside stylex.create({...}) blocks.
  * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
- * then removes blank lines between properties within that region.
+ * then drops every blank line within that region so style entries stay adjacent.
+ * Blank lines inside multiline template-literal values are preserved, since they
+ * are part of the CSS value and removing them would not be lossless.
  */
 function removeBlankLinesInStylexCreate(code: string): string {
-  return transformStylexCreateBlocks(code, (blockContent) =>
-    blockContent
-      // Remove blank lines after closing braces followed by property
-      .replace(
-        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|\d+|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
-        "$1\n$2",
-      )
-      // Remove blank lines after commas followed by property or comment
-      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
-      // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
-      .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
-      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'"),
-  );
+  return transformStylexCreateBlocks(code, (blockContent) => {
+    const lines = blockContent.split("\n");
+    const protectedLines = protectedLineStarts(blockContent, lines.length);
+    const kept: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? "";
+      if (!protectedLines[i] && line.trim() === "") {
+        continue;
+      }
+      kept.push(line);
+    }
+    return (
+      kept
+        .join("\n")
+        // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
+        .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
+        .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'")
+    );
+  });
+}
+
+/**
+ * Returns, per line, whether that line *starts* inside a region where blank
+ * lines are content and must be preserved: a multiline template-literal value or
+ * a multiline block comment. Backticks inside comments or other string literals
+ * are ignored, so an unmatched backtick in a preserved comment cannot flip the
+ * template state and corrupt a following template value.
+ */
+function protectedLineStarts(code: string, lineCount: number): boolean[] {
+  const protectedLines = Array.from<boolean>({ length: lineCount }).fill(false);
+  let inString: string | null = null;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+  let line = 0;
+
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    const next = code[i + 1];
+
+    if (ch === "\n") {
+      line++;
+      inLineComment = false;
+      if (line < lineCount) {
+        protectedLines[line] = inString === "`" || inBlockComment;
+      }
+      continue;
+    }
+    if (inLineComment) {
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = ch;
+    }
+  }
+
+  return protectedLines;
 }
 
 /**

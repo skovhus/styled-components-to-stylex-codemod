@@ -67,13 +67,11 @@ const styles = stylex.create({
     borderColor: "#bf4f74",
     borderRadius: 3,
   },
-
   // Pattern 2: styled(Component) where Component has custom props (like variant)
   // When used with as="label", the component's props must be preserved
   text: {
     marginTop: 4,
   },
-
   // Pattern 3: as prop on unexported intrinsic styled.div
   fullWidthCopyText: {
     width: "100%",

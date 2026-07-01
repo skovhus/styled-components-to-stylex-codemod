@@ -21,7 +21,6 @@ const styles = stylex.create({
     color: "#111",
     padding: 16,
   },
-
   tile: {
     backgroundColor: "peachpuff",
     backgroundImage: "none",
@@ -33,12 +32,10 @@ const styles = stylex.create({
     backgroundClip: "border-box",
     padding: 16,
   },
-
   coloredBase: {
     backgroundColor: "blue",
     padding: 16,
   },
-
   // The shorthand omits a color component, so the base's blue must reset to
   // transparent rather than leak through the merged StyleX styles.
   overlay: {

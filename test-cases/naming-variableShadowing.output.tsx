@@ -32,7 +32,6 @@ export const App = () => (
 const stylexStyles = stylex.create({
   // When a local variable named `styles` exists, the generated stylex constant
   // should use a different name to avoid shadowing.
-
   container: {
     position: "relative",
     flexShrink: 0,
