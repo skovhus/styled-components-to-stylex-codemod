@@ -1,5 +1,12 @@
 import { splitCssValueWhitespace } from "./css-value-split.js";
 
+export const BORDER_RADIUS_LONGHAND_PROPS = [
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+] as const;
+
 type BorderRadiusLonghands<T = string> = {
   topLeft: T;
   topRight: T;
@@ -62,10 +69,10 @@ export function expandBorderRadiusShorthandValue(
 }
 
 const BORDER_RADIUS_LONGHAND_ENTRIES = [
-  ["borderTopLeftRadius", "topLeft"],
-  ["borderTopRightRadius", "topRight"],
-  ["borderBottomRightRadius", "bottomRight"],
-  ["borderBottomLeftRadius", "bottomLeft"],
+  [BORDER_RADIUS_LONGHAND_PROPS[0], "topLeft"],
+  [BORDER_RADIUS_LONGHAND_PROPS[1], "topRight"],
+  [BORDER_RADIUS_LONGHAND_PROPS[2], "bottomRight"],
+  [BORDER_RADIUS_LONGHAND_PROPS[3], "bottomLeft"],
 ] as const satisfies ReadonlyArray<readonly [string, keyof BorderRadiusLonghands<unknown>]>;
 
 function borderRadiusReplacementEntries(

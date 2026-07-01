@@ -2,11 +2,13 @@
  * Tracks leading/trailing comments for StyleX properties.
  * Core concepts: comment metadata propagation and property mapping.
  */
-export function addPropComments(
-  target: any,
-  prop: string,
-  comments: { leading?: string | null; leadingLine?: string | null; trailingLine?: string | null },
-): void {
+export type PropCommentMetadata = {
+  leading?: string | null;
+  leadingLine?: string | null;
+  trailingLine?: string | null;
+};
+
+export function addPropComments(target: any, prop: string, comments: PropCommentMetadata): void {
   if (!prop) {
     return;
   }
