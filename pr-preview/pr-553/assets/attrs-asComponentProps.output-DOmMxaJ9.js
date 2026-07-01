@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";import{m as t}from"./index-CnAB2IxS.js";import{t as n}from"./flex-DSh_JdH9.js";t();var r=e();function i(e){return(0,r.jsx)(n,{...e,column:!0,className:`x12peec7 x12oqio5`})}var a=()=>(0,r.jsxs)(i,{children:[(0,r.jsx)(`div`,{children:`Item 1`}),(0,r.jsx)(`div`,{children:`Item 2`})]});export{a as App};
