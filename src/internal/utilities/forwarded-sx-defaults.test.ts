@@ -566,9 +566,10 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(ctx.warnings[0]?.context?.property).toBe("color");
   });
 
-  it("bails when an unknown style before sx could hide conditional states", () => {
+  it("adds TODOs when an unknown style before sx could hide conditional states", () => {
+    const styleObj = { marginBottom: 16, animationDuration: "0.3s" };
     const ctx = forwardedSxContext({
-      styleObj: { color: "muted" },
+      styleObj,
       baseSource: `
         import * as stylex from "@stylexjs/stylex";
         export function Base({ sx, externalStyles, ...rest }) {
@@ -577,14 +578,20 @@ describe("guardForwardedSxConditionalDefaults", () => {
       `,
     });
 
-    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
-    expect(ctx.warnings[0]?.type).toBe(
-      "Flat StyleX value would erase earlier conditional property states",
-    );
-    expect(ctx.warnings[0]?.context?.reason).toBe(
-      "wrapped component base property could not be proven before sx is applied",
-    );
-    expect(ctx.warnings[0]?.context?.example).toContain("color: value");
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toMatchObject({
+      marginBottom: 16,
+      animationDuration: "0.3s",
+      __propComments: {
+        marginBottom: {
+          leadingLine: expect.stringContaining("flat marginBottom override is safe"),
+        },
+        animationDuration: {
+          leadingLine: expect.stringContaining("flat animationDuration override is safe"),
+        },
+      },
+    });
   });
 
   it("bails when a mutable local guard could hide conditional states", () => {
@@ -931,7 +938,7 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(styleObj).toEqual({ color: "muted" });
   });
 
-  it("treats cyclic const style bindings as unproven without hanging", () => {
+  it("adds a TODO for cyclic const style bindings without hanging", () => {
     const styleObj = { color: "muted" };
     const ctx = forwardedSxContext({
       styleObj,
@@ -945,11 +952,16 @@ describe("guardForwardedSxConditionalDefaults", () => {
       `,
     });
 
-    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
-    expect(ctx.warnings[0]?.type).toBe(
-      "Flat StyleX value would erase earlier conditional property states",
-    );
-    expect(styleObj).toEqual({ color: "muted" });
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toMatchObject({
+      color: "muted",
+      __propComments: {
+        color: {
+          leadingLine: expect.stringContaining("flat color override is safe"),
+        },
+      },
+    });
   });
 });
 
