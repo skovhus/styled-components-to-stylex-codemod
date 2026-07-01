@@ -8,9 +8,7 @@ type Props = {
 };
 
 // Original styled component - spread props first, then override src
-function Thumbnail(
-  props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"img"> & { sx?: stylex.StyleXStyles },
-) {
+function Thumbnail(props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"img">) {
   const { className, style, sx, ...rest } = props;
   return <img {...rest} {...mergedSx([styles.thumbnail, sx], className, style)} />;
 }
@@ -28,7 +26,7 @@ function Box(
   props: {
     sx?: stylex.StyleXStyles;
     "data-test"?: boolean | string;
-  } & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
+  } & React.ComponentProps<"div">,
 ) {
   const { className, style, sx, ...rest } = props;
   return <div {...rest} {...mergedSx([styles.box, sx], className, style)} />;
