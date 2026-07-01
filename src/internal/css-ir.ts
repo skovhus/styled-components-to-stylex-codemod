@@ -5,6 +5,7 @@
 import type { Element } from "stylis";
 import { PLACEHOLDER_RE, type StyledInterpolationSlot } from "./styled-css.js";
 import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
+import { joinLineComment } from "./lower-rules/comments.js";
 
 export type CssValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
 
@@ -121,9 +122,6 @@ export function normalizeStylisAstToIR(
     return false;
   };
 
-  const appendLineComment = (existing: string | undefined | null, next: string): string =>
-    existing ? `${existing}\n${next}` : next;
-
   const findRawLineCommentPlacement = (body: string): "leading" | "trailing" | null => {
     if (!rawCss) {
       return null;
@@ -159,7 +157,7 @@ export function normalizeStylisAstToIR(
       pendingComment = null;
     }
     if (pendingLineComment) {
-      decl.leadingLineComment = appendLineComment(decl.leadingLineComment, pendingLineComment);
+      decl.leadingLineComment = joinLineComment(decl.leadingLineComment, pendingLineComment);
       pendingLineComment = null;
     }
   };
@@ -173,10 +171,10 @@ export function normalizeStylisAstToIR(
     if (isStylisConvertedLineComment(raw)) {
       const placement = findRawLineCommentPlacement(body);
       if (placement === "leading" || !lastDecl) {
-        pendingLineComment = appendLineComment(pendingLineComment, body);
+        pendingLineComment = joinLineComment(pendingLineComment, body);
         return;
       }
-      lastDecl.trailingLineComment = appendLineComment(lastDecl.trailingLineComment, body);
+      lastDecl.trailingLineComment = joinLineComment(lastDecl.trailingLineComment, body);
       return;
     }
     // Preserve inline trailing block comments like:

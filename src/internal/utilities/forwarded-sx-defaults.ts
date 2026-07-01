@@ -25,7 +25,7 @@ import {
   type StaticStyleValue,
 } from "./conditional-style-defaults.js";
 import { buildStyleKeySequence } from "./style-composition-plan.js";
-import { addPropComments } from "../lower-rules/comments.js";
+import { appendPropLeadingLine } from "../lower-rules/comments.js";
 
 export function guardForwardedSxConditionalDefaults(
   ctx: TransformContext,
@@ -88,9 +88,37 @@ function guardForwardedSxStyleObject(
   styleObj: Record<string, unknown>,
 ): "ok" | "bail" {
   for (const prop of propertiesWithFlatValue(styleObj)) {
-    const result = applyForwardedFlatSxValue({ ctx, decl, styleObj, prop });
-    if (result === "bail") {
-      return result;
+    const result = applyForwardedSxDefault({
+      ctx,
+      decl,
+      prop,
+      warningType: FLAT_ERASES_CONDITIONAL_WARNING,
+      applyInference: (inferred) => {
+        const applied = patchFlatValueAgainstPropertyInference(styleObj, prop, inferred);
+        if (applied !== "bail") {
+          return applied;
+        }
+        // An unproven base (unknown/dynamic) can't be shown to carry conditional
+        // states, so keep the flat override and flag it with a TODO instead of
+        // bailing the whole file.
+        if (shouldAnnotateUnprovenForwardedFlatValue(inferred)) {
+          addFlatSxOverrideTodo(styleObj, prop, wrappedComponentIdent(decl));
+          return "safe";
+        }
+        return "bail";
+      },
+      warningContext: (inferred) => ({
+        reason:
+          inferred.kind === "variableConditionalMap"
+            ? "wrapped component base property can be conditional for this prop before sx is applied"
+            : "a forwarded flat sx value would replace wrapped component conditional property states",
+        droppedConditionKeys: conditionKeysForWarning(inferred).join(", "),
+        example: flatStylexValueErasureExample(prop),
+        todo: `TODO: lift ${prop} into a conditional map on the forwarded sx style, or avoid overriding it with a flat value.`,
+      }),
+    });
+    if (result !== "ok") {
+      return "bail";
     }
   }
 
@@ -125,48 +153,6 @@ function guardForwardedSxStyleObject(
   return "ok";
 }
 
-function applyForwardedFlatSxValue(args: {
-  ctx: TransformContext;
-  decl: StyledDecl;
-  styleObj: Record<string, unknown>;
-  prop: string;
-}): "ok" | "bail" {
-  const { ctx, decl, styleObj, prop } = args;
-  const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
-  const inferred = inferWrappedComponentSxProperty(
-    ctx,
-    wrappedComponent,
-    prop,
-    staticPropsForDecl(decl),
-  );
-  const applied = patchFlatValueAgainstPropertyInference(styleObj, prop, inferred);
-  if (applied === "patched" || applied === "safe") {
-    return "ok";
-  }
-  if (shouldAnnotateUnprovenForwardedFlatValue(inferred)) {
-    addFlatSxOverrideTodo(styleObj, prop, wrappedComponent);
-    return "ok";
-  }
-  ctx.warnings.push({
-    severity: "warning",
-    type: FLAT_ERASES_CONDITIONAL_WARNING,
-    loc: decl.loc,
-    context: {
-      localName: decl.localName,
-      wrappedComponent,
-      property: prop,
-      reason:
-        inferred.kind === "variableConditionalMap"
-          ? "wrapped component base property can be conditional for this prop before sx is applied"
-          : "a forwarded flat sx value would replace wrapped component conditional property states",
-      droppedConditionKeys: conditionKeysForWarning(inferred).join(", "),
-      example: flatStylexValueErasureExample(prop),
-      todo: `TODO: lift ${prop} into a conditional map on the forwarded sx style, or avoid overriding it with a flat value.`,
-    },
-  });
-  return "bail";
-}
-
 function shouldAnnotateUnprovenForwardedFlatValue(inferred: PropertyInference): boolean {
   return inferred.kind === "unknown" || inferred.kind === "dynamic";
 }
@@ -176,26 +162,15 @@ function addFlatSxOverrideTodo(
   prop: string,
   wrappedComponent: string,
 ): void {
-  const todo = `TODO: Verify this flat ${prop} override is safe; add explicit conditional defaults if ${wrappedComponent}'s root sx sets ${prop} states before caller sx.`;
-  const leadingLine = existingLeadingLineComment(styleObj, prop);
-  addPropComments(styleObj, prop, {
-    leadingLine: leadingLine ? `${leadingLine}\n${todo}` : todo,
-  });
+  appendPropLeadingLine(
+    styleObj,
+    prop,
+    `TODO: Verify this flat ${prop} override is safe; add explicit conditional defaults if ${wrappedComponent}'s root sx sets ${prop} states before caller sx.`,
+  );
 }
 
-function existingLeadingLineComment(
-  styleObj: Record<string, unknown>,
-  prop: string,
-): string | null {
-  const comments = styleObj.__propComments;
-  if (!isRecord(comments)) {
-    return null;
-  }
-  const propComments = comments[prop];
-  if (!isRecord(propComments)) {
-    return null;
-  }
-  return typeof propComments.leadingLine === "string" ? propComments.leadingLine : null;
+function wrappedComponentIdent(decl: StyledDecl): string {
+  return decl.base.kind === "component" ? decl.base.ident : "";
 }
 
 function applyForwardedSxDefault(args: {
@@ -207,7 +182,7 @@ function applyForwardedSxDefault(args: {
   warningContext: (value: PropertyInference) => Record<string, unknown>;
 }): "ok" | "bail" {
   const { ctx, decl, prop, warningType, applyInference, warningContext } = args;
-  const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
+  const wrappedComponent = wrappedComponentIdent(decl);
   const inferred = inferWrappedComponentSxProperty(
     ctx,
     wrappedComponent,
