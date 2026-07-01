@@ -105,16 +105,14 @@ function transformStylexCreateBlocks(
 function removeBlankLinesInStylexCreate(code: string): string {
   return transformStylexCreateBlocks(code, (blockContent) => {
     const lines = blockContent.split("\n");
+    const protectedLines = protectedLineStarts(blockContent, lines.length);
     const kept: string[] = [];
-    let inTemplate = false;
-    for (const line of lines) {
-      if (!inTemplate && line.trim() === "") {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? "";
+      if (!protectedLines[i] && line.trim() === "") {
         continue;
       }
       kept.push(line);
-      if (countUnescapedBackticks(line) % 2 === 1) {
-        inTemplate = !inTemplate;
-      }
     }
     return (
       kept
@@ -126,15 +124,73 @@ function removeBlankLinesInStylexCreate(code: string): string {
   });
 }
 
-/** Counts backtick characters on a line that are not backslash-escaped. */
-function countUnescapedBackticks(line: string): number {
-  let count = 0;
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === "`" && (i === 0 || line[i - 1] !== "\\")) {
-      count++;
+/**
+ * Returns, per line, whether that line *starts* inside a region where blank
+ * lines are content and must be preserved: a multiline template-literal value or
+ * a multiline block comment. Backticks inside comments or other string literals
+ * are ignored, so an unmatched backtick in a preserved comment cannot flip the
+ * template state and corrupt a following template value.
+ */
+function protectedLineStarts(code: string, lineCount: number): boolean[] {
+  const protectedLines = Array.from<boolean>({ length: lineCount }).fill(false);
+  let inString: string | null = null;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+  let line = 0;
+
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    const next = code[i + 1];
+
+    if (ch === "\n") {
+      line++;
+      inLineComment = false;
+      if (line < lineCount) {
+        protectedLines[line] = inString === "`" || inBlockComment;
+      }
+      continue;
+    }
+    if (inLineComment) {
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = ch;
     }
   }
-  return count;
+
+  return protectedLines;
 }
 
 /**

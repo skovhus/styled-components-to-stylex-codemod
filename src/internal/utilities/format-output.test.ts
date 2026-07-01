@@ -161,4 +161,51 @@ describe("formatOutput", () => {
     expect(output).toMatch(/0 0 0 1px,\n\s*\n\s*0 1px 2px/);
     expect(output).not.toMatch(/\n[ \t]*\n[ \t]*other:/);
   });
+
+  it("ignores backticks inside comments when protecting template values", () => {
+    // An unmatched backtick in a preserved comment must not flip template
+    // tracking; otherwise the following real template value loses its blank line.
+    const input = [
+      "const styles = stylex.create({",
+      "  // reference to `someToken in a note",
+      "  tab: {",
+      "    boxShadow: `",
+      "      0 0 0 1px,",
+      "",
+      "      0 1px 2px`,",
+      "  },",
+      "",
+      "  other: {",
+      '    color: "red",',
+      "  },",
+      "});",
+      "",
+    ].join("\n");
+
+    const output = formatOutput(input);
+    expect(output).toMatch(/0 0 0 1px,\n\s*\n\s*0 1px 2px/);
+    expect(output).not.toMatch(/\n[ \t]*\n[ \t]*other:/);
+  });
+
+  it("preserves blank lines inside multiline block comments", () => {
+    const input = [
+      "const styles = stylex.create({",
+      "  /* first note",
+      "",
+      "     second note */",
+      "  tab: {",
+      '    color: "red",',
+      "  },",
+      "",
+      "  other: {",
+      '    color: "blue",',
+      "  },",
+      "});",
+      "",
+    ].join("\n");
+
+    const output = formatOutput(input);
+    expect(output).toMatch(/first note\n\s*\n\s*second note/);
+    expect(output).not.toMatch(/\n[ \t]*\n[ \t]*other:/);
+  });
 });
