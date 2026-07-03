@@ -90,6 +90,7 @@ export function tryHandleResolvedStyleFunctionNode(rc: ResolvedDynamicNodeContex
     d,
     media,
     pseudos,
+    resolvedSelectorMedia,
     res,
     slotId,
     loc,
@@ -126,6 +127,17 @@ export function tryHandleResolvedStyleFunctionNode(rc: ResolvedDynamicNodeContex
     if (!d.property) {
       // This handler is only intended for value interpolations on concrete properties.
       // If the IR is missing a property, fall through to other handlers.
+    } else if (resolvedSelectorMedia) {
+      // This declaration lives inside a computed media block (e.g. `${screenSize.phone}`),
+      // which resolves to a computed media key. The dynamic style-function emitter below
+      // cannot represent a computed media-query override — it would silently drop the
+      // media branch (keeping only the default), producing an incomplete style. Bail so
+      // the declaration is preserved rather than emitting a lossy conversion.
+      bailUnsupportedLocal(
+        decl,
+        "Prop-dependent dynamic style function cannot also carry a computed media-query override for the same property — split into static conditional styles or bind the media value separately",
+      );
+      return true;
     } else {
       const e = decl.templateExpressions[slotId] as any;
       if (e?.type !== "ArrowFunctionExpression" && e?.type !== "FunctionExpression") {

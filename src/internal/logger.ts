@@ -87,6 +87,7 @@ export type WarningType =
   | "Unsupported interpolation: unknown"
   | `Unsupported CSS property "${string}" cannot be emitted in StyleX`
   | "Dynamic logical scroll shorthand cannot be expanded — bind a specific longhand (e.g. scroll-padding-inline-start) instead"
+  | "Prop-dependent dynamic style function cannot also carry a computed media-query override for the same property — split into static conditional styles or bind the media value separately"
   | "Imported runtime condition root collides with a component prop of the same name"
   | "Mixed logical and physical scroll properties cannot be normalized without a known writing-mode"
   | "Unsupported nested conditional interpolation"
