@@ -209,6 +209,12 @@ export function createLowerRulesState(ctx: TransformContext) {
   // This allows us to resolve member expressions like Divider.HEIGHT to their literal values.
   const staticPropertyValues = new Map<string, Map<string, string | number | boolean>>();
   const staticIdentifierValues = new Map<string, string | number | boolean>();
+  // Names of top-level consts bound to a function (arrow/function expression).
+  // A bare reference to one of these interpolated as a CSS value — e.g.
+  // `color: ${baseColor}` where `baseColor = (props) => props.theme.isDark ? … : …`
+  // — cannot be emitted statically: StyleX would coerce the function object to its
+  // `toString()`. Such references must bail rather than inline the raw identifier.
+  const localFunctionIdentifierNames = new Set<string>();
   root.find(j.VariableDeclarator).forEach((p) => {
     if (!isTopLevelConstDeclarator(p)) {
       return;
@@ -216,6 +222,10 @@ export function createLowerRulesState(ctx: TransformContext) {
     const node = p.node as { id?: { type?: string; name?: string }; init?: unknown };
     if (node.id?.type !== "Identifier" || !node.id.name) {
       return;
+    }
+    const initType = (node.init as { type?: string } | undefined)?.type;
+    if (initType === "ArrowFunctionExpression" || initType === "FunctionExpression") {
+      localFunctionIdentifierNames.add(node.id.name);
     }
     // Reject function-valued constants (e.g. `const BASE = () => 8`): coercing
     // their body would let arithmetic/value resolution treat a function object
@@ -231,7 +241,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   // top-level value at the point of use and be mis-folded (e.g. `const gap = 8`
   // shadowed by a `gap` parameter). Dropping them is safe: worst case we skip an
   // optimization rather than emit wrong output.
-  if (staticIdentifierValues.size > 0) {
+  if (staticIdentifierValues.size > 0 || localFunctionIdentifierNames.size > 0) {
     const shadowingNames = new Set<string>();
     root.find(j.Function).forEach((fnPath) => {
       collectPatternBindingNames((fnPath.node as { params?: unknown }).params, shadowingNames);
@@ -255,6 +265,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     });
     for (const name of shadowingNames) {
       staticIdentifierValues.delete(name);
+      localFunctionIdentifierNames.delete(name);
     }
   }
   root
@@ -396,6 +407,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     mixinValuesByKey,
     staticPropertyValues,
     staticIdentifierValues,
+    localFunctionIdentifierNames,
     usedCssHelperFunctions: new Set<string>(),
     warnPropInlineStyle,
     applyCssHelperMixin,
