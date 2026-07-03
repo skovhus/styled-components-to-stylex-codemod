@@ -47,6 +47,19 @@ const PaddedLine = styled.div<{ $pad?: string }>`
   }
 `;
 
+// withConfig({ shouldForwardProp }) with a non-transient prop → the shouldForwardProp
+// dynamic-style-function fallback (also ignores the computed media key).
+const forwardKeys = ["offset"];
+const ForwardLine = styled("div").withConfig({
+  shouldForwardProp: (prop) => !forwardKeys.includes(prop),
+})<{ offset: string }>`
+  bottom: ${({ offset }) => offset};
+
+  ${screenSize.phone} {
+    bottom: ${({ offset }) => offset};
+  }
+`;
+
 export function App() {
   return (
     <div style={{ position: "relative", height: 200, padding: 40 }}>
@@ -56,6 +69,7 @@ export function App() {
       <DateLine>B</DateLine>
       <OffsetLine $offset="4px">C</OffsetLine>
       <PaddedLine>D</PaddedLine>
+      <ForwardLine offset="4px">E</ForwardLine>
     </div>
   );
 }

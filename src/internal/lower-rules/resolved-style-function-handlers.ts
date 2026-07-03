@@ -123,19 +123,21 @@ export function tryHandleResolvedStyleFunctionNode(rc: ResolvedDynamicNodeContex
     resolveImportForExpr,
   } = state;
 
-  // Every dynamic style-function emitter below (`emitStyleFunctionFromPropsObject`,
-  // `emitStyleFunctionWithDefault`, `emitStyleFunction`) keys off `media`/`pseudos`
+  // Every dynamic style-function emitter in this handler keys off `media`/`pseudos`
   // but has no path for a computed media key (`resolvedSelectorMedia`, e.g. a
-  // `${screenSize.phone}` block). Emitting the style function there would silently
-  // drop the media-specific value and keep only the default — a lossy conversion.
-  // Bail up-front for the whole family so the declaration is preserved instead.
+  // `${screenSize.phone}` block): the three `emitStyleFunction*` result types below
+  // and the `decl.shouldForwardProp` fallback (reached when `res` didn't emit) all
+  // build the style-function body via `buildPseudoMediaPropValue`, which ignores it.
+  // Any of them would silently drop the media-specific value and keep only the
+  // default — a lossy conversion. Bail up-front for the whole family so the
+  // declaration is preserved instead. (`keepOriginal` already bails on its own.)
   if (
     resolvedSelectorMedia &&
     d.property &&
-    res &&
-    (res.type === "emitStyleFunctionFromPropsObject" ||
-      res.type === "emitStyleFunctionWithDefault" ||
-      res.type === "emitStyleFunction")
+    (decl.shouldForwardProp ||
+      res?.type === "emitStyleFunctionFromPropsObject" ||
+      res?.type === "emitStyleFunctionWithDefault" ||
+      res?.type === "emitStyleFunction")
   ) {
     bailUnsupportedLocal(
       decl,
