@@ -1386,11 +1386,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       })
       .size() > 0;
 
-  const existingImportLocals = new Set<string>();
-  // Records the module specifier + imported name each local binding resolves to,
-  // so a name collision with a resolver import can be recognized as the *same*
-  // import (reuse) rather than a genuine clash (alias).
-  const existingImportBindings = new Map<string, { imported: string; source: string }>();
+  // Maps each import local used outside styled templates to the module specifier +
+  // imported name it resolves to (or null when that can't be determined). The keys
+  // are the set of existing locals a resolver import could collide with; the value
+  // lets a collision be recognized as the *same* import (reuse) vs a genuine clash.
+  const existingImportBindings = new Map<string, { imported: string; source: string } | null>();
   root.find(j.ImportDeclaration).forEach((p: any) => {
     const specs = (p.node.specifiers ?? []) as any[];
     const sourceValue = typeof p.node.source?.value === "string" ? p.node.source.value : null;
@@ -1407,24 +1407,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
               ? s.local.name
               : null;
       if (local && isUsedOutsideStyledTemplates(local)) {
-        existingImportLocals.add(local);
-        if (sourceValue !== null) {
-          const imported =
-            s?.type === "ImportDefaultSpecifier"
-              ? "default"
-              : s?.type === "ImportNamespaceSpecifier"
-                ? "*"
-                : (s?.imported?.name ?? s?.imported?.value ?? null);
-          if (typeof imported === "string") {
-            existingImportBindings.set(local, { imported, source: sourceValue });
-          }
-        }
+        const imported =
+          s?.type === "ImportDefaultSpecifier"
+            ? "default"
+            : s?.type === "ImportNamespaceSpecifier"
+              ? "*"
+              : (s?.imported?.name ?? s?.imported?.value ?? null);
+        existingImportBindings.set(
+          local,
+          sourceValue !== null && typeof imported === "string"
+            ? { imported, source: sourceValue }
+            : null,
+        );
       }
     }
   });
 
   const resolverImportAliases = new Map<string, string>();
-  const usedLocals = new Set(existingImportLocals);
+  const usedLocals = new Set(existingImportBindings.keys());
   const makeUniqueLocal = (base: string): string => {
     let candidate = base;
     let i = 1;
@@ -1442,7 +1442,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (!desired) {
         continue;
       }
-      if (existingImportLocals.has(desired)) {
+      if (existingImportBindings.has(desired)) {
         // A name collision with an existing binding is only a genuine clash when
         // it resolves to a *different* import. When the resolver wants the exact
         // same module + imported name, reuse the existing binding: aliasing here
