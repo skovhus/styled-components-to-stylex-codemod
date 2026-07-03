@@ -90,6 +90,7 @@ export function tryHandleResolvedStyleFunctionNode(rc: ResolvedDynamicNodeContex
     d,
     media,
     pseudos,
+    resolvedSelectorMedia,
     res,
     slotId,
     loc,
@@ -121,6 +122,29 @@ export function tryHandleResolvedStyleFunctionNode(rc: ResolvedDynamicNodeContex
     resolveImportInScope,
     resolveImportForExpr,
   } = state;
+
+  // Every dynamic style-function emitter in this handler keys off `media`/`pseudos`
+  // but has no path for a computed media key (`resolvedSelectorMedia`, e.g. a
+  // `${screenSize.phone}` block): the three `emitStyleFunction*` result types below
+  // and the `decl.shouldForwardProp` fallback (reached when `res` didn't emit) all
+  // build the style-function body via `buildPseudoMediaPropValue`, which ignores it.
+  // Any of them would silently drop the media-specific value and keep only the
+  // default — a lossy conversion. Bail up-front for the whole family so the
+  // declaration is preserved instead. (`keepOriginal` already bails on its own.)
+  if (
+    resolvedSelectorMedia &&
+    d.property &&
+    (decl.shouldForwardProp ||
+      res?.type === "emitStyleFunctionFromPropsObject" ||
+      res?.type === "emitStyleFunctionWithDefault" ||
+      res?.type === "emitStyleFunction")
+  ) {
+    bailUnsupportedLocal(
+      decl,
+      "Prop-dependent dynamic style function cannot also carry a computed media-query override for the same property — split into static conditional styles or bind the media value separately",
+    );
+    return true;
+  }
 
   if (res && res.type === "emitStyleFunctionFromPropsObject") {
     if (!d.property) {

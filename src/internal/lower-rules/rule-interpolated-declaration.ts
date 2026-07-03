@@ -117,6 +117,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     declByLocalName,
     cssHelperValuesByKey,
     staticPropertyValues,
+    localFunctionIdentifierNames,
     applyCssHelperMixin,
     hasLocalThemeBinding,
     resolveThemeValue,
@@ -192,6 +193,31 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   });
 
   for (let _i = 0; _i < 1; _i++) {
+    if (flags.bail) {
+      break;
+    }
+    // A bare identifier interpolation that references a local function used as a
+    // CSS value (e.g. `color: ${baseColor}` / `border: 1px solid ${baseColor}`
+    // where `baseColor = (props) => …`) cannot be emitted: StyleX would coerce the
+    // function object to its `toString()`. Bail so the declaration is preserved
+    // rather than producing invalid output like `color: baseColor`.
+    for (const part of (d.value as { parts?: Array<{ kind?: string; slotId?: number }> }).parts ??
+      []) {
+      if (part?.kind !== "slot" || part.slotId === undefined) {
+        continue;
+      }
+      const slotExpr = decl.templateExpressions[part.slotId] as
+        | { type?: string; name?: string }
+        | undefined;
+      if (
+        slotExpr?.type === "Identifier" &&
+        slotExpr.name &&
+        localFunctionIdentifierNames.has(slotExpr.name)
+      ) {
+        bailUnsupportedLocal(decl, "Unsupported interpolation: identifier");
+        break;
+      }
+    }
     if (flags.bail) {
       break;
     }
