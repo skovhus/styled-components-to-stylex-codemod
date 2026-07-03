@@ -12,10 +12,22 @@ import styled, { type DefaultTheme } from "styled-components";
 const baseColor = (props: { theme: DefaultTheme }) =>
   props.theme.isDark ? props.theme.color.bgSub : props.theme.color.bgBorderFaint;
 
+// An unrelated binding that SHADOWS the module-scope `baseColor` name in a nested
+// scope. The bail must still fire for the module-scope reference in the styled
+// template below — the shadowing must NOT drop `baseColor` from the bail set.
+function readColor({ baseColor }: { baseColor: string }) {
+  return baseColor;
+}
+
 const Badge = styled.div`
   border: 1px solid ${baseColor};
   color: ${baseColor};
   padding: 8px;
 `;
 
-export const App = () => <Badge>Badge</Badge>;
+export const App = () => (
+  <>
+    <Badge>Badge</Badge>
+    {readColor({ baseColor: "labelBase" })}
+  </>
+);

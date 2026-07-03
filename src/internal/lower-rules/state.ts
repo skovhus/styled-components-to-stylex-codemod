@@ -214,6 +214,11 @@ export function createLowerRulesState(ctx: TransformContext) {
   // `color: ${baseColor}` where `baseColor = (props) => props.theme.isDark ? … : …`
   // — cannot be emitted statically: StyleX would coerce the function object to its
   // `toString()`. Such references must bail rather than inline the raw identifier.
+  // Unlike `staticIdentifierValues`, this set is NOT pruned by the shadowing pass
+  // below: dropping a name here would make the bail *disappear* when an unrelated
+  // nested binding shares the name (e.g. a `baseColor` parameter elsewhere), letting
+  // the codemod emit the raw identifier again. Over-bailing preserves a declaration
+  // (safe); under-bailing emits invalid output — so keep every module-scope name.
   const localFunctionIdentifierNames = new Set<string>();
   root.find(j.VariableDeclarator).forEach((p) => {
     if (!isTopLevelConstDeclarator(p)) {
@@ -241,7 +246,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   // top-level value at the point of use and be mis-folded (e.g. `const gap = 8`
   // shadowed by a `gap` parameter). Dropping them is safe: worst case we skip an
   // optimization rather than emit wrong output.
-  if (staticIdentifierValues.size > 0 || localFunctionIdentifierNames.size > 0) {
+  if (staticIdentifierValues.size > 0) {
     const shadowingNames = new Set<string>();
     root.find(j.Function).forEach((fnPath) => {
       collectPatternBindingNames((fnPath.node as { params?: unknown }).params, shadowingNames);
@@ -265,7 +270,6 @@ export function createLowerRulesState(ctx: TransformContext) {
     });
     for (const name of shadowingNames) {
       staticIdentifierValues.delete(name);
-      localFunctionIdentifierNames.delete(name);
     }
   }
   root

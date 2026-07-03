@@ -13,6 +13,7 @@ import { screenSize } from "./lib/helpers";
 const BURN_UP_GRAPH_HEIGHT = 216;
 const BURN_UP_GRAPH_HEIGHT_PHONE = 347;
 
+// Ternary body → emitStyleFunctionFromPropsObject
 const DateLine = styled.div<{ $extendForGraph?: boolean; $isFirstItem?: boolean }>`
   position: absolute;
   top: ${(props) => (props.$isFirstItem ? "0" : "4.5px")};
@@ -28,6 +29,24 @@ const DateLine = styled.div<{ $extendForGraph?: boolean; $isFirstItem?: boolean 
   }
 `;
 
+// Direct prop passthrough → emitStyleFunction (the same lossy drop lived here too).
+const OffsetLine = styled.div<{ $offset: string }>`
+  bottom: ${({ $offset }) => $offset};
+
+  ${screenSize.phone} {
+    bottom: ${({ $offset }) => $offset};
+  }
+`;
+
+// Destructured default → emitStyleFunctionWithDefault.
+const PaddedLine = styled.div<{ $pad?: string }>`
+  padding-top: ${({ $pad = "8px" }) => $pad};
+
+  ${screenSize.phone} {
+    padding-top: ${({ $pad = "2px" }) => $pad};
+  }
+`;
+
 export function App() {
   return (
     <div style={{ position: "relative", height: 200, padding: 40 }}>
@@ -35,6 +54,8 @@ export function App() {
         A
       </DateLine>
       <DateLine>B</DateLine>
+      <OffsetLine $offset="4px">C</OffsetLine>
+      <PaddedLine>D</PaddedLine>
     </div>
   );
 }
