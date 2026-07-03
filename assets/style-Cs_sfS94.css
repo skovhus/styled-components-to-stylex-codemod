@@ -6629,6 +6629,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
     padding-inline: 16px;
   }
 
+  .x1tt0io2.x1tt0io2:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    font-size: 16px;
+  }
+
   .xp4kysb.xp4kysb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     font-size: var(--xsu5xip);
   }
@@ -6736,6 +6740,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x12zldmm:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   transition: background-image .12s ease-out;
+}
+
+@media (width <= 640px) {
+  .x1e7v4a0.x1e7v4a0:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    width: 50%;
+  }
 }
 
 .x1hzk0bc:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
