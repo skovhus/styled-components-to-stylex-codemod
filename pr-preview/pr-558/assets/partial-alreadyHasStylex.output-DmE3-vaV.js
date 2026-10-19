@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`div`,{className:`xh8yej3 x1e7v4a0 xd10qfp`,children:`converted by codemod`}),(0,t.jsx)(`h1`,{className:`xdqfz29 x1pvqxga x1tt0io2`,children:`already stylex`})]});export{n as App};

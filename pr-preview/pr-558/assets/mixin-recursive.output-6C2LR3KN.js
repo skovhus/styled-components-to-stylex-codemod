@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D4ePz0Hl.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`x7z7khe x1t391ir x1e2nbdu`,children:`Recursive mixins`});export{n as App};
