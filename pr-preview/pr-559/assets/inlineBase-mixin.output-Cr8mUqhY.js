@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./stylex-oKV_zOnp.js";import{t as n}from"./mixins.stylex-bK6XhA8L.js";var r=e();function i(){return(0,r.jsx)(`div`,{...t([n.flex,a.container]),children:`Mixin mode`})}var a={container:{kmVPX3:`xe8ttls`,kWkggS:`xpnvprw`,kMzoRj:`xmkeg23`,ksu8eU:`x1y0btm7`,kVAM5u:`xqu46wi`,$$css:!0}};export{i as App};

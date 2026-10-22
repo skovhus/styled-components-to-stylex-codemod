@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./react-lJqMpIaC.js";t();var n=e();function r(){return(0,n.jsx)(`div`,{className:`x1csysfu x1tamke2 x12peec7`,children:`Dialog Content`})}export{r as App};

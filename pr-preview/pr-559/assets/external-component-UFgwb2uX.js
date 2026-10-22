@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./react-lJqMpIaC.js";t();var n=e();function r(e){let{className:t,children:r,isOpen:i,...a}=e;return(0,n.jsx)(`div`,{className:t,...a,children:r??`ExternalComponent`})}export{r as t};

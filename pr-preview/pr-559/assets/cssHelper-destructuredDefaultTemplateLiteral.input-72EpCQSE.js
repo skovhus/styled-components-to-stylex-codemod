@@ -1,0 +1,4 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./react-lJqMpIaC.js";import{i as n}from"./styled-components.browser.esm-Dy4oaG3m.js";t();var r=e(),i=n.div`
+  display: inline-flex;
+  ${({gap:e=8})=>`gap: ${e}px;`}
+`,a=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:12,padding:12},children:[(0,r.jsxs)(i,{style:{background:`#e2f0ff`,padding:8},children:[(0,r.jsx)(`span`,{style:{background:`#4f83cc`,color:`white`,padding:8},children:`Default gap`}),(0,r.jsx)(`span`,{style:{background:`#4f83cc`,color:`white`,padding:8},children:`Default gap`})]}),(0,r.jsxs)(i,{gap:14,style:{background:`#ffeecf`,padding:8},children:[(0,r.jsx)(`span`,{style:{background:`#f9a825`,color:`white`,padding:8},children:`Gap 14`}),(0,r.jsx)(`span`,{style:{background:`#f9a825`,color:`white`,padding:8},children:`Gap 14`})]})]});export{a as App,i as Tile};

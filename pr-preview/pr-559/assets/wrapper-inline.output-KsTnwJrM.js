@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./react-lJqMpIaC.js";import{t as n}from"./external-component-UFgwb2uX.js";t();var r=e();function i(){return(0,r.jsx)(`div`,{children:(0,r.jsx)(n,{isOpen:!0,className:`xdj266r xv8wvd9 xat24cr x1bawvfr`})})}export{i as App};

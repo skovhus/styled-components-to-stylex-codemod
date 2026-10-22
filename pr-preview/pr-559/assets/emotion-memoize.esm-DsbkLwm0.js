@@ -1,0 +1,1 @@
+function e(e){var t=Object.create(null);return function(n){return t[n]===void 0&&(t[n]=e(n)),t[n]}}export{e as t};

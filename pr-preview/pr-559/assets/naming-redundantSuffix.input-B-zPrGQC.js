@@ -1,0 +1,5 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";import{t}from"./react-lJqMpIaC.js";import{i as n}from"./styled-components.browser.esm-Dy4oaG3m.js";t();var r=e(),i=n.div`
+  border-width: ${e=>e.$borderWidth}px;
+  border-style: solid;
+  border-color: black;
+`;function a(){return(0,r.jsx)(`div`,{style:{padding:`16px`},children:(0,r.jsx)(i,{$borderWidth:2,children:`Bordered box`})})}export{a as App};

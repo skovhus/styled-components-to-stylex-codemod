@@ -1,0 +1,1 @@
+import"./jsx-runtime-CF8L0Gwd.js";import{t as e}from"./react-lJqMpIaC.js";import{i as t}from"./styled-components.browser.esm-Dy4oaG3m.js";e();var n=t.span``;export{n as t};

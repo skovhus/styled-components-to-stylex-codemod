@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CF8L0Gwd.js";var t=e(),n=()=>(0,t.jsxs)(t.Fragment,{children:[(0,t.jsx)(`div`,{className:`x1rg5ohu x1aerksh x1c74tu6 x1esw782 xa4qsjk x18mflkt xnxx81d xvewgow`,children:`💅`}),(0,t.jsx)(`div`,{className:`x1rg5ohu x1aerksh x1c74tu6 x1esw782 xa4qsjk x18mflkt xnxx81d xvewgow`,children:`💅`})]});export{n as App};
